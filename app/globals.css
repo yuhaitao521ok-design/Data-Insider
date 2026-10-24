@@ -1,0 +1,123 @@
+@import "tailwindcss";
+
+@theme {
+  --color-terminal: #070b12;
+  --color-surface: #0b1220;
+  --color-panel: #0e1726;
+  --color-panel-soft: #121d2e;
+  --color-line: #1d2a3f;
+  --color-ink: #e8eefb;
+  --color-muted: #8796ad;
+  --color-accent: #4f8cff;
+  --color-up: #16c784;
+  --color-down: #f0616d;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", sans-serif;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(1200px 600px at 15% -10%, rgba(79, 140, 255, 0.14), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(22, 199, 132, 0.08), transparent 55%),
+    var(--color-terminal);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: rgba(79, 140, 255, 0.35);
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+.panel {
+  background: linear-gradient(180deg, rgba(18, 29, 46, 0.9), rgba(11, 18, 32, 0.9));
+  border: 1px solid var(--color-line);
+  box-shadow: 0 18px 40px -32px rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(6px);
+}
+
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #2a3a55 transparent;
+}
+
+.scroll-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: #2a3a55;
+  border-radius: 999px;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.rise {
+  animation: rise 0.28s ease-out both;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.75);
+  }
+}
+
+.live-dot {
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -220px 0;
+  }
+  100% {
+    background-position: 220px 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.1) 50%, rgba(255, 255, 255, 0.04) 100%);
+  background-size: 440px 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+.chart-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: draw-line 0.75s ease-out forwards;
+}
+
+@keyframes draw-line {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+

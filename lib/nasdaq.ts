@@ -1,0 +1,404 @@
+import type { ChartPoint, ChartResponse, Quote, RangeKey } from "@/lib/types";
+
+/**
+ * Nasdaq 官方行情接口（无需 API Key），作为 Yahoo 的兜底数据源。
+ *
+ *  - /api/quote/{symbol}/info   最新价、涨跌、成交量、52 周区间
+ *  - /api/quote/{symbol}/chart  日线历史（可自行聚合为周线 / 月线）
+ *
+ * 注意：该接口没有分时数据，因此 1D / 5D 仍然只能依赖 Yahoo 或 Perplexity。
+ */
+
+const BASE = "https://api.nasdaq.com/api";
+const HEADERS: Record<string, string> = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+  Accept: "application/json, text/plain, */*",
+  "Accept-Language": "en-US,en;q=0.9",
+  Origin: "https://www.nasdaq.com",
+  Referer: "https://www.nasdaq.com/",
+};
+
+export class NasdaqError extends Error {
+  constructor(
+    message: string,
+    readonly status: number = 502,
+    readonly code: "not_found" | "upstream_error" = "upstream_error",
+  ) {
+    super(message);
+    this.name = "NasdaqError";
+  }
+}
+
+interface NasdaqEnvelope<T> {
+  data: T | null;
+  message?: string | null;
+  status?: { rCode?: number; bCodeMessage?: Array<{ errorMessage?: string }> | null };
+}
+
+interface NasdaqInfo {
+  symbol?: string;
+  companyName?: string;
+  exchange?: string;
+  primaryData?: {
+    lastSalePrice?: string;
+    netChange?: string;
+    percentageChange?: string;
+    lastTradeTimestamp?: string;
+    volume?: string;
+    isRealTime?: boolean;
+  };
+  secondaryData?: { lastSalePrice?: string; netChange?: string; percentageChange?: string } | null;
+  marketStatus?: string;
+  keyStats?: {
+    fiftyTwoWeekHighLow?: { value?: string };
+    dayrange?: { value?: string };
+  };
+}
+
+interface NasdaqChartRow {
+  x?: number;
+  y?: number;
+  z?: {
+    high?: string;
+    low?: string;
+    open?: string;
+    close?: string;
+    volume?: string;
+    dateTime?: string;
+  };
+}
+
+interface NasdaqChart {
+  symbol?: string;
+  company?: string;
+  lastSalePrice?: string;
+  netChange?: string;
+  percentageChange?: string;
+  previousClose?: string;
+  timeAsOf?: string;
+  chart?: NasdaqChartRow[] | null;
+}
+
+const assetClassCache = new Map<string, "stocks" | "etf">();
+
+function parseNumber(value: string | number | null | undefined): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (!value) return null;
+  const cleaned = value.replace(/[$,%\s,]/g, "").replace(/^\+/, "");
+  if (!cleaned || cleaned.toUpperCase() === "N/A" || cleaned === "NA" || cleaned === "--") return null;
+  const parsed = Number.parseFloat(cleaned);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseDate(value: string | undefined): string | null {
+  if (!value) return null;
+  const parsed = new Date(`${value} 20:00:00 UTC`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString();
+}
+
+function parse52Week(value: string | undefined): { low: number | null; high: number | null } {
+  if (!value) return { low: null, high: null };
+  const [low, high] = value.split("-").map((part) => parseNumber(part));
+  return { low: low ?? null, high: high ?? null };
+}
+
+async function requestNasdaq<T>(path: string): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(`${BASE}${path}`, {
+      headers: HEADERS,
+      cache: "no-store",
+      signal: AbortSignal.timeout(12_000),
+    });
+  } catch {
+    throw new NasdaqError("连接 Nasdaq 接口超时", 504);
+  }
+
+  if (response.status === 404) throw new NasdaqError("Nasdaq 未找到该代码", 404, "not_found");
+  if (!response.ok) throw new NasdaqError(`Nasdaq 接口异常（${response.status}）`);
+
+  const body = (await response.json()) as NasdaqEnvelope<T>;
+  if (!body.data) {
+    throw new NasdaqError(
+      body.status?.bCodeMessage?.[0]?.errorMessage || "Nasdaq 未返回有效数据",
+      502,
+    );
+  }
+  return body.data;
+}
+
+async function fetchInfo(symbol: string): Promise<NasdaqInfo> {
+  const cached = assetClassCache.get(symbol);
+  const candidates: Array<"stocks" | "etf"> = cached ? [cached] : ["stocks", "etf"];
+
+  let lastError: unknown = null;
+  for (const assetClass of candidates) {
+    try {
+      const info = await requestNasdaq<NasdaqInfo>(
+        `/quote/${encodeURIComponent(symbol)}/info?assetclass=${assetClass}`,
+      );
+      if (!info.primaryData?.lastSalePrice) throw new NasdaqError("Nasdaq 未返回有效报价", 404);
+      assetClassCache.set(symbol, assetClass);
+      return info;
+    } catch (error) {
+      // 股票/ETF 的 assetclass 不同，第一个失败时继续尝试下一个
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new NasdaqError("Nasdaq 未找到该代码", 404, "not_found");
+}
+
+function cleanCompanyName(name: string | undefined, symbol: string): string {
+  if (!name) return symbol;
+  return name
+    .replace(
+      /\s+(Common Stock|Class [A-Z] Common Stock|Capital Stock|Common Shares|Ordinary Shares|American Depositary Shares|Depositary Shares|Units|Warrants?)$/i,
+      "",
+    )
+    .trim();
+}
+
+function infoToQuote(symbol: string, info: NasdaqInfo, assetClass: "stocks" | "etf"): Quote {
+  const primary = info.primaryData ?? {};
+  const price = parseNumber(primary.lastSalePrice);
+  if (price === null || price <= 0) {
+    throw new NasdaqError(`Nasdaq 未返回 ${symbol} 的有效报价`, 404, "not_found");
+  }
+
+  const change = parseNumber(primary.netChange);
+  const changePercent = parseNumber(primary.percentageChange);
+  const previousClose = change !== null ? price - change : null;
+
+  return {
+    symbol: (info.symbol || symbol).toUpperCase(),
+    name: cleanCompanyName(info.companyName, symbol),
+    price,
+    previousClose,
+    change,
+    changePercent,
+    currency: "USD",
+    exchange: info.exchange || (assetClass === "etf" ? "ETF" : "NASDAQ"),
+    marketTime: parseDate(primary.lastTradeTimestamp),
+    sparkline: [],
+    source: "nasdaq",
+    estimated: false,
+  };
+}
+
+
+/* -------------------------------------------------------------------------- */
+/*                                  对外 API                                    */
+/* -------------------------------------------------------------------------- */
+
+const RANGE_DAYS: Record<"1M" | "3M" | "6M" | "1Y" | "5Y" | "MAX", number> = {
+  "1M": 45,
+  "3M": 110,
+  "6M": 220,
+  "1Y": 400,
+  "5Y": 1900,
+  MAX: 11000,
+};
+
+const RANGE_INTERVAL: Record<"1M" | "3M" | "6M" | "1Y" | "5Y" | "MAX", string> = {
+  "1M": "1d",
+  "3M": "1d",
+  "6M": "1d",
+  "1Y": "1d",
+  "5Y": "1wk",
+  MAX: "1mo",
+};
+
+async function mapLimit<T, R>(items: T[], limit: number, task: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let cursor = 0;
+
+  async function worker() {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await task(items[index]);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+function daysAgo(days: number): string {
+  const date = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  return date.toISOString().slice(0, 10);
+}
+
+/** 批量报价（4 个并发），单个失败不影响其它代码 */
+export async function nasdaqQuotes(symbols: string[]): Promise<{
+  quotes: Quote[];
+  errors: { symbol: string; message: string }[];
+}> {
+  const results = await mapLimit(symbols, 4, async (symbol) => {
+    try {
+      const info = await fetchInfo(symbol);
+      const assetClass = assetClassCache.get(symbol) ?? "stocks";
+      return { quote: infoToQuote(symbol, info, assetClass) };
+    } catch (error) {
+      return {
+        error: {
+          symbol,
+          message: error instanceof Error ? error.message : "Nasdaq 获取报价失败",
+        },
+      };
+    }
+  });
+
+  const quotes: Quote[] = [];
+  const errors: { symbol: string; message: string }[] = [];
+  for (const result of results) {
+    if (result.quote) quotes.push(result.quote);
+    if (result.error) errors.push(result.error);
+  }
+  return { quotes, errors };
+}
+
+function bucketKey(timestamp: number, mode: "week" | "month"): number {
+  const date = new Date(timestamp * 1000);
+  if (mode === "month") {
+    return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1) / 1000;
+  }
+  const day = date.getUTCDay();
+  const diff = (day + 6) % 7; // 以周一为一周起点
+  const monday = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() - diff),
+  );
+  return monday.getTime() / 1000;
+}
+
+/** 把日线聚合为周线 / 月线 */
+function aggregate(points: ChartPoint[], mode: "week" | "month"): ChartPoint[] {
+  const groups = new Map<number, ChartPoint[]>();
+  for (const point of points) {
+    const key = bucketKey(point.t, mode);
+    const group = groups.get(key);
+    if (group) group.push(point);
+    else groups.set(key, [point]);
+  }
+
+  return Array.from(groups.values())
+    .map((group) => {
+      const volumes = group
+        .map((point) => point.volume)
+        .filter((value): value is number => value !== null);
+      return {
+        t: group[group.length - 1].t,
+        open: group[0].open,
+        close: group[group.length - 1].close,
+        high: Math.max(...group.map((point) => point.high ?? point.close)),
+        low: Math.min(...group.map((point) => point.low ?? point.close)),
+        volume: volumes.length > 0 ? volumes.reduce((sum, value) => sum + value, 0) : null,
+      } satisfies ChartPoint;
+    })
+    .sort((a, b) => a.t - b.t);
+}
+
+/** 获取日线以上的周期走势（1D / 5D 不支持） */
+export async function nasdaqChart(
+  symbol: string,
+  range: RangeKey,
+): Promise<ChartResponse & { cached: boolean; stale: boolean }> {
+  if (range === "1D" || range === "5D") {
+    throw new NasdaqError("Nasdaq 不提供分时数据，该周期暂时无法使用兜底数据源", 503);
+  }
+
+  const info = await fetchInfo(symbol);
+  const assetClass = assetClassCache.get(symbol) ?? "stocks";
+  const from = daysAgo(RANGE_DAYS[range]);
+  const to = new Date().toISOString().slice(0, 10);
+
+  const data = await requestNasdaq<NasdaqChart>(
+    `/quote/${encodeURIComponent(symbol)}/chart?assetclass=${assetClass}&fromdate=${from}&todate=${to}`,
+  );
+
+  const rawPoints: ChartPoint[] = [];
+  for (const row of data.chart ?? []) {
+    const close = parseNumber(row.z?.close) ?? parseNumber(row.y);
+    if (close === null || !row.x) continue;
+    rawPoints.push({
+      t: Math.floor(row.x / 1000),
+      open: parseNumber(row.z?.open),
+      high: parseNumber(row.z?.high),
+      low: parseNumber(row.z?.low),
+      close,
+      volume: parseNumber(row.z?.volume),
+    });
+  }
+
+  if (rawPoints.length === 0) {
+    throw new NasdaqError("Nasdaq 没有返回该周期的走势数据", 404, "not_found");
+  }
+
+  const points =
+    range === "5Y"
+      ? aggregate(rawPoints, "week")
+      : range === "MAX"
+        ? aggregate(rawPoints, "month")
+        : rawPoints;
+
+  const last = points[points.length - 1];
+  const changeFromInfo = parseNumber(info.primaryData?.netChange);
+  const previousClose =
+    parseNumber(data.previousClose) ?? (changeFromInfo !== null ? (parseNumber(info.primaryData?.lastSalePrice) ?? last.close) - changeFromInfo : null);
+  const price = parseNumber(info.primaryData?.lastSalePrice) ?? last.close;
+  const change =
+    changeFromInfo ?? (previousClose !== null ? price - previousClose : null);
+  const changePercent =
+    parseNumber(info.primaryData?.percentageChange) ??
+    (previousClose ? ((price - previousClose) / previousClose) * 100 : null);
+  const week52 = parse52Week(info.keyStats?.fiftyTwoWeekHighLow?.value);
+
+  const quote: Quote = {
+    symbol: (info.symbol || symbol).toUpperCase(),
+    name: cleanCompanyName(info.companyName, symbol),
+    price,
+    previousClose,
+    change,
+    changePercent,
+    currency: "USD",
+    exchange: info.exchange || (assetClass === "etf" ? "ETF" : "NASDAQ"),
+    marketTime: parseDate(info.primaryData?.lastTradeTimestamp),
+    sparkline: points.slice(-40).map((point) => point.close),
+    source: "nasdaq",
+    estimated: false,
+  };
+
+  return {
+    symbol: quote.symbol,
+    name: quote.name,
+    exchange: quote.exchange,
+    currency: "USD",
+    timezone: "America/New_York",
+    range,
+    interval: RANGE_INTERVAL[range],
+    points,
+    meta: {
+      price,
+      previousClose,
+      change,
+      changePercent,
+      dayHigh: last.high,
+      dayLow: last.low,
+      week52Low: week52.low,
+      week52High: week52.high,
+      volume: parseNumber(info.primaryData?.volume) ?? last.volume,
+      currency: "USD",
+    },
+    quote,
+    fetchedAt: new Date().toISOString(),
+    cached: false,
+    stale: false,
+  };
+}
+
+
