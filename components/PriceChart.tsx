@@ -166,7 +166,7 @@ export default function PriceChart({
     };
   }, [points, range, timezone, reference, size]);
 
-  const stroke = positive ? "var(--color-up)" : "var(--color-down)";
+  const stroke = positive ? "var(--positive)" : "var(--negative)";
   const hovered = hover !== null ? points[hover] : null;
   const hoverGeom =
     hover !== null && geometry
@@ -180,7 +180,7 @@ export default function PriceChart({
   return (
     <div ref={wrapRef} className="relative h-[250px] w-full sm:h-[310px] lg:h-[370px]">
       {!geometry ? (
-        <div className="flex h-full items-center justify-center text-sm text-muted">
+        <div className="flex h-full items-center justify-center text-[12px] text-muted-foreground">
           暂无走势数据
         </div>
       ) : (
@@ -188,8 +188,8 @@ export default function PriceChart({
           <svg width={geometry.width} height={geometry.height} className="block overflow-visible">
             <defs>
               <linearGradient id={`grad-${gradientId}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={stroke} stopOpacity="0.3" />
-                <stop offset="100%" stopColor={stroke} stopOpacity="0" />
+                <stop offset="0%" style={{ stopColor: stroke }} stopOpacity="0.18" />
+                <stop offset="100%" style={{ stopColor: stroke }} stopOpacity="0" />
               </linearGradient>
             </defs>
 
@@ -200,15 +200,15 @@ export default function PriceChart({
                   x2={geometry.width - geometry.padRight}
                   y1={line.y}
                   y2={line.y}
-                  stroke="rgba(255,255,255,0.055)"
                   strokeWidth="1"
+                  style={{ stroke: "var(--chart-grid)" }}
                 />
                 <text
                   x={geometry.width - geometry.padRight + 8}
                   y={line.y + 3.5}
-                  fill="#6b7c96"
                   fontSize="10"
                   className="num"
+                  style={{ fill: "var(--chart-label)" }}
                 >
                   {line.label}
                 </text>
@@ -222,15 +222,15 @@ export default function PriceChart({
                   x2={geometry.width - geometry.padRight}
                   y1={geometry.referenceY}
                   y2={geometry.referenceY}
-                  stroke="rgba(160,180,210,0.3)"
                   strokeWidth="1"
                   strokeDasharray="4 4"
+                  style={{ stroke: "var(--chart-reference)" }}
                 />
                 <text
                   x={geometry.padLeft + 2}
                   y={geometry.referenceY - 5}
-                  fill="#6b7c96"
                   fontSize="9"
+                  style={{ fill: "var(--chart-label)" }}
                 >
                   昨收
                 </text>
@@ -244,8 +244,8 @@ export default function PriceChart({
                 y={bar.y}
                 width={bar.width}
                 height={bar.height}
-                fill={bar.up ? "var(--color-up)" : "var(--color-down)"}
-                opacity="0.22"
+                opacity="0.24"
+                style={{ fill: bar.up ? "var(--positive)" : "var(--negative)" }}
               />
             ))}
 
@@ -254,8 +254,8 @@ export default function PriceChart({
               key={`${range}-${points.length}-${points[0]?.t ?? 0}`}
               d={geometry.linePath}
               fill="none"
-              stroke={stroke}
-              strokeWidth="1.8"
+              strokeWidth="1.6"
+              style={{ stroke }}
               strokeLinejoin="round"
               strokeLinecap="round"
               pathLength={1}
@@ -269,17 +269,16 @@ export default function PriceChart({
                   x2={hoverGeom.x}
                   y1={geometry.padTop}
                   y2={geometry.padTop + geometry.plotHeight}
-                  stroke="rgba(200,215,240,0.35)"
                   strokeWidth="1"
                   strokeDasharray="3 3"
+                  style={{ stroke: "var(--chart-crosshair)" }}
                 />
                 <circle
                   cx={hoverGeom.x}
                   cy={hoverGeom.y}
                   r="4"
-                  fill={stroke}
-                  stroke="#0b1220"
                   strokeWidth="2"
+                  style={{ fill: stroke, stroke: "var(--card)" }}
                 />
               </g>
             )}
@@ -290,8 +289,9 @@ export default function PriceChart({
                 x={label.x}
                 y={geometry.height - 6}
                 textAnchor={label.anchor}
-                fill="#6b7c96"
                 fontSize="10"
+                className="num"
+                style={{ fill: "var(--chart-label)" }}
               >
                 {label.label}
               </text>
@@ -316,22 +316,22 @@ export default function PriceChart({
 
           {hovered && (
             <div
-              className="pointer-events-none absolute top-2 z-10 w-[188px] rounded-lg border border-line/80 bg-[#0a111d]/95 p-2.5 text-[11px] shadow-xl"
+              className="pointer-events-none absolute top-2 z-10 w-[188px] rounded-lg border border-border bg-popover/95 p-2.5 text-[11px] shadow-[var(--shadow-pop)]"
               style={{ left: tooltipLeft }}
             >
-              <div className="mb-1 text-muted">{formatFullTime(hovered.t, timezone)}</div>
+              <div className="mb-1 text-muted-foreground">{formatFullTime(hovered.t, timezone)}</div>
               <div className="num text-base font-semibold" style={{ color: stroke }}>
                 {formatPrice(hovered.close, currency)}
               </div>
-              <div className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 text-muted">
+              <div className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 text-muted-foreground">
                 <span>开</span>
-                <span className="num text-right text-ink/80">{formatPrice(hovered.open, currency)}</span>
+                <span className="num text-right text-foreground/80">{formatPrice(hovered.open, currency)}</span>
                 <span>高</span>
-                <span className="num text-right text-ink/80">{formatPrice(hovered.high, currency)}</span>
+                <span className="num text-right text-foreground/80">{formatPrice(hovered.high, currency)}</span>
                 <span>低</span>
-                <span className="num text-right text-ink/80">{formatPrice(hovered.low, currency)}</span>
+                <span className="num text-right text-foreground/80">{formatPrice(hovered.low, currency)}</span>
                 <span>量</span>
-                <span className="num text-right text-ink/80">{formatCompact(hovered.volume)}</span>
+                <span className="num text-right text-foreground/80">{formatCompact(hovered.volume)}</span>
               </div>
             </div>
           )}

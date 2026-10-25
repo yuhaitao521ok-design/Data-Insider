@@ -33,7 +33,7 @@ export default function Sparkline({ data, positive, className = "" }: SparklineP
       <polyline
         points={points.join(" ")}
         fill="none"
-        stroke={positive ? "var(--color-up)" : "var(--color-down)"}
+        style={{ stroke: positive ? "var(--positive)" : "var(--negative)" }}
         strokeWidth="1.4"
         strokeLinecap="round"
         strokeLinejoin="round"

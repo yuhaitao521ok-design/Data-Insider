@@ -1,56 +1,206 @@
 @import "tailwindcss";
 
-@theme {
-  --color-terminal: #070b12;
-  --color-surface: #0b1220;
-  --color-panel: #0e1726;
-  --color-panel-soft: #121d2e;
-  --color-line: #1d2a3f;
-  --color-ink: #e8eefb;
-  --color-muted: #8796ad;
-  --color-accent: #4f8cff;
-  --color-up: #16c784;
-  --color-down: #f0616d;
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* -------------------------------------------------------------------------- */
+/*  字体：Roboto + Roboto Mono（自托管，OpenRouter 同款字体栈）                  */
+/* -------------------------------------------------------------------------- */
+
+@font-face {
+  font-family: "Roboto";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/roboto-400-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Roboto";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/roboto-500-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Roboto";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/roboto-700-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Roboto Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/roboto-mono-400-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Roboto Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/roboto-mono-500-latin.woff2") format("woff2");
+}
+
+/* -------------------------------------------------------------------------- */
+/*  设计 token：沿用 OpenRouter 的中性灰 + 靛紫主色，light / dark 双主题        */
+/* -------------------------------------------------------------------------- */
+
+:root {
+  color-scheme: light;
+
+  --background: #ffffff;
+  --foreground: #0a0a0b;
+  --card: #ffffff;
+  --popover: #ffffff;
+  --muted: #f4f4f5;
+  --muted-foreground: #71717a;
+
+  --border: #e4e4e7;
+  --border-strong: #d4d4d8;
+
+  --accent: #6366f1;
+  --accent-hover: #4f46e5;
+  --accent-foreground: #ffffff;
+  --accent-soft: rgba(99, 102, 241, 0.08);
+
+  --positive: #00bf6f;
+  --positive-text: #007544;
+  --positive-soft: rgba(0, 191, 111, 0.08);
+  --negative: #ff2d55;
+  --negative-text: #bf0024;
+  --negative-soft: rgba(255, 45, 85, 0.08);
+
+  --overlay: rgba(9, 9, 11, 0.04);
+  --hover: rgba(9, 9, 11, 0.035);
+
+  --chart-grid: rgba(9, 9, 11, 0.07);
+  --chart-label: #71717a;
+  --chart-crosshair: rgba(9, 9, 11, 0.35);
+  --chart-reference: rgba(9, 9, 11, 0.25);
+
+  --shadow-pop: 0 8px 24px -8px rgba(9, 9, 11, 0.16), 0 2px 6px rgba(9, 9, 11, 0.06);
+  --ring: rgba(99, 102, 241, 0.35);
+
+}
+
+.dark {
+  color-scheme: dark;
+
+  --background: #0a0a0b;
+  --foreground: #e4e4e7;
+  --card: #0f0f11;
+  --popover: #141417;
+  --muted: #1b1b1f;
+  --muted-foreground: #a1a1aa;
+
+  --border: #26262b;
+  --border-strong: #3f3f46;
+
+  --accent: #818cf8;
+  --accent-hover: #a5b4fc;
+  --accent-foreground: #0a0a0b;
+  --accent-soft: rgba(129, 140, 248, 0.12);
+
+  --positive: #34dfaa;
+  --positive-text: #34dfaa;
+  --positive-soft: rgba(52, 223, 170, 0.1);
+  --negative: #ff2d55;
+  --negative-text: #ff6b87;
+  --negative-soft: rgba(255, 45, 85, 0.1);
+
+  --overlay: rgba(255, 255, 255, 0.06);
+  --hover: rgba(255, 255, 255, 0.05);
+
+  --chart-grid: rgba(255, 255, 255, 0.06);
+  --chart-label: #8b8b93;
+  --chart-crosshair: rgba(255, 255, 255, 0.32);
+  --chart-reference: rgba(255, 255, 255, 0.22);
+
+  --shadow-pop: 0 12px 32px -12px rgba(0, 0, 0, 0.7), 0 2px 8px rgba(0, 0, 0, 0.4);
+  --ring: rgba(129, 140, 248, 0.4);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-popover: var(--popover);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-soft: var(--accent-soft);
+  --color-positive: var(--positive);
+  --color-positive-text: var(--positive-text);
+  --color-positive-soft: var(--positive-soft);
+  --color-negative: var(--negative);
+  --color-negative-text: var(--negative-text);
+  --color-negative-soft: var(--negative-soft);
+  --color-overlay: var(--overlay);
+  --color-hover: var(--hover);
 
   --font-sans:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
-    "Microsoft YaHei", sans-serif;
+    "Roboto", ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono:
+    "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 }
 
-html,
-body {
-  height: 100%;
+/* -------------------------------------------------------------------------- */
+/*  基础样式                                                                    */
+/* -------------------------------------------------------------------------- */
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
 }
 
 body {
-  background:
-    radial-gradient(1200px 600px at 15% -10%, rgba(79, 140, 255, 0.14), transparent 60%),
-    radial-gradient(900px 500px at 100% 0%, rgba(22, 199, 132, 0.08), transparent 55%),
-    var(--color-terminal);
-  color: var(--color-ink);
+  background: var(--background);
+  color: var(--foreground);
   font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 ::selection {
-  background: rgba(79, 140, 255, 0.35);
+  background: var(--accent-soft);
 }
 
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+a {
+  color: inherit;
+}
+
+/* 等宽数字：价格、涨跌幅、指标统一用 Roboto Mono */
 .num {
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
 }
 
-.panel {
-  background: linear-gradient(180deg, rgba(18, 29, 46, 0.9), rgba(11, 18, 32, 0.9));
-  border: 1px solid var(--color-line);
-  box-shadow: 0 18px 40px -32px rgba(0, 0, 0, 0.9);
-  backdrop-filter: blur(6px);
-}
-
+/* 细滚动条，贴近 OpenRouter 的克制风格 */
 .scroll-thin {
   scrollbar-width: thin;
-  scrollbar-color: #2a3a55 transparent;
+  scrollbar-color: var(--border-strong) transparent;
 }
 
 .scroll-thin::-webkit-scrollbar {
@@ -59,14 +209,31 @@ body {
 }
 
 .scroll-thin::-webkit-scrollbar-thumb {
-  background: #2a3a55;
+  background: var(--border-strong);
   border-radius: 999px;
+}
+
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 走势线绘制动画 */
+.chart-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: draw-line 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes draw-line {
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
@@ -75,49 +242,36 @@ body {
 }
 
 .rise {
-  animation: rise 0.28s ease-out both;
+  animation: rise 0.2s ease-out both;
 }
 
 @keyframes pulse-dot {
   0%,
   100% {
     opacity: 1;
-    transform: scale(1);
   }
   50% {
     opacity: 0.35;
-    transform: scale(0.75);
   }
 }
 
 .live-dot {
-  animation: pulse-dot 1.8s ease-in-out infinite;
+  animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-@keyframes shimmer {
-  0% {
-    background-position: -220px 0;
-  }
+/* 骨架屏：OpenRouter 使用纯净的 muted 块 + pulse */
+@keyframes skeleton-pulse {
+  0%,
   100% {
-    background-position: 220px 0;
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
   }
 }
 
 .skeleton {
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.1) 50%, rgba(255, 255, 255, 0.04) 100%);
-  background-size: 440px 100%;
-  animation: shimmer 1.4s linear infinite;
-}
-
-.chart-line {
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  animation: draw-line 0.75s ease-out forwards;
-}
-
-@keyframes draw-line {
-  to {
-    stroke-dashoffset: 0;
-  }
+  background: var(--muted);
+  animation: skeleton-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 

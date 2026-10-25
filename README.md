@@ -16,6 +16,8 @@
 - **多数据源自动降级**：Yahoo → Nasdaq →（可选）Perplexity，页面明确标注来源
 - **AI 解读（可选）**：Perplexity `sonar` 结合最新新闻生成中文解读、要点、风险与引用链接
 - **深色行情终端风格**，移动端 / 桌面端自适应
+- **亮 / 暗双主题**：跟随系统并可手动切换，选择持久化到 localStorage
+- **界面风格参考 [OpenRouter](https://openrouter.ai)**：Roboto / Roboto Mono 字体、细边框卡片、靛紫强调色、克制的留白与字号层级
 
 ## 快速开始
 

@@ -112,10 +112,10 @@ export default function SearchBox({ onPick }: SearchBoxProps) {
 
   return (
     <div ref={containerRef} className="relative w-full max-w-md">
-      <div className="flex items-center gap-2 rounded-xl border border-line bg-panel/80 px-3 py-2 transition focus-within:border-accent/70 focus-within:ring-2 focus-within:ring-accent/15">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" className="shrink-0 text-muted">
-          <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
-          <path d="m16.5 16.5 4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <div className="flex items-center gap-2 h-9 rounded-lg border border-border bg-card px-2.5 transition-colors focus-within:border-border-strong focus-within:ring-2 focus-within:ring-accent/15">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" className="shrink-0 text-muted-foreground">
+          <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8" />
+          <path d="m16.5 16.5 4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
         </svg>
         <input
           ref={inputRef}
@@ -124,7 +124,7 @@ export default function SearchBox({ onPick }: SearchBoxProps) {
           onFocus={() => results.length > 0 && setOpen(true)}
           onKeyDown={handleKeyDown}
           placeholder="搜索代码或公司，如 AAPL / 英伟达"
-          className="w-full bg-transparent text-sm text-ink placeholder:text-muted/70 focus:outline-none"
+          className="w-full bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
           aria-label="搜索股票"
           autoComplete="off"
           spellCheck={false}
@@ -132,30 +132,30 @@ export default function SearchBox({ onPick }: SearchBoxProps) {
         {loading ? (
           <span className="h-3 w-3 shrink-0 animate-spin rounded-full border border-accent border-t-transparent" />
         ) : (
-          <kbd className="hidden shrink-0 rounded border border-line px-1.5 py-0.5 text-[10px] text-muted sm:block">
+          <kbd className="hidden h-5 min-w-5 shrink-0 items-center justify-center rounded border border-border px-1 text-[10px] text-muted-foreground sm:flex">
             /
           </kbd>
         )}
       </div>
 
       {open && (results.length > 0 || showDirectAdd) && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-[360px] overflow-y-auto rounded-xl border border-line bg-[#0a111d] shadow-2xl scroll-thin rise">
+        <div className="absolute left-0 right-0 top-full z-50 mt-1.5 max-h-[360px] overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-[var(--shadow-pop)] scroll-thin rise">
           {results.map((item, index) => (
             <button
               key={`${item.symbol}-${index}`}
               type="button"
               onMouseEnter={() => setActive(index)}
               onClick={() => pick(item.symbol)}
-              className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition ${
-                active === index ? "bg-accent/15" : "hover:bg-white/5"
+              className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left transition-colors ${
+                active === index ? "bg-muted" : "hover:bg-muted"
               }`}
             >
-              <span className="w-16 shrink-0 truncate text-sm font-semibold text-ink">
+              <span className="w-14 shrink-0 truncate text-[13px] font-medium text-foreground">
                 {item.symbol}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-xs text-ink/85">{item.name}</span>
-                <span className="block truncate text-[10px] text-muted">
+                <span className="block truncate text-[12px] text-foreground/85">{item.name}</span>
+                <span className="block truncate text-[10px] text-muted-foreground">
                   {item.exchange} · {item.type}
                 </span>
               </span>
@@ -166,12 +166,12 @@ export default function SearchBox({ onPick }: SearchBoxProps) {
             <button
               type="button"
               onClick={() => pick(tickerCandidate!)}
-              className="flex w-full items-center gap-3 border-t border-line/60 px-3 py-2.5 text-left transition hover:bg-white/5"
+              className="mt-1 flex w-full items-center gap-2 rounded-md border-t border-border px-2 py-2 text-left transition-colors hover:bg-muted"
             >
-              <span className="w-16 shrink-0 text-sm font-semibold text-accent">
+              <span className="w-14 shrink-0 text-[13px] font-medium text-accent">
                 {tickerCandidate}
               </span>
-              <span className="text-xs text-muted">直接添加该代码</span>
+              <span className="text-[12px] text-muted-foreground">直接添加该代码</span>
             </button>
           )}
         </div>
