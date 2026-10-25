@@ -1,0 +1,4 @@
+# 本地 `npm run preview:cf`（wrangler dev）时读取的运行时变量
+# 用法：cp .dev.vars.example .dev.vars
+PERPLEXITY_API_KEY=
+PERPLEXITY_MODEL=sonar

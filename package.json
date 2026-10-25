@@ -2,14 +2,23 @@
   "name": "data-insider",
   "version": "0.1.0",
   "private": true,
-  "description": "美股多周期行情看板 - Yahoo Finance + Perplexity",
+  "description": "美股多周期行情看板 - Yahoo Finance + Nasdaq + Perplexity",
+  "engines": {
+    "node": ">=20.9.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:cf": "opennextjs-cloudflare build",
+    "preview:cf": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy:cf": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "upload:cf": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "start": "next start",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@opennextjs/cloudflare": "^1.20.13",
     "next": "15.5.28",
     "react": "19.1.1",
     "react-dom": "19.1.1"
@@ -20,6 +29,7 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "tailwindcss": "^4.3.3",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "wrangler": "^4.152.0"
   }
 }

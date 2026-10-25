@@ -87,13 +87,60 @@ curl 'http://localhost:3000/api/chart?symbol=NVDA&range=3M' | jq '.meta, (.point
 - Yahoo 对机房 IP 限流较严，Nasdaq 兜底可保证页面在多数环境下仍能正常使用；1D / 5D 分时数据仅 Yahoo 提供。
 - Yahoo / Nasdaq 均为公开非官方接口，字段可能变更，请勿用于生产交易决策。
 
+## 部署到 Cloudflare Workers
+
+本项目使用 **`@opennextjs/cloudflare`（OpenNext 适配器）** 部署为 Worker + Static Assets，不是 Cloudflare Pages / `next-on-pages`，**不需要**把 API 路由改成 Edge Runtime。
+
+仓库中已包含：
+
+- `wrangler.jsonc`：Worker 入口 `.open-next/worker.js`、`nodejs_compat`、静态资源 `ASSETS` 绑定
+- `open-next.config.ts`：OpenNext 构建配置（当前无 ISR，默认配置即可）
+- `public/_headers`：`/_next/static/*` 与 `/fonts/*` 长缓存
+- `package.json` 脚本：`build:cf` / `preview:cf` / `deploy:cf` / `upload:cf`
+
+### Workers Builds 面板怎么填
+
+| 字段 | 填写 |
+| --- | --- |
+| Build command | `npm run build:cf` |
+| Deploy command | `npx wrangler deploy` |
+| Preview command | `npx wrangler preview` |
+
+> ⚠️ 默认的 `npm run build` **不对**：它只执行 `next build`，产出 `.next`，不会生成 Cloudflare 需要的 `.open-next/worker.js`，随后的 `wrangler deploy` 会失败。必须改用 `npm run build:cf`（内部会先跑 `next build`，再执行 OpenNext 转换）。
+>
+> `npx wrangler preview` 是 Wrangler 4 的有效命令（open beta），用于非生产分支创建 Preview URL；如果想生成 Version URL，可改成 `npx wrangler versions upload`。
+
+### 环境变量
+
+在 Worker 的 **Settings → Variables and Secrets** 添加（仅运行时需要，构建阶段不需要）：
+
+| 变量 | 类型 | 说明 |
+| --- | --- | --- |
+| `PERPLEXITY_API_KEY` | Secret | 可选，启用 AI 解读与兜底报价 |
+| `PERPLEXITY_MODEL` | Text | 可选，默认 `sonar` |
+
+### 本地与命令行
+
+```bash
+cp .dev.vars.example .dev.vars   # 填入 PERPLEXITY_API_KEY（可留空）
+npm run preview:cf               # 构建并在本地 Workers 运行时预览
+npm run deploy:cf                # 构建并直接部署（需 wrangler login 或 CLOUDFLARE_API_TOKEN）
+```
+
+### 注意事项
+
+- 建议使用 **Workers Paid** 计划：免费套餐单请求 10ms CPU，`MAX` 周期解析较大的 JSON 时可能超限；付费为 30s。
+- `lib/cache.ts` 是 per-isolate 内存缓存，Workers 上实例更多，命中率低于单实例 Node；如需跨实例缓存，可按 OpenNext 文档接 R2 incremental cache。
+- 云厂商出口 IP 可能被 Yahoo / Nasdaq 限流。部署后先访问 `/api/quotes?symbols=AAPL` 验证；若两个源都被封，建议在 `lib/market.ts` 再接入一个带 Key 的数据源（Finnhub / Twelve Data / Polygon）作为第三层兜底。
+- Workers 免费计划子请求上限 50/请求，本项目正常情况 ≤ 12 个。
+
 ## 部署到 Vercel
 
 1. 将仓库导入 Vercel，框架会自动识别为 Next.js；
 2. 在 Project Settings → Environment Variables 添加 `PERPLEXITY_API_KEY`（可选）；
 3. Deploy。
 
-也可以部署到任何支持 Node.js 18+ 的平台（需 Node Runtime，不支持 Edge Runtime，因为依赖 Node 内置能力）。
+也可以部署到任何支持 Node.js 20+ 的平台（需 Node Runtime；Cloudflare Workers 请使用上面的 OpenNext 方案）。
 
 ## 目录结构
 
@@ -126,6 +173,9 @@ lib/
   http.ts               路由公共工具
 public/
   fonts/                自托管 Roboto / Roboto Mono
+  _headers              Cloudflare 静态资源缓存规则
+wrangler.jsonc          Cloudflare Worker 配置（OpenNext）
+open-next.config.ts     OpenNext 适配器配置
 ```
 
 ## 界面与主题
