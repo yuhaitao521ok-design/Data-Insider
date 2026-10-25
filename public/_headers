@@ -1,0 +1,6 @@
+# Cloudflare 静态资源缓存（OpenNext 推荐）
+/_next/static/*
+  Cache-Control: public,max-age=31536000,immutable
+
+/fonts/*
+  Cache-Control: public,max-age=31536000,immutable
