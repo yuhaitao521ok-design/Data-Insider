@@ -680,7 +680,7 @@ export default function Dashboard() {
                         aria-pressed={range === key}
                         className={`h-7 rounded-md px-2.5 text-[12px] transition-colors ${
                           range === key
-                            ? "bg-card font-medium text-foreground shadow-sm"
+                            ? "bg-card font-medium text-foreground shadow-sm dark:bg-overlay dark:shadow-none"
                             : "text-muted-foreground hover:text-foreground"
                         }`}
                       >
