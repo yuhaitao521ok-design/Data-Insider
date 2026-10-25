@@ -109,11 +109,12 @@ app/
     insight/route.ts    Perplexity AI 解读
     config/route.ts     功能开关探测
 components/
-  Dashboard.tsx         主面板（状态、轮询、自选股）
+  Dashboard.tsx         主面板（状态、轮询、自选股、导航）
   PriceChart.tsx        SVG 走势图
   Sparkline.tsx         迷你走势
   SearchBox.tsx         搜索下拉
   InsightPanel.tsx      AI 解读卡片
+  ThemeToggle.tsx       亮/暗主题切换
 lib/
   types.ts              共享类型 + 周期配置
   yahoo.ts              Yahoo Finance 适配器
@@ -123,7 +124,18 @@ lib/
   cache.ts              LRU 缓存 / 去重 / SWR
   format.ts             数字与时间格式化
   http.ts               路由公共工具
+public/
+  fonts/                自托管 Roboto / Roboto Mono
 ```
+
+## 界面与主题
+
+界面参考 [OpenRouter](https://openrouter.ai) 的设计语言：
+
+- **字体**：Roboto（UI）+ Roboto Mono（价格、涨跌幅、指标），自托管于 `public/fonts`，不依赖外部字体 CDN
+- **色板**：中性灰底 + 1px 细边框 + 靛紫 `#6366f1` 强调色（暗色模式为 `#818cf8`），涨跌沿用美股习惯（绿涨红跌）
+- **组件**：12px 圆角卡片、分段式周期切换、分隔线网格指标区、行式自选股列表
+- **亮 / 暗双主题**：默认跟随系统，右上角可手动切换，选择写入 `localStorage`；`app/layout.tsx` 中的首帧脚本避免主题闪烁
 
 ## 免责声明
 
