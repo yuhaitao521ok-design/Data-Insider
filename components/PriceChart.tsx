@@ -129,6 +129,9 @@ export default function PriceChart({
   const wrapRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [hover, setHover] = useState<number | null>(null);
+  const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
+  const [tooltipHeight, setTooltipHeight] = useState(0);
+  const tooltipRef = useRef<HTMLDivElement>(null);
   const gradientId = useId().replace(/[:]/g, "");
 
   useEffect(() => {
@@ -143,6 +146,11 @@ export default function PriceChart({
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    const element = tooltipRef.current;
+    if (element) setTooltipHeight(element.offsetHeight);
+  }, [hover, panes.length, overlays.length]);
 
   const geometry = useMemo<Geometry | null>(() => {
     const width = size.width;
@@ -429,9 +437,34 @@ export default function PriceChart({
   const hoverIndex = hover ?? 0;
   const hoverGeom =
     hover !== null ? { x: geometry.xFor(hover), y: geometry.yFor(points[hover].close) } : null;
-  const tooltipLeft = hoverGeom
-    ? Math.min(Math.max(hoverGeom.x - 104, 8), Math.max(geometry.width - 216, 8))
-    : 0;
+  const TOOLTIP_WIDTH = 208;
+  const TOOLTIP_OFFSET = 14;
+  // 鼠标还没进入图表时（例如键盘打开）用一个兜底锚点
+  const anchor = pointer ?? (hoverGeom ? { x: hoverGeom.x, y: geometry.padTop + 24 } : null);
+  const estimatedHeight =
+    tooltipHeight || Math.min(300, 120 + panes.length * 88 + overlays.length * 64);
+
+  let tooltipLeft = 0;
+  let tooltipTop = 0;
+  if (anchor) {
+    tooltipLeft = anchor.x + TOOLTIP_OFFSET;
+    if (tooltipLeft + TOOLTIP_WIDTH > geometry.width - 8) {
+      tooltipLeft = anchor.x - TOOLTIP_WIDTH - TOOLTIP_OFFSET;
+    }
+    tooltipLeft = Math.min(
+      Math.max(tooltipLeft, 8),
+      Math.max(geometry.width - TOOLTIP_WIDTH - 8, 8),
+    );
+
+    tooltipTop = anchor.y + TOOLTIP_OFFSET;
+    if (tooltipTop + estimatedHeight > geometry.height - 8) {
+      tooltipTop = anchor.y - estimatedHeight - TOOLTIP_OFFSET;
+    }
+    tooltipTop = Math.min(
+      Math.max(tooltipTop, 8),
+      Math.max(geometry.height - estimatedHeight - 8, 8),
+    );
+  }
   const legendStyle = {
     fill: "var(--chart-label)",
     paintOrder: "stroke" as const,
@@ -714,18 +747,25 @@ export default function PriceChart({
           fill="transparent"
           onPointerMove={(event) => {
             const rect = event.currentTarget.getBoundingClientRect();
-            const ratio = (event.clientX - rect.left) / Math.max(rect.width, 1);
+            const offsetX = event.clientX - rect.left;
+            const offsetY = event.clientY - rect.top;
+            const ratio = offsetX / Math.max(rect.width, 1);
             const index = Math.round(ratio * (points.length - 1));
             setHover(Math.min(points.length - 1, Math.max(0, index)));
+            setPointer({ x: geometry.padLeft + offsetX, y: offsetY });
           }}
-          onPointerLeave={() => setHover(null)}
+          onPointerLeave={() => {
+            setHover(null);
+            setPointer(null);
+          }}
         />
       </svg>
 
       {hovered && (
         <div
-          className="pointer-events-none absolute top-2 z-10 w-[208px] rounded-lg border border-border bg-popover/95 p-2.5 text-[10.5px] shadow-[var(--shadow-pop)]"
-          style={{ left: tooltipLeft }}
+          ref={tooltipRef}
+          className="pointer-events-none absolute z-10 w-[208px] rounded-lg border border-border bg-popover/95 p-2.5 text-[10.5px] shadow-[var(--shadow-pop)]"
+          style={{ left: tooltipLeft, top: tooltipTop }}
         >
           <div className="mb-1 text-muted-foreground">{formatFullTime(hovered.t, timezone)}</div>
           <div className="num text-[15px] font-medium" style={{ color: stroke }}>
