@@ -12,6 +12,7 @@
 - **自选股**：默认 8 只热门标的，支持搜索添加（含中文别名）、移除，列表持久化到 localStorage
 - **实时刷新**：报价 30 秒轮询、分时图 60 秒轮询，可一键暂停；自选股列表带迷你走势
 - **专业走势图**：纯 SVG 实现（无图表库依赖），支持十字光标、悬浮明细、成交量、昨收参考线
+- **技术指标**：一键添加 MACD / RSI / BOLL，支持自定义参数；MACD、RSI 为副图，BOLL 叠加主图，指标配置持久化
 - **关键指标**：昨收、今日高低、成交量、区间涨跌 / 高低、52 周区间
 - **多数据源自动降级**：Yahoo → Nasdaq →（可选）Perplexity，页面明确标注来源
 - **AI 解读（可选）**：Perplexity `sonar` 结合最新新闻生成中文解读、要点、风险与引用链接
@@ -87,6 +88,21 @@ curl 'http://localhost:3000/api/chart?symbol=NVDA&range=3M' | jq '.meta, (.point
 - Yahoo 对机房 IP 限流较严，Nasdaq 兜底可保证页面在多数环境下仍能正常使用；1D / 5D 分时数据仅 Yahoo 提供。
 - Yahoo / Nasdaq 均为公开非官方接口，字段可能变更，请勿用于生产交易决策。
 
+## 技术指标
+
+图表右上角的「+ 指标」按钮可添加以下指标（同一类型只保留一个实例）：
+
+| 指标 | 位置 | 参数 | 计算方式 |
+| --- | --- | --- | --- |
+| **MACD** | 副图 | 快线 12、慢线 26、信号 9 | EMA 差值（DIF）、DEA 信号线、柱状图 = DIF − DEA |
+| **RSI** | 副图 | 周期 14、超买 70、超卖 30 | Wilder 平滑，0–100，附超买/超卖参考线 |
+| **BOLL** | 主图叠加 | 周期 20、标准差倍数 2 | 中轨 SMA + 上下轨 ±k×标准差，带填充色带 |
+
+- 点击指标标签可修改参数，带范围与交叉校验（如慢线必须大于快线、超买必须大于超卖），支持「重置默认」
+- 指标选择与参数写入 `localStorage`，刷新后自动恢复
+- 若当前周期数据点不足（例如 1M 只有约 22 个点，而 MACD 需要 34 个），图表上方会提示并给出「切换到更长周期」按钮
+- 计算全部在浏览器完成（`lib/indicators.ts`），不新增接口请求，也不依赖第三方指标库
+
 ## 部署到 Cloudflare Workers
 
 本项目使用 **`@opennextjs/cloudflare`（OpenNext 适配器）** 部署为 Worker + Static Assets，不是 Cloudflare Pages / `next-on-pages`，**不需要**把 API 路由改成 Edge Runtime。
@@ -161,9 +177,11 @@ components/
   Sparkline.tsx         迷你走势
   SearchBox.tsx         搜索下拉
   InsightPanel.tsx      AI 解读卡片
+  IndicatorControls.tsx 指标添加 / 参数设置
   ThemeToggle.tsx       亮/暗主题切换
 lib/
   types.ts              共享类型 + 周期配置
+  indicators.ts         MACD / RSI / BOLL 计算与校验
   yahoo.ts              Yahoo Finance 适配器
   nasdaq.ts             Nasdaq 兜底适配器
   perplexity.ts         Perplexity 适配器

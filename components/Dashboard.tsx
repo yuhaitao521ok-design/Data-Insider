@@ -6,6 +6,7 @@ import Sparkline from "@/components/Sparkline";
 import PriceChart from "@/components/PriceChart";
 import InsightPanel from "@/components/InsightPanel";
 import ThemeToggle from "@/components/ThemeToggle";
+import IndicatorControls from "@/components/IndicatorControls";
 import {
   DEFAULT_WATCHLIST,
   RANGE_CONFIG,
@@ -17,6 +18,12 @@ import {
   type RangeKey,
 } from "@/lib/types";
 import {
+  buildIndicatorRenderData,
+  requiredIndicatorPoints,
+  sanitizeIndicatorConfigs,
+  type IndicatorConfig,
+} from "@/lib/indicators";
+import {
   formatCompact,
   formatPercent,
   formatPrice,
@@ -26,6 +33,7 @@ import {
 const WATCHLIST_KEY = "data-insider:watchlist:v1";
 const RANGE_KEY = "data-insider:range:v1";
 const AUTO_KEY = "data-insider:auto:v1";
+const INDICATORS_KEY = "data-insider:indicators:v1";
 const POLL_MS = 30_000;
 const INTRADAY_POLL_MS = 60_000;
 
@@ -52,6 +60,7 @@ export default function Dashboard() {
   const [selected, setSelected] = useState<string>(DEFAULT_WATCHLIST[0]);
   const [range, setRange] = useState<RangeKey>("1M");
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [indicators, setIndicators] = useState<IndicatorConfig[]>([]);
 
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
   const [quotesLoading, setQuotesLoading] = useState(true);
@@ -95,6 +104,8 @@ export default function Dashboard() {
       if (isRangeKey(savedRange)) setRange(savedRange.toUpperCase() as RangeKey);
       const savedAuto = window.localStorage.getItem(AUTO_KEY);
       if (savedAuto !== null) setAutoRefresh(savedAuto === "1");
+      const savedIndicators = window.localStorage.getItem(INDICATORS_KEY);
+      if (savedIndicators) setIndicators(sanitizeIndicatorConfigs(JSON.parse(savedIndicators)));
     } catch {
       // localStorage 不可用（隐私模式等），忽略即可
     }
@@ -107,10 +118,11 @@ export default function Dashboard() {
       window.localStorage.setItem(WATCHLIST_KEY, JSON.stringify(watchlist));
       window.localStorage.setItem(RANGE_KEY, range);
       window.localStorage.setItem(AUTO_KEY, autoRefresh ? "1" : "0");
+      window.localStorage.setItem(INDICATORS_KEY, JSON.stringify(indicators));
     } catch {
       // 忽略写入失败
     }
-  }, [watchlist, range, autoRefresh, hydrated]);
+  }, [watchlist, range, autoRefresh, indicators, hydrated]);
 
   /* -------------------------------- 数据加载 ------------------------------- */
 
@@ -287,6 +299,30 @@ export default function Dashboard() {
     const lows = points.map((point) => point.low ?? point.close);
     return { high: Math.max(...highs), low: Math.min(...lows) };
   }, [chart]);
+
+  const indicatorWarning = useMemo(() => {
+    if (!chart || indicators.length === 0) return null;
+    const available = chart.points.length;
+    const issues = indicators.filter((config) => requiredIndicatorPoints(config) > available);
+    if (issues.length === 0) return null;
+
+    const rangeIndex = (RANGE_KEYS as readonly RangeKey[]).indexOf(range);
+    const suggest = rangeIndex >= 0 && rangeIndex < RANGE_KEYS.length - 1
+        ? (RANGE_KEYS[rangeIndex + 1] as RangeKey)
+        : null;
+    return {
+      available,
+      label: issues
+        .map((config) => `${config.type} 需 ${requiredIndicatorPoints(config)} 个`)
+        .join("、"),
+      suggest,
+    };
+  }, [chart, indicators, range]);
+
+  const indicatorData = useMemo(
+    () => (chart ? buildIndicatorRenderData(chart.points, indicators) : { panes: [], overlays: [] }),
+    [chart, indicators],
+  );
 
   const lastUpdateLabel = lastUpdated
     ? formatTimeInZone(lastUpdated, "Asia/Shanghai", {
@@ -577,7 +613,7 @@ export default function Dashboard() {
               </div>
             )}
 
-            <article className="overflow-hidden rounded-xl border border-border bg-card">
+            <article className="rounded-xl border border-border bg-card">
               <div className="p-4 sm:p-5">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="min-w-0">
@@ -688,10 +724,30 @@ export default function Dashboard() {
                       </button>
                     ))}
                   </div>
-                  <span className="text-[11px] text-muted-foreground">
-                    间隔 {chart?.interval ?? RANGE_CONFIG[range].interval}
-                  </span>
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <IndicatorControls configs={indicators} onChange={setIndicators} />
+                    <span className="hidden text-[11px] text-muted-foreground sm:inline">
+                      间隔 {chart?.interval ?? RANGE_CONFIG[range].interval}
+                    </span>
+                  </div>
                 </div>
+
+                {indicatorWarning && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-amber-500/25 bg-amber-500/[0.07] px-2.5 py-1.5 text-[10.5px] leading-4 text-amber-700 dark:text-amber-300">
+                    <span className="flex-1">
+                      当前周期仅 {indicatorWarning.available} 个数据点，{indicatorWarning.label}数据点才能完整计算。
+                    </span>
+                    {indicatorWarning.suggest && (
+                      <button
+                        type="button"
+                        onClick={() => setRange(indicatorWarning.suggest as RangeKey)}
+                        className="rounded border border-amber-500/30 px-1.5 py-0.5 text-[10px] transition-colors hover:bg-amber-500/10"
+                      >
+                        切换到 {RANGE_CONFIG[indicatorWarning.suggest].label}
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 <div className="mt-3">
                   {chartError ? (
@@ -728,6 +784,8 @@ export default function Dashboard() {
                       reference={
                         range === "1D" || range === "5D" ? chart.meta.previousClose : null
                       }
+                      overlays={indicatorData.overlays}
+                      panes={indicatorData.panes}
                     />
                   ) : (
                     <div className="skeleton h-[250px] w-full rounded-lg sm:h-[310px] lg:h-[360px]" />
@@ -736,7 +794,7 @@ export default function Dashboard() {
 
               </div>
 
-              <div className="grid grid-cols-2 gap-px border-t border-border bg-border sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-px overflow-hidden rounded-b-xl border-t border-border bg-border sm:grid-cols-4">
                 {stats.map((stat) => (
                   <div key={stat.label} className="bg-card px-4 py-3">
                     <p className="text-[10.5px] text-muted-foreground">{stat.label}</p>
