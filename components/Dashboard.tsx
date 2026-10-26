@@ -7,12 +7,18 @@ import PriceChart from "@/components/PriceChart";
 import InsightPanel from "@/components/InsightPanel";
 import ThemeToggle from "@/components/ThemeToggle";
 import IndicatorControls from "@/components/IndicatorControls";
+import IntervalSelect from "@/components/IntervalSelect";
 import {
   DEFAULT_WATCHLIST,
   RANGE_CONFIG,
   RANGE_KEYS,
+  isIntervalAllowed,
+  isIntervalKey,
+  isIntradayInterval,
   isRangeKey,
+  resolveInterval,
   type ChartResponse,
+  type IntervalKey,
   type InsightResponse,
   type Quote,
   type RangeKey,
@@ -34,6 +40,7 @@ const WATCHLIST_KEY = "data-insider:watchlist:v1";
 const RANGE_KEY = "data-insider:range:v1";
 const AUTO_KEY = "data-insider:auto:v1";
 const INDICATORS_KEY = "data-insider:indicators:v1";
+const INTERVALS_KEY = "data-insider:intervals:v1";
 const POLL_MS = 30_000;
 const INTRADAY_POLL_MS = 60_000;
 
@@ -61,6 +68,11 @@ export default function Dashboard() {
   const [range, setRange] = useState<RangeKey>("1M");
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [indicators, setIndicators] = useState<IndicatorConfig[]>([]);
+  const [intervalByRange, setIntervalByRange] = useState<
+    Partial<Record<RangeKey, IntervalKey>>
+  >({});
+
+  const interval = resolveInterval(range, intervalByRange[range]);
 
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
   const [quotesLoading, setQuotesLoading] = useState(true);
@@ -106,6 +118,22 @@ export default function Dashboard() {
       if (savedAuto !== null) setAutoRefresh(savedAuto === "1");
       const savedIndicators = window.localStorage.getItem(INDICATORS_KEY);
       if (savedIndicators) setIndicators(sanitizeIndicatorConfigs(JSON.parse(savedIndicators)));
+      const savedIntervals = window.localStorage.getItem(INTERVALS_KEY);
+      if (savedIntervals) {
+        const parsed = JSON.parse(savedIntervals) as Record<string, unknown>;
+        const next: Partial<Record<RangeKey, IntervalKey>> = {};
+        for (const key of RANGE_KEYS) {
+          const candidate = parsed?.[key];
+          if (
+            typeof candidate === "string" &&
+            isIntervalKey(candidate) &&
+            isIntervalAllowed(key, candidate)
+          ) {
+            next[key] = candidate;
+          }
+        }
+        setIntervalByRange(next);
+      }
     } catch {
       // localStorage 不可用（隐私模式等），忽略即可
     }
@@ -119,10 +147,11 @@ export default function Dashboard() {
       window.localStorage.setItem(RANGE_KEY, range);
       window.localStorage.setItem(AUTO_KEY, autoRefresh ? "1" : "0");
       window.localStorage.setItem(INDICATORS_KEY, JSON.stringify(indicators));
+      window.localStorage.setItem(INTERVALS_KEY, JSON.stringify(intervalByRange));
     } catch {
       // 忽略写入失败
     }
-  }, [watchlist, range, autoRefresh, indicators, hydrated]);
+  }, [watchlist, range, autoRefresh, indicators, intervalByRange, hydrated]);
 
   /* -------------------------------- 数据加载 ------------------------------- */
 
@@ -168,7 +197,12 @@ export default function Dashboard() {
   );
 
   const loadChart = useCallback(
-    async (symbol: string, nextRange: RangeKey, options: { silent?: boolean } = {}) => {
+    async (
+      symbol: string,
+      nextRange: RangeKey,
+      nextInterval: IntervalKey,
+      options: { silent?: boolean } = {},
+    ) => {
       const requestId = ++chartRequestRef.current;
       if (!options.silent) {
         setChartLoading(true);
@@ -177,7 +211,7 @@ export default function Dashboard() {
 
       try {
         const response = await fetch(
-          `/api/chart?symbol=${encodeURIComponent(symbol)}&range=${nextRange}`,
+          `/api/chart?symbol=${encodeURIComponent(symbol)}&range=${nextRange}&interval=${nextInterval}`,
           { cache: "no-store" },
         );
         if (!response.ok) {
@@ -212,18 +246,18 @@ export default function Dashboard() {
   useEffect(() => {
     if (!hydrated) return;
     setChart(null);
-    void loadChart(selected, range);
-  }, [hydrated, selected, range, loadChart]);
+    void loadChart(selected, range, interval);
+  }, [hydrated, selected, range, interval, loadChart]);
 
   useEffect(() => {
     if (!autoRefresh || !hydrated) return;
-    if (range !== "1D" && range !== "5D") return;
+    if (!isIntradayInterval(interval)) return;
     const id = window.setInterval(
-      () => void loadChart(selected, range, { silent: true }),
+      () => void loadChart(selected, range, interval, { silent: true }),
       INTRADAY_POLL_MS,
     );
     return () => window.clearInterval(id);
-  }, [autoRefresh, hydrated, selected, range, loadChart]);
+  }, [autoRefresh, hydrated, selected, range, interval, loadChart]);
 
   useEffect(() => {
     fetch("/api/config", { cache: "no-store" })
@@ -268,6 +302,11 @@ export default function Dashboard() {
     if (next.length === 0) return;
     setWatchlist(next);
     if (selected === symbol) setSelected(next[0]);
+  }
+
+  function selectInterval(next: IntervalKey) {
+    if (!isIntervalAllowed(range, next)) return;
+    setIntervalByRange((prev) => ({ ...prev, [range]: next }));
   }
 
   function focusSearch() {
@@ -415,7 +454,7 @@ export default function Dashboard() {
               type="button"
               onClick={() => {
                 void loadQuotes();
-                void loadChart(selected, range);
+                void loadChart(selected, range, interval);
               }}
               className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               title="立即刷新"
@@ -724,11 +763,9 @@ export default function Dashboard() {
                       </button>
                     ))}
                   </div>
-                  <div className="flex flex-wrap items-center justify-end gap-2">
+                  <div className="flex flex-wrap items-center justify-end gap-1.5">
+                    <IntervalSelect range={range} value={interval} onChange={selectInterval} />
                     <IndicatorControls configs={indicators} onChange={setIndicators} />
-                    <span className="hidden text-[11px] text-muted-foreground sm:inline">
-                      间隔 {chart?.interval ?? RANGE_CONFIG[range].interval}
-                    </span>
                   </div>
                 </div>
 
@@ -758,7 +795,7 @@ export default function Dashboard() {
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => void loadChart(selected, range)}
+                          onClick={() => void loadChart(selected, range, interval)}
                           className="h-8 rounded-lg bg-foreground px-3 text-[12px] font-medium text-background transition-opacity hover:opacity-90"
                         >
                           重新加载
@@ -784,6 +821,7 @@ export default function Dashboard() {
                       reference={
                         range === "1D" || range === "5D" ? chart.meta.previousClose : null
                       }
+                      interval={interval}
                       overlays={indicatorData.overlays}
                       panes={indicatorData.panes}
                     />

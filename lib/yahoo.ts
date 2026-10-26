@@ -1,8 +1,12 @@
 import { cached } from "@/lib/cache";
 import {
+  INTERVAL_CONFIG,
   RANGE_CONFIG,
+  defaultIntervalFor,
+  isIntervalAllowed,
   type ChartPoint,
   type ChartResponse,
+  type IntervalKey,
   type Quote,
   type RangeKey,
   type SearchResult,
@@ -247,9 +251,14 @@ async function fetchSpark(symbols: string[]): Promise<YahooSparkResponse> {
   return fetchYahooJson<YahooSparkResponse>(path);
 }
 
-async function fetchChartRaw(symbol: string, rangeKey: RangeKey): Promise<YahooChartResult> {
-  const config = RANGE_CONFIG[rangeKey];
-  const path = `/v8/finance/chart/${encodeURIComponent(symbol)}?range=${config.range}&interval=${config.interval}&includePrePost=false&events=div%2Csplit`;
+async function fetchChartRaw(
+  symbol: string,
+  rangeKey: RangeKey,
+  intervalKey: IntervalKey,
+): Promise<YahooChartResult> {
+  const rangeConfig = RANGE_CONFIG[rangeKey];
+  const intervalConfig = INTERVAL_CONFIG[intervalKey];
+  const path = `/v8/finance/chart/${encodeURIComponent(symbol)}?range=${rangeConfig.range}&interval=${intervalConfig.yahoo}&includePrePost=false&events=div%2Csplit`;
   const data = await fetchYahooJson<YahooChartResponse>(path);
   const result = data.chart?.result?.[0];
   if (!result) {
@@ -264,7 +273,7 @@ async function fetchChartRaw(symbol: string, rangeKey: RangeKey): Promise<YahooC
 
 /** 用 chart 接口兜底单个代码（spark 偶尔会漏掉某些标的） */
 async function quoteFromChart(symbol: string): Promise<Quote> {
-  const result = await fetchChartRaw(symbol, "1D");
+  const result = await fetchChartRaw(symbol, "1D", "5m");
   return buildQuote(result.meta, sparklineFrom(result), symbol);
 }
 
@@ -340,11 +349,15 @@ export async function getQuotes(symbols: string[]): Promise<{
 export async function getChart(
   symbol: string,
   range: RangeKey,
+  interval: IntervalKey = defaultIntervalFor(range),
 ): Promise<ChartResponse & { cached: boolean; stale: boolean }> {
-  const config = RANGE_CONFIG[range];
-  const key = `chart:${symbol}:${range}`;
-  const result = await cached(key, config.freshSeconds, config.staleSeconds, async () => {
-    const raw = await fetchChartRaw(symbol, range);
+  if (!isIntervalAllowed(range, interval)) {
+    throw new UpstreamError(`周期 ${range} 不支持 ${interval} 间隔`, 400);
+  }
+  const intervalConfig = INTERVAL_CONFIG[interval];
+  const key = `chart:${symbol}:${range}:${interval}`;
+  const result = await cached(key, intervalConfig.freshSeconds, intervalConfig.staleSeconds, async () => {
+    const raw = await fetchChartRaw(symbol, range, interval);
     const points = chartPointsFrom(raw);
     if (points.length === 0) {
       throw new UpstreamError("该代码在该周期内没有可用的行情数据", 404, "not_found");
@@ -362,7 +375,7 @@ export async function getChart(
       currency: quote.currency,
       timezone: meta.exchangeTimezoneName || "America/New_York",
       range,
-      interval: config.interval,
+      interval,
       points,
       meta: {
         price: quote.price,

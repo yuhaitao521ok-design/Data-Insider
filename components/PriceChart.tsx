@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import type { ChartPoint, RangeKey } from "@/lib/types";
+import type { ChartPoint, IntervalKey, RangeKey } from "@/lib/types";
 import type { ChartOverlay, ChartPane } from "@/lib/indicators";
 import { formatIndicatorValue } from "@/lib/indicators";
 import { formatAxisTime, formatCompact, formatFullTime, formatPrice } from "@/lib/format";
@@ -9,6 +9,7 @@ import { formatAxisTime, formatCompact, formatFullTime, formatPrice } from "@/li
 interface PriceChartProps {
   points: ChartPoint[];
   range: RangeKey;
+  interval: IntervalKey;
   timezone: string;
   currency: string;
   /** 上涨用绿色，下跌用红色 */
@@ -38,13 +39,10 @@ interface LineGeometry {
   points: { x: number; y: number }[];
 }
 
-interface BarGeometry {
-  key: string;
-  x: number;
+interface HistogramPaths {
+  positive: string;
+  negative: string;
   width: number;
-  y: number;
-  height: number;
-  positive: boolean;
 }
 
 interface PaneGeometry {
@@ -56,7 +54,7 @@ interface PaneGeometry {
   max: number;
   yFor: (value: number) => number;
   lines: LineGeometry[];
-  bars: BarGeometry[];
+  histograms: HistogramPaths[];
   guides: { value: number; y: number; label?: string }[];
   zeroY: number | null;
   yLabels: { y: number; label: string }[];
@@ -75,7 +73,7 @@ interface Geometry {
   yFor: (price: number) => number;
   linePath: string;
   areaPath: string;
-  volumeBars: BarGeometry[];
+  volumePaths: HistogramPaths;
   gridLines: { y: number; label: string }[];
   xLabels: { x: number; label: string; anchor: "start" | "middle" | "end" }[];
   referenceY: number | null;
@@ -120,6 +118,7 @@ function numericValues(values: (number | null)[]): number[] {
 export default function PriceChart({
   points,
   range,
+  interval,
   timezone,
   currency,
   positive,
@@ -202,19 +201,21 @@ export default function PriceChart({
     const maxVolume = Math.max(...points.map((point) => point.volume ?? 0), 1);
     const volumeTop = priceBottom + VOLUME_GAP;
     const barWidth = Math.max(1, innerWidth / points.length - 0.8);
-    const volumeBars = points.map((point, index) => {
+    const volumeBase = volumeTop + volumeHeight;
+    let volumePositive = "";
+    let volumeNegative = "";
+
+    points.forEach((point, index) => {
       const value = point.volume ?? 0;
-      const barHeight = Math.max(value > 0 ? 1 : 0, (value / maxVolume) * volumeHeight);
-      const open = point.open ?? point.close;
-      return {
-        key: `v-${index}`,
-        x: xFor(index) - barWidth / 2,
-        width: barWidth,
-        y: volumeTop + volumeHeight - barHeight,
-        height: barHeight,
-        positive: point.close >= open,
-      };
+      if (value <= 0) return;
+      const barHeight = Math.max(1, (value / maxVolume) * volumeHeight);
+      const x = xFor(index).toFixed(2);
+      const segment = `M${x} ${(volumeBase - barHeight).toFixed(2)}V${volumeBase.toFixed(2)}`;
+      if (point.close >= (point.open ?? point.close)) volumePositive += segment;
+      else volumeNegative += segment;
     });
+
+    const volumePaths = { positive: volumePositive, negative: volumeNegative, width: barWidth };
 
     const gridLines = Array.from({ length: 4 }, (_, index) => {
       const ratio = index / 3;
@@ -228,7 +229,7 @@ export default function PriceChart({
         labelCount === 1 ? 0 : Math.round((index / (labelCount - 1)) * (points.length - 1));
       return {
         x: xFor(pointIndex),
-        label: formatAxisTime(points[pointIndex].t, range, timezone),
+        label: formatAxisTime(points[pointIndex].t, range, timezone, interval),
         anchor: (index === 0 ? "start" : index === labelCount - 1 ? "end" : "middle") as
           | "start"
           | "middle"
@@ -327,24 +328,22 @@ export default function PriceChart({
       const paneSpan = paneMax - paneMin || 1;
       const paneYFor = (value: number) => top + ((paneMax - value) / paneSpan) * PANE_HEIGHT;
       const paneLines: LineGeometry[] = [];
-      const paneBars: BarGeometry[] = [];
+      const paneHistograms: HistogramPaths[] = [];
       const histogramWidth = Math.max(1, innerWidth / points.length - 0.8);
 
       pane.series.forEach((series, seriesIndex) => {
         if (series.type === "histogram") {
           const zero = paneYFor(0);
+          let positive = "";
+          let negative = "";
           series.values.forEach((value, index) => {
             if (value === null || !Number.isFinite(value)) return;
             const y = paneYFor(value);
-            paneBars.push({
-              key: `${pane.id}-h-${index}`,
-              x: xFor(index) - histogramWidth / 2,
-              width: histogramWidth,
-              y: Math.min(y, zero),
-              height: Math.max(1, Math.abs(zero - y)),
-              positive: value >= 0,
-            });
+            const segment = `M${xFor(index).toFixed(2)} ${Math.min(y, zero).toFixed(2)}V${Math.max(y, zero).toFixed(2)}`;
+            if (value >= 0) positive += segment;
+            else negative += segment;
           });
+          paneHistograms.push({ positive, negative, width: histogramWidth });
           return;
         }
 
@@ -373,7 +372,7 @@ export default function PriceChart({
         max: paneMax,
         yFor: paneYFor,
         lines: paneLines,
-        bars: paneBars,
+        histograms: paneHistograms,
         guides,
         zeroY: pane.zeroLine || hasHistogram ? paneYFor(0) : null,
         yLabels: [
@@ -401,7 +400,7 @@ export default function PriceChart({
       yFor,
       linePath,
       areaPath,
-      volumeBars,
+      volumePaths,
       gridLines,
       xLabels,
       referenceY,
@@ -410,7 +409,7 @@ export default function PriceChart({
       panes: paneGeometries,
       panesBottom,
     };
-  }, [points, range, timezone, reference, overlays, panes, size]);
+  }, [points, range, interval, timezone, reference, overlays, panes, size]);
 
 
   if (!geometry) {
@@ -515,17 +514,24 @@ export default function PriceChart({
           />
         ))}
 
-        {geometry.volumeBars.map((bar) => (
-          <rect
-            key={bar.key}
-            x={bar.x}
-            y={bar.y}
-            width={bar.width}
-            height={bar.height}
+        {geometry.volumePaths.positive && (
+          <path
+            d={geometry.volumePaths.positive}
+            fill="none"
+            strokeWidth={geometry.volumePaths.width}
             opacity="0.24"
-            style={{ fill: bar.positive ? "var(--positive)" : "var(--negative)" }}
+            style={{ stroke: "var(--positive)" }}
           />
-        ))}
+        )}
+        {geometry.volumePaths.negative && (
+          <path
+            d={geometry.volumePaths.negative}
+            fill="none"
+            strokeWidth={geometry.volumePaths.width}
+            opacity="0.24"
+            style={{ stroke: "var(--negative)" }}
+          />
+        )}
 
         <path d={geometry.areaPath} fill={`url(#grad-${gradientId})`} />
         <path
@@ -586,16 +592,27 @@ export default function PriceChart({
               </g>
             ))}
 
-            {pane.bars.map((bar) => (
-              <rect
-                key={bar.key}
-                x={bar.x}
-                y={bar.y}
-                width={bar.width}
-                height={bar.height}
-                opacity="0.5"
-                style={{ fill: bar.positive ? "var(--positive)" : "var(--negative)" }}
-              />
+            {pane.histograms.map((histogram, index) => (
+              <g key={`${pane.id}-histogram-${index}`}>
+                {histogram.positive && (
+                  <path
+                    d={histogram.positive}
+                    fill="none"
+                    strokeWidth={histogram.width}
+                    opacity="0.5"
+                    style={{ stroke: "var(--positive)" }}
+                  />
+                )}
+                {histogram.negative && (
+                  <path
+                    d={histogram.negative}
+                    fill="none"
+                    strokeWidth={histogram.width}
+                    opacity="0.5"
+                    style={{ stroke: "var(--negative)" }}
+                  />
+                )}
+              </g>
             ))}
 
             {pane.lines.map((line) => (

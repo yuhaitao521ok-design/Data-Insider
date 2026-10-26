@@ -4,6 +4,76 @@ export const RANGE_KEYS = ["1D", "5D", "1M", "3M", "6M", "1Y", "5Y", "MAX"] as c
 
 export type RangeKey = (typeof RANGE_KEYS)[number];
 
+/**
+ * 数据源支持的 K 线间隔（Yahoo Finance chart API）。
+ * 1h 是 60m 的别名，这里统一用 60m；5d/3mo 属于稀有粒度，保留 3mo、暂不暴露 5d。
+ */
+export const INTERVAL_KEYS = [
+  "1m",
+  "2m",
+  "5m",
+  "15m",
+  "30m",
+  "60m",
+  "90m",
+  "1d",
+  "5d",
+  "1wk",
+  "1mo",
+  "3mo",
+] as const;
+
+export type IntervalKey = (typeof INTERVAL_KEYS)[number];
+
+export type IntervalKind = "minute" | "hour" | "day" | "week" | "month" | "quarter";
+
+export interface IntervalConfig {
+  label: string;
+  /** 下拉里的紧凑写法 */
+  short: string;
+  /** Yahoo chart API 的 interval 参数值 */
+  yahoo: string;
+  kind: IntervalKind;
+  /** Nasdaq 兜底是否支持（只能通过日线聚合出日/周/月） */
+  nasdaq: boolean;
+  freshSeconds: number;
+  staleSeconds: number;
+}
+
+export const INTERVAL_CONFIG: Record<IntervalKey, IntervalConfig> = {
+  "1m": { label: "1 分钟", short: "1m", yahoo: "1m", kind: "minute", nasdaq: false, freshSeconds: 30, staleSeconds: 300 },
+  "2m": { label: "2 分钟", short: "2m", yahoo: "2m", kind: "minute", nasdaq: false, freshSeconds: 30, staleSeconds: 300 },
+  "5m": { label: "5 分钟", short: "5m", yahoo: "5m", kind: "minute", nasdaq: false, freshSeconds: 30, staleSeconds: 300 },
+  "15m": { label: "15 分钟", short: "15m", yahoo: "15m", kind: "minute", nasdaq: false, freshSeconds: 60, staleSeconds: 600 },
+  "30m": { label: "30 分钟", short: "30m", yahoo: "30m", kind: "minute", nasdaq: false, freshSeconds: 60, staleSeconds: 600 },
+  "60m": { label: "1 小时", short: "1h", yahoo: "60m", kind: "hour", nasdaq: false, freshSeconds: 60, staleSeconds: 600 },
+  "90m": { label: "90 分钟", short: "90m", yahoo: "90m", kind: "minute", nasdaq: false, freshSeconds: 60, staleSeconds: 600 },
+  "1d": { label: "日线", short: "1D", yahoo: "1d", kind: "day", nasdaq: true, freshSeconds: 300, staleSeconds: 3600 },
+  "5d": { label: "5 日线", short: "5D", yahoo: "5d", kind: "day", nasdaq: false, freshSeconds: 600, staleSeconds: 7200 },
+  "1wk": { label: "周线", short: "1W", yahoo: "1wk", kind: "week", nasdaq: true, freshSeconds: 1800, staleSeconds: 21600 },
+  "1mo": { label: "月线", short: "1M", yahoo: "1mo", kind: "month", nasdaq: true, freshSeconds: 3600, staleSeconds: 43200 },
+  "3mo": { label: "季线", short: "3M", yahoo: "3mo", kind: "quarter", nasdaq: true, freshSeconds: 3600, staleSeconds: 43200 },
+};
+
+/**
+ * 每个周期可选的间隔。规则来自 Yahoo chart API / yfinance 的校验：
+ * - 1m 最多回溯 8 天
+ * - 2m / 5m / 15m / 30m / 90m 最多回溯 60 天
+ * - 60m 最多回溯 730 天
+ * - 1d 及以上无限制
+ */
+export const RANGE_INTERVALS: Record<RangeKey, IntervalKey[]> = {
+  "1D": ["1m", "2m", "5m", "15m", "30m", "60m", "90m"],
+  "5D": ["1m", "2m", "5m", "15m", "30m", "60m", "90m"],
+  "1M": ["2m", "5m", "15m", "30m", "60m", "90m", "1d", "1wk"],
+  "3M": ["60m", "1d", "5d", "1wk"],
+  "6M": ["60m", "1d", "5d", "1wk"],
+  "1Y": ["60m", "1d", "5d", "1wk", "1mo"],
+  "5Y": ["1d", "5d", "1wk", "1mo", "3mo"],
+  MAX: ["1d", "5d", "1wk", "1mo", "3mo"],
+};
+
+
 export type QuoteSource = "yahoo" | "nasdaq" | "perplexity";
 
 export interface Quote {
@@ -64,7 +134,7 @@ export interface ChartResponse {
   currency: string;
   timezone: string;
   range: RangeKey;
-  interval: string;
+  interval: IntervalKey;
   points: ChartPoint[];
   meta: ChartMeta;
   quote: Quote;
@@ -103,16 +173,16 @@ export interface ApiErrorBody {
 
 export const RANGE_CONFIG: Record<
   RangeKey,
-  { label: string; range: string; interval: string; freshSeconds: number; staleSeconds: number }
+  { label: string; range: string; defaultInterval: IntervalKey }
 > = {
-  "1D": { label: "1天", range: "1d", interval: "5m", freshSeconds: 30, staleSeconds: 900 },
-  "5D": { label: "5天", range: "5d", interval: "15m", freshSeconds: 60, staleSeconds: 1800 },
-  "1M": { label: "1月", range: "1mo", interval: "1d", freshSeconds: 300, staleSeconds: 3600 },
-  "3M": { label: "3月", range: "3mo", interval: "1d", freshSeconds: 600, staleSeconds: 7200 },
-  "6M": { label: "6月", range: "6mo", interval: "1d", freshSeconds: 900, staleSeconds: 10800 },
-  "1Y": { label: "1年", range: "1y", interval: "1d", freshSeconds: 900, staleSeconds: 10800 },
-  "5Y": { label: "5年", range: "5y", interval: "1wk", freshSeconds: 1800, staleSeconds: 21600 },
-  MAX: { label: "全部", range: "max", interval: "1mo", freshSeconds: 3600, staleSeconds: 43200 },
+  "1D": { label: "1天", range: "1d", defaultInterval: "5m" },
+  "5D": { label: "5天", range: "5d", defaultInterval: "15m" },
+  "1M": { label: "1月", range: "1mo", defaultInterval: "1d" },
+  "3M": { label: "3月", range: "3mo", defaultInterval: "1d" },
+  "6M": { label: "6月", range: "6mo", defaultInterval: "1d" },
+  "1Y": { label: "1年", range: "1y", defaultInterval: "1d" },
+  "5Y": { label: "5年", range: "5y", defaultInterval: "1wk" },
+  MAX: { label: "全部", range: "max", defaultInterval: "1mo" },
 };
 
 export const DEFAULT_WATCHLIST = [
@@ -128,6 +198,30 @@ export const DEFAULT_WATCHLIST = [
 
 export function isRangeKey(value: string | null | undefined): value is RangeKey {
   return !!value && (RANGE_KEYS as readonly string[]).includes(value.toUpperCase());
+}
+
+export function isIntervalKey(value: string | null | undefined): value is IntervalKey {
+  return !!value && (INTERVAL_KEYS as readonly string[]).includes(value);
+}
+
+/** 该周期是否允许这个间隔（受数据源回溯限制） */
+export function isIntervalAllowed(range: RangeKey, interval: IntervalKey): boolean {
+  return RANGE_INTERVALS[range].includes(interval);
+}
+
+export function defaultIntervalFor(range: RangeKey): IntervalKey {
+  return RANGE_CONFIG[range].defaultInterval;
+}
+
+/** 取合法的间隔：不合法时回退到该周期的默认值 */
+export function resolveInterval(range: RangeKey, value: string | null | undefined): IntervalKey {
+  if (isIntervalKey(value) && isIntervalAllowed(range, value)) return value;
+  return defaultIntervalFor(range);
+}
+
+export function isIntradayInterval(interval: IntervalKey): boolean {
+  const kind = INTERVAL_CONFIG[interval].kind;
+  return kind === "minute" || kind === "hour";
 }
 
 export function normalizeSymbol(raw: string): string {

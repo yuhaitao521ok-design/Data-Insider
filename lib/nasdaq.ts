@@ -1,4 +1,11 @@
-import type { ChartPoint, ChartResponse, Quote, RangeKey } from "@/lib/types";
+import {
+  INTERVAL_CONFIG,
+  type ChartPoint,
+  type ChartResponse,
+  type IntervalKey,
+  type Quote,
+  type RangeKey,
+} from "@/lib/types";
 
 /**
  * Nasdaq 官方行情接口（无需 API Key），作为 Yahoo 的兜底数据源。
@@ -23,7 +30,7 @@ export class NasdaqError extends Error {
   constructor(
     message: string,
     readonly status: number = 502,
-    readonly code: "not_found" | "upstream_error" = "upstream_error",
+    readonly code: "not_found" | "upstream_error" | "unsupported_interval" = "upstream_error",
   ) {
     super(message);
     this.name = "NasdaqError";
@@ -204,15 +211,6 @@ const RANGE_DAYS: Record<"1M" | "3M" | "6M" | "1Y" | "5Y" | "MAX", number> = {
   MAX: 11000,
 };
 
-const RANGE_INTERVAL: Record<"1M" | "3M" | "6M" | "1Y" | "5Y" | "MAX", string> = {
-  "1M": "1d",
-  "3M": "1d",
-  "6M": "1d",
-  "1Y": "1d",
-  "5Y": "1wk",
-  MAX: "1mo",
-};
-
 async function mapLimit<T, R>(items: T[], limit: number, task: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array(items.length);
   let cursor = 0;
@@ -263,10 +261,13 @@ export async function nasdaqQuotes(symbols: string[]): Promise<{
   return { quotes, errors };
 }
 
-function bucketKey(timestamp: number, mode: "week" | "month"): number {
+function bucketKey(timestamp: number, mode: "week" | "month" | "quarter"): number {
   const date = new Date(timestamp * 1000);
   if (mode === "month") {
     return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1) / 1000;
+  }
+  if (mode === "quarter") {
+    return Date.UTC(date.getUTCFullYear(), Math.floor(date.getUTCMonth() / 3) * 3, 1) / 1000;
   }
   const day = date.getUTCDay();
   const diff = (day + 6) % 7; // 以周一为一周起点
@@ -276,8 +277,8 @@ function bucketKey(timestamp: number, mode: "week" | "month"): number {
   return monday.getTime() / 1000;
 }
 
-/** 把日线聚合为周线 / 月线 */
-function aggregate(points: ChartPoint[], mode: "week" | "month"): ChartPoint[] {
+/** 把日线聚合为周线 / 月线 / 季线 */
+function aggregate(points: ChartPoint[], mode: "week" | "month" | "quarter"): ChartPoint[] {
   const groups = new Map<number, ChartPoint[]>();
   for (const point of points) {
     const key = bucketKey(point.t, mode);
@@ -303,11 +304,20 @@ function aggregate(points: ChartPoint[], mode: "week" | "month"): ChartPoint[] {
     .sort((a, b) => a.t - b.t);
 }
 
-/** 获取日线以上的周期走势（1D / 5D 不支持） */
+/** 获取日线及以上的走势（纳斯达克接口只有日线，周/月/季由本地聚合） */
 export async function nasdaqChart(
   symbol: string,
   range: RangeKey,
+  interval: IntervalKey,
 ): Promise<ChartResponse & { cached: boolean; stale: boolean }> {
+  const intervalConfig = INTERVAL_CONFIG[interval];
+  if (!intervalConfig.nasdaq) {
+    throw new NasdaqError(
+      `${intervalConfig.label}数据仅 Yahoo Finance 提供，当前无法使用 Nasdaq 兜底`,
+      503,
+      "unsupported_interval",
+    );
+  }
   if (range === "1D" || range === "5D") {
     throw new NasdaqError("Nasdaq 不提供分时数据，该周期暂时无法使用兜底数据源", 503);
   }
@@ -340,13 +350,16 @@ export async function nasdaqChart(
   }
 
   const points =
-    range === "5Y"
+    interval === "1wk"
       ? aggregate(rawPoints, "week")
-      : range === "MAX"
+      : interval === "1mo"
         ? aggregate(rawPoints, "month")
-        : rawPoints;
+        : interval === "3mo"
+          ? aggregate(rawPoints, "quarter")
+          : rawPoints;
 
   const last = points[points.length - 1];
+  const lastDaily = rawPoints[rawPoints.length - 1];
   const changeFromInfo = parseNumber(info.primaryData?.netChange);
   const previousClose =
     parseNumber(data.previousClose) ?? (changeFromInfo !== null ? (parseNumber(info.primaryData?.lastSalePrice) ?? last.close) - changeFromInfo : null);
@@ -368,7 +381,7 @@ export async function nasdaqChart(
     currency: "USD",
     exchange: info.exchange || (assetClass === "etf" ? "ETF" : "NASDAQ"),
     marketTime: parseDate(info.primaryData?.lastTradeTimestamp),
-    sparkline: points.slice(-40).map((point) => point.close),
+    sparkline: rawPoints.slice(-40).map((point) => point.close),
     source: "nasdaq",
     estimated: false,
   };
@@ -380,18 +393,18 @@ export async function nasdaqChart(
     currency: "USD",
     timezone: "America/New_York",
     range,
-    interval: RANGE_INTERVAL[range],
+    interval,
     points,
     meta: {
       price,
       previousClose,
       change,
       changePercent,
-      dayHigh: last.high,
-      dayLow: last.low,
+      dayHigh: lastDaily.high ?? last.high,
+      dayLow: lastDaily.low ?? last.low,
       week52Low: week52.low,
       week52High: week52.high,
-      volume: parseNumber(info.primaryData?.volume) ?? last.volume,
+      volume: parseNumber(info.primaryData?.volume) ?? lastDaily.volume,
       currency: "USD",
     },
     quote,

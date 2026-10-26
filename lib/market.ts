@@ -1,7 +1,15 @@
 import { cached } from "@/lib/cache";
 import { getChart as yahooChart, getQuotes as yahooQuotes, UpstreamError } from "@/lib/yahoo";
 import { nasdaqChart, nasdaqQuotes } from "@/lib/nasdaq";
-import { RANGE_CONFIG, type ChartResponse, type Quote, type RangeKey } from "@/lib/types";
+import {
+  INTERVAL_CONFIG,
+  defaultIntervalFor,
+  isIntervalAllowed,
+  type ChartResponse,
+  type IntervalKey,
+  type Quote,
+  type RangeKey,
+} from "@/lib/types";
 
 /**
  * 数据源编排层：
@@ -76,16 +84,24 @@ export async function loadQuotes(symbols: string[]): Promise<{
 export async function loadChart(
   symbol: string,
   range: RangeKey,
+  interval: IntervalKey = defaultIntervalFor(range),
 ): Promise<ChartResponse & { cached: boolean; stale: boolean }> {
-  const config = RANGE_CONFIG[range];
-  const key = `market:chart:${symbol}:${range}`;
+  if (!isIntervalAllowed(range, interval)) {
+    throw new UpstreamError(`周期 ${range} 不支持 ${interval} 间隔`, 400);
+  }
 
-  const result = await cached(key, config.freshSeconds, config.staleSeconds, async () => {
+  const intervalConfig = INTERVAL_CONFIG[interval];
+  const key = `market:chart:${symbol}:${range}:${interval}`;
+
+  const result = await cached(key, intervalConfig.freshSeconds, intervalConfig.staleSeconds, async () => {
     let yahooError: unknown = null;
+    // 仅 Yahoo 支持的间隔（分时/小时/季线）即使在冷却期也值得再试一次，
+    // 否则用户会在一分钟内完全无法查看这些间隔。
+    const shouldTryYahoo = yahooAvailable() || !intervalConfig.nasdaq;
 
-    if (yahooAvailable()) {
+    if (shouldTryYahoo) {
       try {
-        return await yahooChart(symbol, range);
+        return await yahooChart(symbol, range, interval);
       } catch (error) {
         yahooError = error;
         if (error instanceof UpstreamError && error.code === "not_found") throw error;
@@ -94,9 +110,9 @@ export async function loadChart(
       }
     }
 
-    if (range !== "1D" && range !== "5D") {
+    if (intervalConfig.nasdaq && range !== "1D" && range !== "5D") {
       try {
-        return await nasdaqChart(symbol, range);
+        return await nasdaqChart(symbol, range, interval);
       } catch (error) {
         console.warn("[market] Nasdaq 走势失败：", (error as Error)?.message);
         if (yahooError instanceof UpstreamError) throw yahooError;
@@ -104,9 +120,25 @@ export async function loadChart(
       }
     }
 
-    if (yahooError instanceof UpstreamError) throw yahooError;
+    if (yahooError instanceof UpstreamError) {
+      if (yahooError.code === "rate_limited") {
+        throw new UpstreamError(
+          `${intervalConfig.label}数据仅 Yahoo Finance 提供，当前触发限流；可稍后重试或切换到日线`, 
+          429,
+          "rate_limited",
+        );
+      }
+      throw yahooError;
+    }
+    if (!intervalConfig.nasdaq) {
+      throw new UpstreamError(
+        `${intervalConfig.label}数据仅 Yahoo Finance 提供，Yahoo 当前不可用（限流中），请稍后重试或切换到日线/周线`,
+        503,
+        "rate_limited",
+      );
+    }
     throw new UpstreamError(
-      "分时数据暂时不可用（Yahoo 限流），请稍后重试，或切换到 1 个月以上的周期",
+      "该间隔的走势数据暂时不可用，请稍后重试或切换间隔",
       503,
       "rate_limited",
     );
