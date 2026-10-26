@@ -9,6 +9,7 @@
 ## 功能
 
 - **8 种周期**：1D / 5D / 1M / 3M / 6M / 1Y / 5Y / MAX，自动选择合适的数据粒度（分钟 / 日 / 周 / 月）
+- **可切换 K 线间隔**：每个周期可从 1/2/5/15/30/60/90 分钟、5 日线、日线、周线、月线、季线中选择数据源实际支持的粒度，选择按周期记忆
 - **自选股**：默认 8 只热门标的，支持搜索添加（含中文别名）、移除，列表持久化到 localStorage
 - **实时刷新**：报价 30 秒轮询、分时图 60 秒轮询，可一键暂停；自选股列表带迷你走势
 - **专业走势图**：纯 SVG 实现（无图表库依赖），支持十字光标、悬浮明细、成交量、昨收参考线
@@ -50,7 +51,7 @@ npm run build && npm start
 | 路由 | 说明 |
 | --- | --- |
 | `GET /api/quotes?symbols=AAPL,MSFT` | 批量报价 + 迷你走势（一次请求，服务端缓存 15s） |
-| `GET /api/chart?symbol=AAPL&range=1M` | 指定周期走势 + 报价，`range` 取 `1D/5D/1M/3M/6M/1Y/5Y/MAX` |
+| `GET /api/chart?symbol=AAPL&range=1M&interval=1d` | 指定周期 + 间隔的走势与报价；`range` 取 `1D/5D/1M/3M/6M/1Y/5Y/MAX`，`interval` 见下文「K 线间隔」 |
 | `GET /api/search?q=英伟达` | 代码 / 公司名搜索（Yahoo 不可用时回退到内置热门列表） |
 | `GET /api/insight?symbol=AAPL&range=1M` | Perplexity AI 解读（未配置 Key 返回 501） |
 | `GET /api/config` | 前端探测 AI 功能是否可用 |
@@ -58,7 +59,8 @@ npm run build && npm start
 示例：
 
 ```bash
-curl 'http://localhost:3000/api/chart?symbol=NVDA&range=3M' | jq '.meta, (.points | length)'
+curl 'http://localhost:3000/api/chart?symbol=NVDA&range=3M&interval=1d' | jq '.meta, (.points | length)'
+curl 'http://localhost:3000/api/chart?symbol=NVDA&range=1Y&interval=1wk' | jq '.interval, (.points | length)'
 ```
 
 ## 数据源与降级策略
@@ -86,7 +88,39 @@ curl 'http://localhost:3000/api/chart?symbol=NVDA&range=3M' | jq '.meta, (.point
 - Yahoo 失败后进入 **60 秒冷却**，期间直接走兜底源，避免每次请求都先撞 429。
 - 服务端使用进程内 LRU 缓存 + 请求去重 + `stale-while-revalidate`：报价 15s 新鲜期 / 10min 宽限期，走势按周期 30s–1h。响应同时带 `s-maxage`，部署在 Vercel 时可被 CDN 缓存。
 - Yahoo 对机房 IP 限流较严，Nasdaq 兜底可保证页面在多数环境下仍能正常使用；1D / 5D 分时数据仅 Yahoo 提供。
+- Yahoo 支持分钟/小时/日/周/月/季全部间隔；Nasdaq 只有日线，周/月/季在 `lib/nasdaq.ts` 内由日线聚合。
 - Yahoo / Nasdaq 均为公开非官方接口，字段可能变更，请勿用于生产交易决策。
+
+## K 线间隔
+
+图表工具栏的「间隔」下拉会根据当前周期列出数据源支持的粒度，选择按周期记忆（localStorage）。
+
+| 周期 | 可选间隔 |
+| --- | --- |
+| 1D | 1分 / 2分 / 5分 / 15分 / 30分 / 1小时 / 90分 |
+| 5D | 1分 / 2分 / 5分 / 15分 / 30分 / 1小时 / 90分 |
+| 1M | 2分 / 5分 / 15分 / 30分 / 1小时 / 90分 / 日线 / 周线 |
+| 3M | 1小时 / 日线 / 5日线 / 周线 |
+| 6M | 1小时 / 日线 / 5日线 / 周线 |
+| 1Y | 1小时 / 日线 / 5日线 / 周线 / 月线 |
+| 5Y | 日线 / 5日线 / 周线 / 月线 / 季线 |
+| MAX | 日线 / 5日线 / 周线 / 月线 / 季线 |
+
+限制来自 Yahoo Finance chart API（与 yfinance 的校验一致）：
+
+| 间隔 | 最大回溯 |
+| --- | --- |
+| `1m` | 8 天 |
+| `2m` / `5m` / `15m` / `30m` / `90m` | 60 天 |
+| `60m`（`1h` 别名） | 730 天 |
+| `1d` / `5d` / `1wk` / `1mo` / `3mo` | 不限 |
+
+补充说明：
+
+- `1h` 与 `60m` 等价，统一显示为「1 小时」；`5d` 表示 5 个交易日一根 K 线，仅 Yahoo 提供
+- 下拉中带 **Yahoo** 标记的间隔（全部分时 / 小时线）只能由 Yahoo 提供；Nasdaq 兜底只有日线，周线 / 月线 / 季线由日线本地聚合
+- 非法组合会被 API 拒绝（400），并返回该周期允许的间隔列表
+- 分时/小时线只能使用 Yahoo；Yahoo 限流时会明确提示「该间隔仅 Yahoo 提供」，日线及以上可自动走 Nasdaq 兜底
 
 ## 技术指标
 
@@ -178,6 +212,7 @@ components/
   SearchBox.tsx         搜索下拉
   InsightPanel.tsx      AI 解读卡片
   IndicatorControls.tsx 指标添加 / 参数设置
+  IntervalSelect.tsx     K 线间隔下拉
   ThemeToggle.tsx       亮/暗主题切换
 lib/
   types.ts              共享类型 + 周期配置

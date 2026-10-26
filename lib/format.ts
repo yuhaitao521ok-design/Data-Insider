@@ -57,17 +57,25 @@ export function formatTimeInZone(
   }
 }
 
-/** 根据周期选择合适的横轴时间格式 */
-export function formatAxisTime(timestamp: number, range: string, timeZone: string): string {
+/** 根据周期与间隔选择合适的横轴时间格式 */
+export function formatAxisTime(
+  timestamp: number,
+  range: string,
+  timeZone: string,
+  interval?: string,
+): string {
   const date = new Date(timestamp * 1000);
-  const base: Intl.DateTimeFormatOptions =
-    range === "1D"
+  const intraday = interval
+    ? ["1m", "2m", "5m", "15m", "30m", "60m", "90m"].includes(interval)
+    : range === "1D";
+
+  const base: Intl.DateTimeFormatOptions = intraday
+    ? range === "1D"
       ? { hour: "2-digit", minute: "2-digit", hour12: false }
-      : range === "5D"
-        ? { month: "2-digit", day: "2-digit", hour: "2-digit", hour12: false }
-        : range === "MAX" || range === "5Y"
-          ? { year: "numeric", month: "2-digit" }
-          : { month: "2-digit", day: "2-digit" };
+      : { month: "2-digit", day: "2-digit" }
+    : range === "MAX" || range === "5Y"
+      ? { year: "numeric", month: "2-digit" }
+      : { month: "2-digit", day: "2-digit" };
 
   try {
     return new Intl.DateTimeFormat("zh-CN", { timeZone, ...base }).format(date);
