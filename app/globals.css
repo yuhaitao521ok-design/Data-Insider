@@ -82,6 +82,10 @@
   --chart-label: #71717a;
   --chart-crosshair: rgba(9, 9, 11, 0.35);
   --chart-reference: rgba(9, 9, 11, 0.25);
+  --chart-series-1: #6366f1;
+  --chart-series-2: #d97706;
+  --chart-series-3: #8b5cf6;
+  --chart-band: rgba(99, 102, 241, 0.08);
 
   --shadow-pop: 0 8px 24px -8px rgba(9, 9, 11, 0.16), 0 2px 6px rgba(9, 9, 11, 0.06);
   --ring: rgba(99, 102, 241, 0.35);
@@ -120,6 +124,10 @@
   --chart-label: #8b8b93;
   --chart-crosshair: rgba(255, 255, 255, 0.32);
   --chart-reference: rgba(255, 255, 255, 0.22);
+  --chart-series-1: #818cf8;
+  --chart-series-2: #fbbf24;
+  --chart-series-3: #a78bfa;
+  --chart-band: rgba(129, 140, 248, 0.1);
 
   --shadow-pop: 0 12px 32px -12px rgba(0, 0, 0, 0.7), 0 2px 8px rgba(0, 0, 0, 0.4);
   --ring: rgba(129, 140, 248, 0.4);
