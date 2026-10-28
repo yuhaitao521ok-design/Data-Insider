@@ -24,6 +24,15 @@ import {
   type PriceAlert,
 } from "@/lib/alerts";
 import {
+  dropIndexAt,
+  isWatchlistSort,
+  moveItem,
+  nextWatchlistSort,
+  sortWatchlist,
+  sortWatchlistLabel,
+  type WatchlistSort,
+} from "@/lib/watchlist";
+import {
   DEFAULT_WATCHLIST,
   INDEX_SYMBOLS,
   RANGE_CONFIG,
@@ -60,6 +69,7 @@ const AUTO_KEY = "data-insider:auto:v1";
 const INDICATORS_KEY = "data-insider:indicators:v1";
 const INTERVALS_KEY = "data-insider:intervals:v1";
 const CHART_MODE_KEY = "data-insider:chart-mode:v1";
+const WATCHLIST_SORT_KEY = "data-insider:watchlist-sort:v1";
 const POLL_MS = 30_000;
 const INTRADAY_POLL_MS = 60_000;
 
@@ -105,6 +115,25 @@ export default function Dashboard() {
   const [stale, setStale] = useState(false);
 
   const [chartMode, setChartMode] = useState<ChartMode>("line");
+  const [sortMode, setSortMode] = useState<WatchlistSort>("manual");
+  const [drag, setDrag] = useState<{
+    symbol: string;
+    from: number;
+    to: number;
+    order: string[];
+  } | null>(null);
+  const dragRef = useRef<{
+    symbol: string;
+    from: number;
+    to: number;
+    order: string[];
+    startX: number;
+    startY: number;
+    pointerId: number;
+    active: boolean;
+  } | null>(null);
+  const watchlistListRef = useRef<HTMLDivElement>(null);
+  const suppressClickRef = useRef(false);
   const [alerts, setAlerts] = useState<PriceAlert[]>([]);
   const [toasts, setToasts] = useState<AlertToastItem[]>([]);
   const [notificationState, setNotificationState] = useState<
@@ -173,6 +202,8 @@ export default function Dashboard() {
       }
       const savedMode = window.localStorage.getItem(CHART_MODE_KEY);
       if (savedMode === "line" || savedMode === "candle") setChartMode(savedMode);
+      const savedSort = window.localStorage.getItem(WATCHLIST_SORT_KEY);
+      if (isWatchlistSort(savedSort)) setSortMode(savedSort);
       const savedAlerts = window.localStorage.getItem(ALERTS_KEY);
       if (savedAlerts) setAlerts(sanitizeAlerts(JSON.parse(savedAlerts)));
       if (typeof Notification !== "undefined") {
@@ -193,11 +224,22 @@ export default function Dashboard() {
       window.localStorage.setItem(INDICATORS_KEY, JSON.stringify(indicators));
       window.localStorage.setItem(INTERVALS_KEY, JSON.stringify(intervalByRange));
       window.localStorage.setItem(CHART_MODE_KEY, chartMode);
+      window.localStorage.setItem(WATCHLIST_SORT_KEY, sortMode);
       window.localStorage.setItem(ALERTS_KEY, JSON.stringify(alerts));
     } catch {
       // 忽略写入失败
     }
-  }, [watchlist, range, autoRefresh, indicators, intervalByRange, chartMode, alerts, hydrated]);
+  }, [
+    watchlist,
+    range,
+    autoRefresh,
+    indicators,
+    intervalByRange,
+    chartMode,
+    sortMode,
+    alerts,
+    hydrated,
+  ]);
 
   /* -------------------------------- 数据加载 ------------------------------- */
 
@@ -446,6 +488,93 @@ export default function Dashboard() {
   const dismissToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
+
+  /* ------------------------------ 自选股排序 ------------------------------ */
+
+  /** 按当前排序模式计算出的展示顺序（手动 / 涨跌幅降序 / 涨跌幅升序） */
+  const displayedWatchlist = useMemo(
+    () => sortWatchlist(watchlist, quotes, sortMode),
+    [watchlist, quotes, sortMode],
+  );
+  /** 拖拽过程中冻结展示顺序，避免轮询刷新导致列表在指针下跳动 */
+  const visibleWatchlist = drag ? drag.order : displayedWatchlist;
+
+  function handleItemPointerDown(
+    event: React.PointerEvent<HTMLDivElement>,
+    symbol: string,
+    index: number,
+  ) {
+    // 触摸设备保留原生滚动，不做拖拽
+    if (event.pointerType === "touch") return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+
+    dragRef.current = {
+      symbol,
+      from: index,
+      to: index,
+      order: displayedWatchlist,
+      startX: event.clientX,
+      startY: event.clientY,
+      pointerId: event.pointerId,
+      active: false,
+    };
+  }
+
+  function handleItemPointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    const state = dragRef.current;
+    if (!state || state.pointerId !== event.pointerId) return;
+
+    if (!state.active) {
+      // 超过阈值才算拖拽，避免影响点击选择
+      if (Math.hypot(event.clientX - state.startX, event.clientY - state.startY) < 6) return;
+      state.active = true;
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    }
+
+    const list = watchlistListRef.current;
+    if (!list) return;
+    const rects = Array.from(
+      list.querySelectorAll<HTMLElement>("[data-watchlist-item]"),
+    ).map((item) => item.getBoundingClientRect());
+    const target = dropIndexAt(rects, { x: event.clientX, y: event.clientY });
+
+    state.to = target;
+    setDrag({
+      symbol: state.symbol,
+      from: state.from,
+      to: state.to,
+      order: state.order,
+    });
+  }
+
+  function finishDrag(event: React.PointerEvent<HTMLDivElement>, commit: boolean) {
+    const state = dragRef.current;
+    if (!state || state.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    }
+    if (!state.active) return;
+
+    // 拖拽结束后紧跟着的 click 不应触发「选中」
+    suppressClickRef.current = true;
+    window.setTimeout(() => {
+      suppressClickRef.current = false;
+    }, 0);
+
+    if (commit && state.from !== state.to) {
+      setWatchlist((current) => {
+        // 拖拽期间发生过增删则放弃本次排序，避免丢数据
+        if (current.length !== state.order.length) return current;
+        return moveItem(state.order, state.from, state.to);
+      });
+      // 任何排序模式下拖拽，都把当前展示顺序固化为新的手动顺序
+      if (sortMode !== "manual") setSortMode("manual");
+    }
+
+    setDrag(null);
+  }
 
   /* --------------------------------- 交互 --------------------------------- */
 
@@ -812,6 +941,32 @@ export default function Dashboard() {
               <div className="flex items-center gap-1">
                 <button
                   type="button"
+                  onClick={() => setSortMode((prev) => nextWatchlistSort(prev))}
+                  aria-pressed={sortMode !== "manual"}
+                  aria-label={`按涨跌幅排序（当前：${sortWatchlistLabel(sortMode)}）`}
+                  title={`按涨跌幅排序 · 当前：${sortWatchlistLabel(sortMode)}（点击切换）`}
+                  className={`inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[10.5px] transition-colors ${
+                    sortMode === "manual"
+                      ? "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      : "bg-accent-soft text-accent"
+                  }`}
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path
+                      d="M7.5 19V5.5m0 0L4.5 8.5m3-3 3 3M16.5 5v13.5m0 0 3-3m-3 3-3-3"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  涨跌幅
+                  <span className="num" aria-hidden="true">
+                    {sortMode === "change-desc" ? "↓" : sortMode === "change-asc" ? "↑" : "↕"}
+                  </span>
+                </button>
+                <button
+                  type="button"
                   onClick={focusSearch}
                   className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                   aria-label="添加自选股"
@@ -829,23 +984,59 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="scroll-thin flex gap-1 overflow-x-auto p-2 lg:flex-col lg:overflow-y-auto">
-              {watchlist.map((symbol) => {
+            <div
+              ref={watchlistListRef}
+              className="scroll-thin flex gap-1 overflow-x-auto p-2 lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-y-auto"
+              aria-label="自选股列表（可拖动排序）"
+            >
+              {visibleWatchlist.map((symbol, index) => {
                 const item = quotes[symbol];
                 const up = (item?.changePercent ?? 0) >= 0;
+                const isDragging = drag?.symbol === symbol;
+                const isDropTarget = drag !== null && drag.to === index && drag.symbol !== symbol;
                 return (
                   <div
                     key={symbol}
-                    className={`group relative w-[236px] shrink-0 rounded-lg border transition-colors lg:w-auto ${
-                      selected === symbol
-                        ? "border-border bg-muted"
-                        : "border-transparent hover:bg-hover"
-                    }`}
+                    data-watchlist-item
+                    onPointerDown={(event) => handleItemPointerDown(event, symbol, index)}
+                    onPointerMove={handleItemPointerMove}
+                    onPointerUp={(event) => finishDrag(event, true)}
+                    onPointerCancel={(event) => finishDrag(event, false)}
+                    className={`group relative w-[236px] shrink-0 select-none rounded-lg border transition-colors lg:w-auto ${
+                      isDragging
+                        ? "z-10 cursor-grabbing border-accent/50 bg-card opacity-70 shadow-[var(--shadow-pop)]"
+                        : `cursor-grab ${
+                            selected === symbol
+                              ? "border-border bg-muted"
+                              : "border-transparent hover:bg-hover"
+                          }`
+                    } ${isDropTarget ? "border-accent/40 bg-accent-soft/30" : ""}`}
                   >
+                    <span
+                      className="pointer-events-none absolute left-1 top-1/2 -translate-y-1/2 text-muted-foreground/60 opacity-0 transition-opacity group-hover:opacity-100"
+                      aria-hidden="true"
+                    >
+                      <svg width="9" height="14" viewBox="0 0 10 16" fill="currentColor">
+                        <circle cx="3" cy="4" r="1.1" />
+                        <circle cx="7" cy="4" r="1.1" />
+                        <circle cx="3" cy="8" r="1.1" />
+                        <circle cx="7" cy="8" r="1.1" />
+                        <circle cx="3" cy="12" r="1.1" />
+                        <circle cx="7" cy="12" r="1.1" />
+                      </svg>
+                    </span>
+
                     <button
                       type="button"
-                      onClick={() => setSelected(symbol)}
-                      className="flex w-full items-center gap-2 px-2.5 py-2 text-left"
+                      onClick={() => {
+                        // 拖拽松手后的 click 不应该切换选中
+                        if (suppressClickRef.current) {
+                          suppressClickRef.current = false;
+                          return;
+                        }
+                        setSelected(symbol);
+                      }}
+                      className="flex w-full items-center gap-2 py-2 pl-4 pr-2.5 text-left"
                       aria-label={`查看 ${symbol} 行情`}
                     >
                       <div className="min-w-0 flex-1">
@@ -886,6 +1077,7 @@ export default function Dashboard() {
                     {watchlist.length > 1 && (
                       <button
                         type="button"
+                        onPointerDown={(event) => event.stopPropagation()}
                         onClick={() => removeSymbol(symbol)}
                         className="absolute -right-1 -top-1 hidden h-4 w-4 items-center justify-center rounded-full border border-border bg-card text-[10px] leading-none text-muted-foreground shadow-sm transition-colors hover:border-negative/40 hover:text-negative-text group-hover:flex"
                         title={`从自选股移除 ${symbol}`}
@@ -900,7 +1092,9 @@ export default function Dashboard() {
             </div>
 
             <div className="mt-auto hidden items-center justify-between border-t border-border px-4 py-2 text-[10.5px] text-muted-foreground lg:flex">
-              <span>Yahoo / Nasdaq</span>
+              <span className="truncate">
+                {sortMode === "manual" ? "Yahoo / Nasdaq" : `按${sortWatchlistLabel(sortMode)}`}
+              </span>
               <span className="num">{lastUpdateLabel ?? "--"}</span>
             </div>
           </aside>
