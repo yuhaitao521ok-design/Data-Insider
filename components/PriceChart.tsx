@@ -4,9 +4,15 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ChartMode, ChartPoint, IntervalKey, RangeKey } from "@/lib/types";
 import type { ChartOverlay, ChartPane } from "@/lib/indicators";
 import type { CandleShape } from "@/lib/chart";
-import { buildCandles } from "@/lib/chart";
+import { barChange, buildCandles } from "@/lib/chart";
 import { formatIndicatorValue } from "@/lib/indicators";
-import { formatAxisTime, formatCompact, formatFullTime, formatPrice } from "@/lib/format";
+import {
+  formatAxisTime,
+  formatCompact,
+  formatFullTime,
+  formatPercent,
+  formatPrice,
+} from "@/lib/format";
 
 /** 主图上的提醒线（价格提醒） */
 export interface ChartAlertLine {
@@ -494,12 +500,35 @@ export default function PriceChart({
   const hoverIndex = hover ?? 0;
   const hoverGeom =
     hover !== null ? { x: geometry.xFor(hover), y: geometry.yFor(points[hover].close) } : null;
-  const TOOLTIP_WIDTH = 208;
+  const TOOLTIP_WIDTH = 228;
   const TOOLTIP_OFFSET = 14;
   // 鼠标还没进入图表时（例如键盘打开）用一个兜底锚点
   const anchor = pointer ?? (hoverGeom ? { x: hoverGeom.x, y: geometry.padTop + 24 } : null);
   const estimatedHeight =
-    tooltipHeight || Math.min(300, 120 + panes.length * 88 + overlays.length * 64);
+    tooltipHeight || Math.min(330, 138 + panes.length * 58 + overlays.length * 42);
+
+  // 当根 K 线的涨跌：以上一根收盘价为基准，首根分时点用昨收
+  const hoverChange =
+    hover !== null
+      ? barChange(points, hover, reference ?? null)
+      : { change: null, changePercent: null, base: null };
+  const changeUp = (hoverChange.changePercent ?? 0) >= 0;
+  const changeToneClass =
+    hoverChange.changePercent === null
+      ? "bg-muted text-muted-foreground"
+      : changeUp
+        ? "bg-positive-soft text-positive-text"
+        : "bg-negative-soft text-negative-text";
+  const changeTextClass =
+    hoverChange.changePercent === null
+      ? "text-muted-foreground"
+      : changeUp
+        ? "text-positive-text"
+        : "text-negative-text";
+  const changeAmountLabel =
+    hoverChange.change === null
+      ? "--"
+      : `${hoverChange.change > 0 ? "+" : ""}${formatPrice(hoverChange.change, currency)}`;
 
   let tooltipLeft = 0;
   let tooltipTop = 0;
@@ -873,38 +902,81 @@ export default function PriceChart({
       {hovered && (
         <div
           ref={tooltipRef}
-          className="pointer-events-none absolute z-10 w-[208px] rounded-lg border border-border bg-popover/95 p-2.5 text-[10.5px] shadow-[var(--shadow-pop)]"
+          className="pointer-events-none absolute z-10 w-[228px] overflow-hidden rounded-xl border border-border bg-popover/95 text-[10.5px] shadow-[var(--shadow-pop)] backdrop-blur-md"
           style={{ left: tooltipLeft, top: tooltipTop }}
         >
-          <div className="mb-1 text-muted-foreground">{formatFullTime(hovered.t, timezone)}</div>
-          <div className="num text-[15px] font-medium" style={{ color: stroke }}>
-            {formatPrice(hovered.close, currency)}
-          </div>
-          <div className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 text-muted-foreground">
-            <span>开</span>
-            <span className="num text-right text-foreground/80">
-              {formatPrice(hovered.open, currency)}
+          <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/50 px-2.5 py-1.5">
+            <span className="text-[10px] leading-4 text-muted-foreground">
+              {formatFullTime(hovered.t, timezone)}
             </span>
-            <span>高</span>
-            <span className="num text-right text-foreground/80">
-              {formatPrice(hovered.high, currency)}
-            </span>
-            <span>低</span>
-            <span className="num text-right text-foreground/80">
-              {formatPrice(hovered.low, currency)}
-            </span>
-            <span>量</span>
-            <span className="num text-right text-foreground/80">
-              {formatCompact(hovered.volume)}
+            <span
+              className={`num inline-flex items-center gap-0.5 rounded-full px-1.5 py-[1px] text-[10px] font-medium leading-4 ${changeToneClass}`}
+            >
+              {hoverChange.changePercent !== null && (
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path
+                    d={changeUp ? "M7 17 17 7M17 7H8M17 7v9" : "M7 7l10 10M17 17H8M17 17V8"}
+                    stroke="currentColor"
+                    strokeWidth="2.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              )}
+              {formatPercent(hoverChange.changePercent)}
             </span>
           </div>
 
+          <div className="px-2.5 pb-2 pt-2">
+            <div className="flex items-baseline justify-between gap-2">
+              <span
+                className="num text-[17px] font-medium leading-none tracking-tight"
+                style={{ color: stroke }}
+              >
+                {formatPrice(hovered.close, currency)}
+              </span>
+              <span className={`num text-[10.5px] leading-4 ${changeTextClass}`}>
+                {changeAmountLabel}
+              </span>
+            </div>
+
+            <div className="mt-2 grid grid-cols-[auto_1fr_auto_1fr] items-center gap-x-2 gap-y-1 text-[10px] leading-4">
+              <span className="text-muted-foreground">开</span>
+              <span className="num text-right text-foreground/85">
+                {formatPrice(hovered.open, currency)}
+              </span>
+              <span className="pl-1 text-muted-foreground">高</span>
+              <span className="num text-right text-foreground/85">
+                {formatPrice(hovered.high, currency)}
+              </span>
+              <span className="text-muted-foreground">低</span>
+              <span className="num text-right text-foreground/85">
+                {formatPrice(hovered.low, currency)}
+              </span>
+              <span className="pl-1 text-muted-foreground">量</span>
+              <span className="num text-right text-foreground/85">
+                {formatCompact(hovered.volume)}
+              </span>
+            </div>
+          </div>
+
           {overlays.map((overlay) => (
-            <div key={overlay.id} className="mt-1.5 border-t border-border pt-1.5">
-              <div className="mb-0.5 text-muted-foreground">{overlay.label}</div>
+            <div key={overlay.id} className="border-t border-border px-2.5 py-1.5">
+              <div className="mb-0.5 text-[9.5px] tracking-wide text-muted-foreground">
+                {overlay.label}
+              </div>
               {overlay.series.map((series) => (
-                <div key={series.label} className="flex justify-between gap-2">
-                  <span style={{ color: series.color }}>{series.label}</span>
+                <div
+                  key={series.label}
+                  className="flex items-center justify-between gap-2 leading-4"
+                >
+                  <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                    <span
+                      className="h-1.5 w-1.5 rounded-full"
+                      style={{ backgroundColor: series.color }}
+                    />
+                    {series.label}
+                  </span>
                   <span className="num text-foreground/85">
                     {formatIndicatorValue(series.values[hoverIndex])}
                   </span>
@@ -914,11 +986,22 @@ export default function PriceChart({
           ))}
 
           {panes.map((pane) => (
-            <div key={pane.id} className="mt-1.5 border-t border-border pt-1.5">
-              <div className="mb-0.5 text-muted-foreground">{pane.label}</div>
+            <div key={pane.id} className="border-t border-border px-2.5 py-1.5">
+              <div className="mb-0.5 text-[9.5px] tracking-wide text-muted-foreground">
+                {pane.label}
+              </div>
               {pane.series.map((series) => (
-                <div key={series.label} className="flex justify-between gap-2">
-                  <span style={{ color: series.color }}>{series.label}</span>
+                <div
+                  key={series.label}
+                  className="flex items-center justify-between gap-2 leading-4"
+                >
+                  <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                    <span
+                      className="h-1.5 w-1.5 rounded-full"
+                      style={{ backgroundColor: series.color }}
+                    />
+                    {series.label}
+                  </span>
                   <span className="num text-foreground/85">
                     {formatIndicatorValue(series.values[hoverIndex])}
                   </span>
