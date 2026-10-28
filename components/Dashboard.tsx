@@ -8,6 +8,7 @@ import InsightPanel from "@/components/InsightPanel";
 import ThemeToggle from "@/components/ThemeToggle";
 import IndicatorControls from "@/components/IndicatorControls";
 import IntervalSelect from "@/components/IntervalSelect";
+import { chartToCsv } from "@/lib/csv";
 import {
   DEFAULT_WATCHLIST,
   RANGE_CONFIG,
@@ -309,6 +310,20 @@ export default function Dashboard() {
     setIntervalByRange((prev) => ({ ...prev, [range]: next }));
   }
 
+  function exportCsv() {
+    if (!chart) return;
+    const csv = chartToCsv(chart);
+    const blob = new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${chart.symbol}_${chart.range}_${chart.interval}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
   function focusSearch() {
     const input = document.querySelector<HTMLInputElement>('input[aria-label="搜索股票"]');
     input?.focus();
@@ -338,6 +353,31 @@ export default function Dashboard() {
     const lows = points.map((point) => point.low ?? point.close);
     return { high: Math.max(...highs), low: Math.min(...lows) };
   }, [chart]);
+
+  const breadth = useMemo(() => {
+    const items: Quote[] = watchlist
+      .map((symbol) => quotes[symbol])
+      .filter((item): item is Quote => Boolean(item) && item.changePercent !== null);
+    if (items.length === 0) return null;
+
+    const up = items.filter((item) => (item.changePercent ?? 0) > 0).length;
+    const down = items.filter((item) => (item.changePercent ?? 0) < 0).length;
+    const average =
+      items.reduce((sum, item) => sum + (item.changePercent ?? 0), 0) / items.length;
+    const sorted = [...items].sort(
+      (a, b) => (b.changePercent ?? 0) - (a.changePercent ?? 0),
+    );
+
+    return {
+      total: items.length,
+      up,
+      down,
+      flat: items.length - up - down,
+      average,
+      best: sorted[0],
+      worst: sorted[sorted.length - 1],
+    };
+  }, [watchlist, quotes]);
 
   const indicatorWarning = useMemo(() => {
     if (!chart || indicators.length === 0) return null;
@@ -415,16 +455,16 @@ export default function Dashboard() {
 
           <nav className="ml-2 hidden items-center gap-0.5 lg:flex" aria-label="页面导航">
             {[
-              ["行情", "#market"],
-              ["自选股", "#watchlist"],
-              ["AI 解读", "#insight"],
-            ].map(([label, href]) => (
+              { label: "行情", href: "#market" },
+              { label: "自选股", href: "#watchlist" },
+              ...(aiEnabled ? [{ label: "AI 解读", href: "#insight" }] : []),
+            ].map((item) => (
               <a
-                key={href}
-                href={href}
+                key={item.href}
+                href={item.href}
                 className="rounded-md px-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
-                {label}
+                {item.label}
               </a>
             ))}
           </nav>
@@ -529,6 +569,61 @@ export default function Dashboard() {
             </span>
           </div>
         </div>
+
+        {breadth && (
+          <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border bg-card px-3 py-2 text-[11px] text-muted-foreground">
+            <span className="font-medium text-foreground">自选股概览</span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-positive" />
+              <span className="num text-foreground/80">{breadth.up}</span> 涨
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-negative" />
+              <span className="num text-foreground/80">{breadth.down}</span> 跌
+            </span>
+            {breadth.flat > 0 && (
+              <span>
+                <span className="num text-foreground/80">{breadth.flat}</span> 平
+              </span>
+            )}
+            <span className="hidden h-3 w-px bg-border sm:block" />
+            <span>
+              平均{" "}
+              <span
+                className={`num ${
+                  breadth.average >= 0 ? "text-positive-text" : "text-negative-text"
+                }`}
+              >
+                {formatPercent(breadth.average)}
+              </span>
+            </span>
+            <span className="hidden h-3 w-px bg-border sm:block" />
+            <span>
+              最强 <span className="font-medium text-foreground">{breadth.best.symbol}</span>{" "}
+              <span
+                className={`num ${
+                  (breadth.best.changePercent ?? 0) >= 0
+                    ? "text-positive-text"
+                    : "text-negative-text"
+                }`}
+              >
+                {formatPercent(breadth.best.changePercent)}
+              </span>
+            </span>
+            <span>
+              最弱 <span className="font-medium text-foreground">{breadth.worst.symbol}</span>{" "}
+              <span
+                className={`num ${
+                  (breadth.worst.changePercent ?? 0) >= 0
+                    ? "text-positive-text"
+                    : "text-negative-text"
+                }`}
+              >
+                {formatPercent(breadth.worst.changePercent)}
+              </span>
+            </span>
+          </div>
+        )}
 
         <div className="grid items-start gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
           <aside
@@ -766,6 +861,24 @@ export default function Dashboard() {
                   <div className="flex flex-wrap items-center justify-end gap-1.5">
                     <IntervalSelect range={range} value={interval} onChange={selectInterval} />
                     <IndicatorControls configs={indicators} onChange={setIndicators} />
+                    <button
+                      type="button"
+                      onClick={exportCsv}
+                      disabled={!chart}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                      aria-label="导出 CSV"
+                      title="导出当前图表数据（CSV）"
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path
+                          d="M12 3v11m0 0 4-4m-4 4-4-4M5 17.5V20h14v-2.5"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </button>
                   </div>
                 </div>
 
@@ -852,6 +965,7 @@ export default function Dashboard() {
               </div>
             </article>
 
+            {aiEnabled && (
             <div id="insight" className="scroll-mt-20">
               <InsightPanel
                 symbol={selected}
@@ -863,6 +977,7 @@ export default function Dashboard() {
                 error={insightError}
               />
             </div>
+            )}
 
 
           </section>
