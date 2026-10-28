@@ -2,6 +2,7 @@ import {
   INTERVAL_CONFIG,
   type ChartPoint,
   type ChartResponse,
+  type Fundamentals,
   type IntervalKey,
   type Quote,
   type RangeKey,
@@ -111,7 +112,7 @@ function parse52Week(value: string | undefined): { low: number | null; high: num
   return { low: low ?? null, high: high ?? null };
 }
 
-async function requestNasdaq<T>(path: string): Promise<T> {
+export async function requestNasdaq<T>(path: string): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`${BASE}${path}`, {
@@ -302,6 +303,117 @@ function aggregate(points: ChartPoint[], mode: "week" | "month" | "quarter"): Ch
       } satisfies ChartPoint;
     })
     .sort((a, b) => a.t - b.t);
+}
+
+interface NasdaqSummaryField {
+  label?: string;
+  value?: string | number | null;
+}
+
+interface NasdaqSummary {
+  symbol?: string;
+  summaryData?: Record<string, NasdaqSummaryField | undefined> | null;
+}
+
+interface NasdaqDividends {
+  dividendHeaderValues?: Array<{ label?: string; value?: string | number | null }> | null;
+}
+
+/** 解析 Nasdaq 摘要里的 "351.73/243.42"（高/低） */
+function parseHighLow(value: string | number | null | undefined): {
+  low: number | null;
+  high: number | null;
+} {
+  if (value === null || value === undefined) return { low: null, high: null };
+  const [high, low] = String(value)
+    .split("/")
+    .map((part) => parseNumber(part));
+  return { low: low ?? null, high: high ?? null };
+}
+
+function summaryValue(
+  summary: Record<string, NasdaqSummaryField | undefined> | null | undefined,
+  ...keys: string[]
+): string | number | null {
+  if (!summary) return null;
+  for (const key of keys) {
+    const value = summary[key]?.value;
+    if (value !== null && value !== undefined && value !== "") return value;
+  }
+  return null;
+}
+
+/**
+ * Nasdaq 基本面兜底：/quote/{symbol}/summary + /quote/{symbol}/dividends。
+ * 不含 EPS（Nasdaq 摘要接口没有该字段），因此 EPS 返回 null。
+ */
+export async function nasdaqFundamentals(symbol: string): Promise<Fundamentals> {
+  const cachedClass = assetClassCache.get(symbol);
+  const candidates: Array<"stocks" | "etf"> = cachedClass ? [cachedClass] : ["stocks", "etf"];
+
+  let summary: NasdaqSummary | null = null;
+  let assetClass: "stocks" | "etf" = "stocks";
+  let lastError: unknown = null;
+
+  for (const candidate of candidates) {
+    try {
+      summary = await requestNasdaq<NasdaqSummary>(
+        `/quote/${encodeURIComponent(symbol)}/summary?assetclass=${candidate}`,
+      );
+      assetClass = candidate;
+      assetClassCache.set(symbol, candidate);
+      break;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (!summary?.summaryData) {
+    throw lastError instanceof Error
+      ? lastError
+      : new NasdaqError("Nasdaq 未返回该代码的基本面数据", 404, "not_found");
+  }
+
+  // 股息接口里带 P/E Ratio；info 接口提供现价（用于推算 EPS），失败都不影响其它字段
+  const [dividends, info] = await Promise.all([
+    requestNasdaq<NasdaqDividends>(
+      `/quote/${encodeURIComponent(symbol)}/dividends?assetclass=${assetClass}`,
+    ).catch(() => null),
+    fetchInfo(symbol).catch(() => null),
+  ]);
+
+  const data = summary.summaryData;
+  const week52 = parseHighLow(summaryValue(data, "FiftTwoWeekHighLow", "FiftyTwoWeekHighLow"));
+  const peField = dividends?.dividendHeaderValues?.find((item) => /P\/E/i.test(item.label ?? ""));
+  const peRatio = parseNumber(peField?.value);
+  const price = parseNumber(info?.primaryData?.lastSalePrice);
+  // EPS(TTM) = 现价 ÷ 市盈率(TTM)：Nasdaq 摘要接口没有原生 EPS 字段，这里做等价推算
+  const eps =
+    peRatio !== null && peRatio > 0 && price !== null && price > 0
+      ? Number((price / peRatio).toFixed(4))
+      : null;
+
+  return {
+    symbol: (summary.symbol || symbol).toUpperCase(),
+    currency: "USD",
+    marketCap: parseNumber(summaryValue(data, "MarketCap")),
+    peRatio,
+    forwardPe: null,
+    eps,
+    epsDerived: eps !== null,
+    dividendYield: parseNumber(summaryValue(data, "Yield", "DividendYield")),
+    beta: parseNumber(summaryValue(data, "Beta")),
+    averageVolume: parseNumber(
+      summaryValue(data, "AverageVolume", "AvgDailyVol20Days", "AvgDailyVol65Days", "FiftyDayAvgDailyVol"),
+    ),
+    week52High: week52.high,
+    week52Low: week52.low,
+    oneYearTarget: parseNumber(summaryValue(data, "OneYrTarget")),
+    sector: (summaryValue(data, "Sector") as string | null) ?? null,
+    industry: (summaryValue(data, "Industry") as string | null) ?? null,
+    source: "nasdaq",
+    fetchedAt: new Date().toISOString(),
+  };
 }
 
 /** 获取日线及以上的走势（纳斯达克接口只有日线，周/月/季由本地聚合） */

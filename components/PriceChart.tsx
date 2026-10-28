@@ -1,10 +1,19 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import type { ChartPoint, IntervalKey, RangeKey } from "@/lib/types";
+import type { ChartMode, ChartPoint, IntervalKey, RangeKey } from "@/lib/types";
 import type { ChartOverlay, ChartPane } from "@/lib/indicators";
+import type { CandleShape } from "@/lib/chart";
+import { buildCandles } from "@/lib/chart";
 import { formatIndicatorValue } from "@/lib/indicators";
 import { formatAxisTime, formatCompact, formatFullTime, formatPrice } from "@/lib/format";
+
+/** 主图上的提醒线（价格提醒） */
+export interface ChartAlertLine {
+  id: string;
+  price: number;
+  direction: "above" | "below";
+}
 
 interface PriceChartProps {
   points: ChartPoint[];
@@ -20,6 +29,10 @@ interface PriceChartProps {
   overlays?: ChartOverlay[];
   /** 副图指标（MACD / RSI） */
   panes?: ChartPane[];
+  /** 主图渲染模式：折线 / 蜡烛（K 线） */
+  mode?: ChartMode;
+  /** 当前标的价格提醒线 */
+  alertLines?: ChartAlertLine[];
 }
 
 const PAD_TOP = 18;
@@ -60,6 +73,15 @@ interface PaneGeometry {
   yLabels: { y: number; label: string }[];
 }
 
+/** 蜡烛（K 线）几何：一条影线 + 一个实体 */
+
+interface AlertMarker {
+  id: string;
+  y: number;
+  label: string;
+  direction: "above" | "below";
+}
+
 interface Geometry {
   width: number;
   height: number;
@@ -81,6 +103,10 @@ interface Geometry {
   overlayLines: LineGeometry[];
   panes: PaneGeometry[];
   panesBottom: number;
+  /** 蜡烛图（mode === "candle" 时非空） */
+  candles: CandleShape[];
+  /** 价格提醒线 */
+  alertMarkers: AlertMarker[];
 }
 
 const formatTick = (value: number): string =>
@@ -125,6 +151,8 @@ export default function PriceChart({
   reference,
   overlays = [],
   panes = [],
+  mode = "line",
+  alertLines = [],
 }: PriceChartProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -175,6 +203,17 @@ export default function PriceChart({
     let min = Math.min(...closes);
     let max = Math.max(...closes);
 
+    // 蜡烛图需要把当根的最高/最低价也纳入价格区间，否则影线会被裁掉
+    if (mode === "candle") {
+      for (const point of points) {
+        const open = point.open ?? point.close;
+        const high = Math.max(point.high ?? Math.max(open, point.close), open, point.close);
+        const low = Math.min(point.low ?? Math.min(open, point.close), open, point.close);
+        min = Math.min(min, low);
+        max = Math.max(max, high);
+      }
+    }
+
     if (reference && reference > 0 && reference > min * 0.85 && reference < max * 1.15) {
       min = Math.min(min, reference);
       max = Math.max(max, reference);
@@ -205,6 +244,12 @@ export default function PriceChart({
       )
       .join(" ");
     const areaPath = `${linePath} L${xFor(points.length - 1).toFixed(2)} ${priceBottom} L${PAD_LEFT} ${priceBottom} Z`;
+
+    /* ------------------------------ 蜡烛（K 线） ----------------------------- */
+
+    const candleStep = innerWidth / Math.max(points.length, 1);
+    const candles: CandleShape[] =
+      mode === "candle" ? buildCandles(points, { xFor, yFor, step: candleStep }) : [];
 
     const maxVolume = Math.max(...points.map((point) => point.volume ?? 0), 1);
     const volumeTop = priceBottom + VOLUME_GAP;
@@ -247,6 +292,16 @@ export default function PriceChart({
 
     const referenceY =
       reference && reference > 0 && reference >= min && reference <= max ? yFor(reference) : null;
+
+    // 提醒线只在当前可视价格区间内绘制
+    const alertMarkers: AlertMarker[] = alertLines
+      .filter((line) => Number.isFinite(line.price) && line.price >= min && line.price <= max)
+      .map((line) => ({
+        id: line.id,
+        y: yFor(line.price),
+        label: `提醒 ${formatTick(line.price)}`,
+        direction: line.direction,
+      }));
 
     /* ---------------------------- 主图叠加指标 ---------------------------- */
 
@@ -416,8 +471,10 @@ export default function PriceChart({
       overlayLines,
       panes: paneGeometries,
       panesBottom,
+      candles,
+      alertMarkers,
     };
-  }, [points, range, interval, timezone, reference, overlays, panes, size]);
+  }, [points, range, interval, timezone, reference, overlays, panes, mode, alertLines, size]);
 
 
   if (!geometry) {
@@ -566,18 +623,70 @@ export default function PriceChart({
           />
         )}
 
-        <path d={geometry.areaPath} fill={`url(#grad-${gradientId})`} />
-        <path
-          key={`${range}-${points.length}-${points[0]?.t ?? 0}`}
-          d={geometry.linePath}
-          fill="none"
-          strokeWidth="1.6"
-          style={{ stroke }}
-          strokeLinejoin="round"
-          strokeLinecap="round"
-          pathLength={1}
-          className="chart-line"
-        />
+        {mode === "candle" ? (
+          <g>
+            {geometry.candles.map((candle, index) => {
+              const color = candle.up ? "var(--positive)" : "var(--negative)";
+              return (
+                <g key={`candle-${points[index]?.t ?? index}`}>
+                  <line
+                    x1={candle.x}
+                    x2={candle.x}
+                    y1={candle.wickTop}
+                    y2={candle.wickBottom}
+                    strokeWidth="1"
+                    style={{ stroke: color }}
+                  />
+                  <rect
+                    x={candle.x - candle.width / 2}
+                    y={candle.bodyTop}
+                    width={candle.width}
+                    height={candle.bodyHeight}
+                    style={{ fill: color }}
+                  />
+                </g>
+              );
+            })}
+          </g>
+        ) : (
+          <>
+            <path d={geometry.areaPath} fill={`url(#grad-${gradientId})`} />
+            <path
+              key={`${range}-${points.length}-${points[0]?.t ?? 0}`}
+              d={geometry.linePath}
+              fill="none"
+              strokeWidth="1.6"
+              style={{ stroke }}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              pathLength={1}
+              className="chart-line"
+            />
+          </>
+        )}
+
+        {geometry.alertMarkers.map((marker) => (
+          <g key={`alert-${marker.id}`}>
+            <line
+              x1={geometry.padLeft}
+              x2={geometry.width - geometry.padRight}
+              y1={marker.y}
+              y2={marker.y}
+              strokeWidth="1"
+              strokeDasharray="2 3"
+              style={{ stroke: "var(--accent)" }}
+            />
+            <text
+              x={geometry.padLeft + 2}
+              y={marker.y - 4}
+              fontSize="9"
+              className="num"
+              style={{ fill: "var(--accent)" }}
+            >
+              {marker.label}
+            </text>
+          </g>
+        ))}
 
         {geometry.panes.map((pane) => (
           <g key={pane.id}>

@@ -12,8 +12,11 @@
 - **可切换 K 线间隔**：每个周期可从 1/2/5/15/30/60/90 分钟、5 日线、日线、周线、月线、季线中选择数据源实际支持的粒度，选择按周期记忆
 - **自选股**：默认 8 只热门标的，支持搜索添加（含中文别名）、移除，列表持久化到 localStorage
 - **实时刷新**：报价 30 秒轮询、分时图 60 秒轮询，可一键暂停；自选股列表带迷你走势
-- **专业走势图**：纯 SVG 实现（无图表库依赖），支持十字光标、跟随鼠标的悬浮明细（自动避让边界）、成交量、昨收参考线
+- **专业走势图**：纯 SVG 实现（无图表库依赖），支持折线 / 蜡烛（K 线）一键切换、十字光标、跟随鼠标的悬浮明细（自动避让边界）、成交量、昨收参考线
 - **技术指标**：一键添加 MACD / RSI / BOLL，支持自定义参数；MACD、RSI 为副图，BOLL 叠加主图，指标配置持久化
+- **价格提醒**：为任意标的设定「涨到 / 跌破」目标价，价格穿越时弹出页面提示 +（可选）浏览器通知，提醒线与状态持久化到 localStorage
+- **指数概览**：页面顶部固定展示 SPY / QQQ / DIA 的报价与涨跌幅，点击即可切换查看；与自选股共用同一次批量请求
+- **基本面数据**：市值、市盈率 / 预期市盈率、EPS、股息率、Beta、平均成交量、1 年目标价，以及带现价游标的 52 周区间条
 - **关键指标**：昨收、今日高低、成交量、区间涨跌 / 高低、52 周区间
 - **自选股概览**：一键查看自选股的上涨/下跌家数、平均涨跌幅、最强与最弱标的
 - **CSV 导出**：把当前周期 + 间隔的 OHLCV 数据导出为 CSV（含交易所当地时间与 UTC，方便 Excel / Python 分析）
@@ -55,6 +58,7 @@ npm run build && npm start
 | `GET /api/quotes?symbols=AAPL,MSFT` | 批量报价 + 迷你走势（一次请求，服务端缓存 15s） |
 | `GET /api/chart?symbol=AAPL&range=1M&interval=1d` | 指定周期 + 间隔的走势与报价；`range` 取 `1D/5D/1M/3M/6M/1Y/5Y/MAX`，`interval` 见下文「K 线间隔」 |
 | `GET /api/search?q=英伟达` | 代码 / 公司名搜索（Yahoo 不可用时回退到内置热门列表） |
+| `GET /api/fundamentals?symbol=AAPL` | 基本面指标（Yahoo `quoteSummary`，失败时退到 Nasdaq summary + dividends；缓存 10 分钟） |
 | `GET /api/insight?symbol=AAPL&range=1M` | Perplexity AI 解读（未配置 Key 返回 501） |
 | `GET /api/config` | 前端探测 AI 功能是否可用 |
 
@@ -140,7 +144,32 @@ curl 'http://localhost:3000/api/chart?symbol=NVDA&range=1Y&interval=1wk' | jq '.
 - 若当前周期数据点不足（例如 1M 只有约 22 个点，而 MACD 需要 34 个），图表上方会提示并给出「切换到更长周期」按钮
 - 计算全部在浏览器完成（`lib/indicators.ts`），不新增接口请求，也不依赖第三方指标库
 
-## 部署到 Cloudflare Workers
+## K 线（蜡烛图）切换
+
+图表工具栏最左侧是「折线 / K线」二选一：折线模式保留渐变面积图，K 线模式按 OHLC 绘制实体 + 影线（收盘 ≥ 开盘为绿，反之为红）。
+
+- 蜡烛几何由 `lib/chart.ts` 的 `buildCandles()` 计算，实体宽度按点密度自适应（1–14px），十字线与悬浮明细在两种模式下都可用
+- 缺少 OHLC 的分钟级数据点会用收盘价兜底，不会出现空洞；价格轴自动把当根最高 / 最低价纳入区间
+- 选择结果写入 `localStorage`（`data-insider:chart-mode:v1`），刷新后保持
+
+## 价格提醒
+
+图表工具栏的「提醒」按钮打开当前标的的提醒面板：
+
+- 选择「涨到 / 跌破」+ 目标价即可新增（默认填入现价），提醒以虚线画在主图上
+- 轮询拿到新报价时比较「上一次观察状态」和当前状态，**只在不满足 → 满足的瞬间触发一次**，避免打开页面就误报
+- 触发后右下角弹出 toast，并在已授权时发送浏览器通知；面板里显示「已触发」的时间和现价，点「重开」可重新生效
+- 全部提醒（含触发状态）保存在 `data-insider:alerts:v1`，纯前端实现，不新增接口请求
+
+## 基本面数据
+
+图表下方的「基本面」卡片展示市值、市盈率（TTM）、预期市盈率、EPS（TTM）、股息率、Beta、平均成交量、1 年目标价，以及带现价游标的 52 周区间条。
+
+- 数据来自 `/api/fundamentals`：优先 Yahoo `quoteSummary`（需要 crumb，服务端自动完成 A3 Cookie 握手并缓存 30 分钟）
+- Yahoo 不可用时退回 Nasdaq `/quote/{symbol}/summary` + `/dividends`（拿到市值、PE、股息率、52 周区间等）；该接口没有原生 EPS 字段，会用「现价 ÷ 市盈率」等价推算，并在数值后标 `*`
+- 结果按代码缓存 10 分钟，切换标的时才重新请求
+
+
 
 本项目使用 **`@opennextjs/cloudflare`（OpenNext 适配器）** 部署为 Worker + Static Assets，不是 Cloudflare Pages / `next-on-pages`，**不需要**把 API 路由改成 Edge Runtime。
 
@@ -206,19 +235,27 @@ app/
     quotes/route.ts     批量报价
     chart/route.ts      周期走势
     search/route.ts     代码搜索
+    fundamentals/route.ts 基本面（市值 / 估值 / 分红）
     insight/route.ts    Perplexity AI 解读
     config/route.ts     功能开关探测
 components/
   Dashboard.tsx         主面板（状态、轮询、自选股、导航）
-  PriceChart.tsx        SVG 走势图
+  PriceChart.tsx        SVG 走势图（折线 / K 线）
   Sparkline.tsx         迷你走势
   SearchBox.tsx         搜索下拉
   InsightPanel.tsx      AI 解读卡片
   IndicatorControls.tsx 指标添加 / 参数设置
   IntervalSelect.tsx     K 线间隔下拉
+  IndexOverview.tsx     指数概览条（SPY / QQQ / DIA）
+  PriceAlerts.tsx       价格提醒弹层
+  AlertToasts.tsx       提醒 toast
+  FundamentalsCard.tsx  基本面卡片
   ThemeToggle.tsx       亮/暗主题切换
 lib/
   types.ts              共享类型 + 周期配置
+  chart.ts              K 线几何计算
+  alerts.ts             价格提醒（穿越判定 / 校验 / 持久化）
+  fundamentals.ts       基本面数据编排（Yahoo crumb + Nasdaq 兜底）
   indicators.ts         MACD / RSI / BOLL 计算与校验
   yahoo.ts              Yahoo Finance 适配器
   nasdaq.ts             Nasdaq 兜底适配器
