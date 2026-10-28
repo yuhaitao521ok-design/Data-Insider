@@ -1,4 +1,5 @@
 import { cached } from "@/lib/cache";
+import { reconcileChange } from "@/lib/quote";
 import {
   INTERVAL_CONFIG,
   RANGE_CONFIG,
@@ -170,23 +171,24 @@ function pickNumber(...values: Array<number | null | undefined>): number | null 
 function buildQuote(meta: YahooMeta, sparkline: number[], symbolHint?: string): Quote {
   const symbol = (meta.symbol || symbolHint || "").toUpperCase();
   const price = pickNumber(meta.regularMarketPrice) ?? sparkline.at(-1) ?? 0;
-  const changePercent = pickNumber(meta.regularMarketChangePercent);
-  let previousClose = pickNumber(meta.previousClose);
-  // v8/chart 的 meta 只有 chartPreviousClose（区间前一日收盘，可能是一年前），
-  // 因此优先用涨跌幅反推昨收，避免出现「涨跌幅 -0.14% 但价差 +10.7」的矛盾展示。
-  if (previousClose === null && changePercent !== null && changePercent !== -100) {
-    previousClose = price / (1 + changePercent / 100);
-  }
-  if (previousClose === null) previousClose = pickNumber(meta.chartPreviousClose);
-  const change = previousClose !== null ? price - previousClose : changePercent !== null ? (price * changePercent) / 100 : null;
+
+  // 统一涨跌口径：优先用 meta.previousClose（上一个交易日收盘）+ price 重算，
+  // 保证 change / changePercent 自洽；chartPreviousClose 是「区间起点前一日」的收盘
+  // （可能是几个月甚至几年前），只在完全拿不到昨收时用于展示，绝不参与涨跌幅计算。
+  const reconciled = reconcileChange({
+    price,
+    previousClose: pickNumber(meta.previousClose),
+    changePercent: pickNumber(meta.regularMarketChangePercent),
+  });
+  const previousClose = reconciled.previousClose ?? pickNumber(meta.chartPreviousClose);
 
   return {
     symbol,
     name: meta.longName || meta.shortName || symbol,
     price,
     previousClose,
-    change,
-    changePercent,
+    change: reconciled.change,
+    changePercent: reconciled.changePercent,
     currency: meta.currency || "USD",
     exchange: meta.fullExchangeName || meta.exchangeName || "",
     marketTime:

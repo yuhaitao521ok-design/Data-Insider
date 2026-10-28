@@ -7,6 +7,7 @@ import {
   type Quote,
   type RangeKey,
 } from "@/lib/types";
+import { parseEasternTimestamp, reconcileChange } from "@/lib/quote";
 
 /**
  * Nasdaq 官方行情接口（无需 API Key），作为 Yahoo 的兜底数据源。
@@ -101,6 +102,11 @@ function parseNumber(value: string | number | null | undefined): number | null {
 
 function parseDate(value: string | undefined): string | null {
   if (!value) return null;
+  // info 接口给的是美东时间字符串（"Oct 28, 2026 9:33 AM ET"，可能带 "Closed at" 前缀），
+  // chart 接口给的是 "YYYY-MM-DD"。两种都支持，避免 marketTime 变成 null。
+  const eastern = parseEasternTimestamp(value);
+  if (eastern) return eastern;
+
   const parsed = new Date(`${value} 20:00:00 UTC`);
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed.toISOString();
@@ -178,17 +184,20 @@ function infoToQuote(symbol: string, info: NasdaqInfo, assetClass: "stocks" | "e
     throw new NasdaqError(`Nasdaq 未返回 ${symbol} 的有效报价`, 404, "not_found");
   }
 
-  const change = parseNumber(primary.netChange);
-  const changePercent = parseNumber(primary.percentageChange);
-  const previousClose = change !== null ? price - change : null;
+  // 只给出 netChange / percentageChange 之一时也能补齐成自洽的涨跌三元组
+  const reconciled = reconcileChange({
+    price,
+    change: parseNumber(primary.netChange),
+    changePercent: parseNumber(primary.percentageChange),
+  });
 
   return {
     symbol: (info.symbol || symbol).toUpperCase(),
     name: cleanCompanyName(info.companyName, symbol),
     price,
-    previousClose,
-    change,
-    changePercent,
+    previousClose: reconciled.previousClose,
+    change: reconciled.change,
+    changePercent: reconciled.changePercent,
     currency: "USD",
     exchange: info.exchange || (assetClass === "etf" ? "ETF" : "NASDAQ"),
     marketTime: parseDate(primary.lastTradeTimestamp),
@@ -472,15 +481,16 @@ export async function nasdaqChart(
 
   const last = points[points.length - 1];
   const lastDaily = rawPoints[rawPoints.length - 1];
-  const changeFromInfo = parseNumber(info.primaryData?.netChange);
-  const previousClose =
-    parseNumber(data.previousClose) ?? (changeFromInfo !== null ? (parseNumber(info.primaryData?.lastSalePrice) ?? last.close) - changeFromInfo : null);
   const price = parseNumber(info.primaryData?.lastSalePrice) ?? last.close;
-  const change =
-    changeFromInfo ?? (previousClose !== null ? price - previousClose : null);
-  const changePercent =
-    parseNumber(info.primaryData?.percentageChange) ??
-    (previousClose ? ((price - previousClose) / previousClose) * 100 : null);
+  const changeFromInfo = parseNumber(info.primaryData?.netChange);
+  const reconciled = reconcileChange({
+    price,
+    // 优先用 info 的实时净变动反推昨收；没有时才用 chart 的 previousClose（口径更粗，不参与百分比推算）
+    previousClose: changeFromInfo !== null ? price - changeFromInfo : null,
+    change: changeFromInfo,
+    changePercent: parseNumber(info.primaryData?.percentageChange),
+  });
+  const previousClose = reconciled.previousClose ?? parseNumber(data.previousClose);
   const week52 = parse52Week(info.keyStats?.fiftyTwoWeekHighLow?.value);
 
   const quote: Quote = {
@@ -488,8 +498,8 @@ export async function nasdaqChart(
     name: cleanCompanyName(info.companyName, symbol),
     price,
     previousClose,
-    change,
-    changePercent,
+    change: reconciled.change,
+    changePercent: reconciled.changePercent,
     currency: "USD",
     exchange: info.exchange || (assetClass === "etf" ? "ETF" : "NASDAQ"),
     marketTime: parseDate(info.primaryData?.lastTradeTimestamp),
@@ -510,8 +520,8 @@ export async function nasdaqChart(
     meta: {
       price,
       previousClose,
-      change,
-      changePercent,
+      change: reconciled.change,
+      changePercent: reconciled.changePercent,
       dayHigh: lastDaily.high ?? last.high,
       dayLow: lastDaily.low ?? last.low,
       week52Low: week52.low,

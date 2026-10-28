@@ -95,6 +95,9 @@ curl 'http://localhost:3000/api/chart?symbol=NVDA&range=1Y&interval=1wk' | jq '.
 - 服务端使用进程内 LRU 缓存 + 请求去重 + `stale-while-revalidate`：报价 15s 新鲜期 / 10min 宽限期，走势按周期 30s–1h。响应同时带 `s-maxage`，部署在 Vercel 时可被 CDN 缓存。
 - Yahoo 对机房 IP 限流较严，Nasdaq 兜底可保证页面在多数环境下仍能正常使用；1D / 5D 分时数据仅 Yahoo 提供。
 - Yahoo 支持分钟/小时/日/周/月/季全部间隔；Nasdaq 只有日线，周/月/季在 `lib/nasdaq.ts` 内由日线聚合。
+- **涨跌幅口径**：所有报价的 `price / previousClose / change / changePercent` 都经 `lib/quote.ts:reconcileChange()` 归一化，优先用「上一个交易日收盘」重算，保证三个数字自洽；`chartPreviousClose`（区间起点前一日收盘）绝不参与涨跌幅计算。
+- **报价以 `/api/quotes` 为准**：图表接口返回的 `quote` 可能来自更早的缓存（甚至上一个交易日），只用于补齐缺失标的，不会覆盖批量报价——否则会出现「切换周期后涨跌幅退回上一个交易日」的问题。
+- Nasdaq 的成交时间（如 `Oct 28, 2026 9:33 AM ET`）由 `parseEasternTimestamp()` 解析为 UTC（自动处理夏令时），页面因此能显示真实的「美东时间」而不是 `--`。
 - Yahoo / Nasdaq 均为公开非官方接口，字段可能变更，请勿用于生产交易决策。
 
 ## K 线间隔
@@ -267,6 +270,7 @@ lib/
   chart.ts              K 线几何计算
   alerts.ts             价格提醒（穿越判定 / 校验 / 持久化）
   watchlist.ts          自选股排序 / 拖拽移动 / 落点计算
+  quote.ts              涨跌口径归一化 + 美东时间解析
   fundamentals.ts       基本面数据编排（Yahoo crumb + Nasdaq 兜底）
   indicators.ts         MACD / RSI / BOLL 计算与校验
   yahoo.ts              Yahoo Finance 适配器

@@ -306,7 +306,11 @@ export default function Dashboard() {
         if (requestId !== chartRequestRef.current) return;
         setChart(data);
         setChartError(null);
-        setQuotes((prev) => ({ ...prev, [data.quote.symbol]: data.quote }));
+        // 注意：图表响应里的 quote 可能来自更早的缓存（甚至上一个交易日），
+        // 不能覆盖批量报价，只在该标的还没有报价时补一个。
+        setQuotes((prev) =>
+          prev[data.quote.symbol] ? prev : { ...prev, [data.quote.symbol]: data.quote },
+        );
       } catch (error) {
         if (requestId !== chartRequestRef.current) return;
         setChartError(error instanceof Error ? error.message : "加载走势失败");
@@ -617,7 +621,9 @@ export default function Dashboard() {
 
   /* -------------------------------- 派生数据 ------------------------------- */
 
-  const quote = chart?.quote ?? quotes[selected] ?? null;
+  // 顶部大价格与涨跌幅统一走批量报价（每 30 秒刷新），图表 quote 只作为兜底，
+  // 否则切换周期后会出现「价格/涨跌幅停留在上一个交易日」的问题。
+  const quote = quotes[selected] ?? chart?.quote ?? null;
   const changePercent = quote?.changePercent ?? null;
   const positive = (changePercent ?? 0) >= 0;
   const inWatchlist = watchlist.includes(selected);
