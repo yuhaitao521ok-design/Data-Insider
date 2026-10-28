@@ -50,3 +50,34 @@ export function buildCandles(points: CandleInput[], layout: CandleLayout): Candl
     };
   });
 }
+
+export interface BarChange {
+  /** 相对基准价的涨跌额 */
+  change: number | null;
+  /** 涨跌幅（百分比数值） */
+  changePercent: number | null;
+  /** 计算基准：上一根的收盘价，首根用传入的兜底基准（如昨收）或当根开盘价 */
+  base: number | null;
+}
+
+/**
+ * 单根 K 线（或折线数据点）的涨跌：以上一根收盘价为基准，
+ * 第一根没有「上一根」，优先用传入的兜底基准（分时图的昨收），否则退回当根开盘价。
+ */
+export function barChange(
+  points: { open: number | null; close: number }[],
+  index: number,
+  fallbackBase: number | null = null,
+): BarChange {
+  const point = points[index];
+  if (!point) return { change: null, changePercent: null, base: null };
+
+  const previous = index > 0 ? points[index - 1]?.close ?? null : fallbackBase;
+  const base = previous ?? point.open ?? null;
+  if (base === null || !Number.isFinite(base) || base === 0) {
+    return { change: null, changePercent: null, base: null };
+  }
+
+  const change = point.close - base;
+  return { change, changePercent: (change / base) * 100, base };
+}
