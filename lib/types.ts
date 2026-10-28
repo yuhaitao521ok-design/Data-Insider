@@ -141,6 +141,41 @@ export interface ChartResponse {
   fetchedAt: string;
 }
 
+/** 主图渲染模式：折线 / 蜡烛（K 线） */
+export type ChartMode = "line" | "candle";
+
+/** 页面顶部指数条展示的标的（第一次报价请求会和自选股合并，不额外发请求） */
+export const INDEX_SYMBOLS = ["SPY", "QQQ", "DIA"] as const;
+
+export type IndexSymbol = (typeof INDEX_SYMBOLS)[number];
+
+/** 基本面指标（市值 / 估值 / 分红 / 52 周区间） */
+export interface Fundamentals {
+  symbol: string;
+  currency: string;
+  /** 总市值（原币种） */
+  marketCap: number | null;
+  /** 市盈率 TTM */
+  peRatio: number | null;
+  /** 预期市盈率 */
+  forwardPe: number | null;
+  /** 每股收益 TTM */
+  eps: number | null;
+  /** EPS 是否由「现价 ÷ 市盈率」推算（Nasdaq 兜底时无原生 EPS 字段） */
+  epsDerived?: boolean;
+  /** 股息率，百分比数值（0.31 表示 0.31%） */
+  dividendYield: number | null;
+  beta: number | null;
+  averageVolume: number | null;
+  week52High: number | null;
+  week52Low: number | null;
+  oneYearTarget: number | null;
+  sector: string | null;
+  industry: string | null;
+  source: "yahoo" | "nasdaq";
+  fetchedAt: string;
+}
+
 export interface SearchResult {
   symbol: string;
   name: string;

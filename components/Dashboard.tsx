@@ -8,9 +8,24 @@ import InsightPanel from "@/components/InsightPanel";
 import ThemeToggle from "@/components/ThemeToggle";
 import IndicatorControls from "@/components/IndicatorControls";
 import IntervalSelect from "@/components/IntervalSelect";
+import IndexOverview from "@/components/IndexOverview";
+import PriceAlerts from "@/components/PriceAlerts";
+import AlertToasts, { type AlertToastItem } from "@/components/AlertToasts";
+import FundamentalsCard from "@/components/FundamentalsCard";
 import { chartToCsv } from "@/lib/csv";
 import {
+  ALERTS_KEY,
+  MAX_ALERTS,
+  createAlert,
+  describeAlert,
+  evaluateAlerts,
+  sanitizeAlerts,
+  type AlertDirection,
+  type PriceAlert,
+} from "@/lib/alerts";
+import {
   DEFAULT_WATCHLIST,
+  INDEX_SYMBOLS,
   RANGE_CONFIG,
   RANGE_KEYS,
   isIntervalAllowed,
@@ -18,7 +33,9 @@ import {
   isIntradayInterval,
   isRangeKey,
   resolveInterval,
+  type ChartMode,
   type ChartResponse,
+  type Fundamentals,
   type IntervalKey,
   type InsightResponse,
   type Quote,
@@ -42,8 +59,14 @@ const RANGE_KEY = "data-insider:range:v1";
 const AUTO_KEY = "data-insider:auto:v1";
 const INDICATORS_KEY = "data-insider:indicators:v1";
 const INTERVALS_KEY = "data-insider:intervals:v1";
+const CHART_MODE_KEY = "data-insider:chart-mode:v1";
 const POLL_MS = 30_000;
 const INTRADAY_POLL_MS = 60_000;
+
+const CHART_MODES: { key: ChartMode; label: string; title: string }[] = [
+  { key: "line", label: "折线", title: "折线图" },
+  { key: "candle", label: "K线", title: "蜡烛图（K 线）" },
+];
 
 const SOURCE_LABEL: Record<Quote["source"], string> = {
   yahoo: "Yahoo Finance",
@@ -81,6 +104,17 @@ export default function Dashboard() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
 
+  const [chartMode, setChartMode] = useState<ChartMode>("line");
+  const [alerts, setAlerts] = useState<PriceAlert[]>([]);
+  const [toasts, setToasts] = useState<AlertToastItem[]>([]);
+  const [notificationState, setNotificationState] = useState<
+    NotificationPermission | "unsupported"
+  >("unsupported");
+
+  const [fundamentals, setFundamentals] = useState<Fundamentals | null>(null);
+  const [fundamentalsLoading, setFundamentalsLoading] = useState(false);
+  const [fundamentalsError, setFundamentalsError] = useState<string | null>(null);
+
   const [chart, setChart] = useState<ChartResponse | null>(null);
   const [chartLoading, setChartLoading] = useState(true);
   const [chartError, setChartError] = useState<string | null>(null);
@@ -92,6 +126,8 @@ export default function Dashboard() {
 
   const quoteRequestRef = useRef(0);
   const chartRequestRef = useRef(0);
+  /** 每条提醒上一次观察到的满足状态（识别价格穿越，避免误报） */
+  const alertSeenRef = useRef<Record<string, boolean>>({});
 
   /* ------------------------------ 本地持久化 ------------------------------ */
 
@@ -135,6 +171,13 @@ export default function Dashboard() {
         }
         setIntervalByRange(next);
       }
+      const savedMode = window.localStorage.getItem(CHART_MODE_KEY);
+      if (savedMode === "line" || savedMode === "candle") setChartMode(savedMode);
+      const savedAlerts = window.localStorage.getItem(ALERTS_KEY);
+      if (savedAlerts) setAlerts(sanitizeAlerts(JSON.parse(savedAlerts)));
+      if (typeof Notification !== "undefined") {
+        setNotificationState(Notification.permission);
+      }
     } catch {
       // localStorage 不可用（隐私模式等），忽略即可
     }
@@ -149,26 +192,25 @@ export default function Dashboard() {
       window.localStorage.setItem(AUTO_KEY, autoRefresh ? "1" : "0");
       window.localStorage.setItem(INDICATORS_KEY, JSON.stringify(indicators));
       window.localStorage.setItem(INTERVALS_KEY, JSON.stringify(intervalByRange));
+      window.localStorage.setItem(CHART_MODE_KEY, chartMode);
+      window.localStorage.setItem(ALERTS_KEY, JSON.stringify(alerts));
     } catch {
       // 忽略写入失败
     }
-  }, [watchlist, range, autoRefresh, indicators, intervalByRange, hydrated]);
+  }, [watchlist, range, autoRefresh, indicators, intervalByRange, chartMode, alerts, hydrated]);
 
   /* -------------------------------- 数据加载 ------------------------------- */
 
   const loadQuotes = useCallback(
     async (options: { silent?: boolean } = {}) => {
-      if (watchlist.length === 0) {
-        setQuotes({});
-        setQuotesLoading(false);
-        return;
-      }
+      // 指数条（SPY / QQQ / DIA）与自选股合并到同一个批量请求，避免额外请求
+      const symbols = Array.from(new Set<string>([...watchlist, ...INDEX_SYMBOLS]));
       const requestId = ++quoteRequestRef.current;
       if (!options.silent) setQuotesLoading(true);
 
       try {
         const response = await fetch(
-          `/api/quotes?symbols=${encodeURIComponent(watchlist.join(","))}`,
+          `/api/quotes?symbols=${encodeURIComponent(symbols.join(","))}`,
           { cache: "no-store" },
         );
         if (!response.ok) {
@@ -260,6 +302,33 @@ export default function Dashboard() {
     return () => window.clearInterval(id);
   }, [autoRefresh, hydrated, selected, range, interval, loadChart]);
 
+  const loadFundamentals = useCallback(async (symbol: string) => {
+    setFundamentalsLoading(true);
+    setFundamentalsError(null);
+    try {
+      const response = await fetch(
+        `/api/fundamentals?symbol=${encodeURIComponent(symbol)}`,
+        { cache: "no-store" },
+      );
+      if (!response.ok) {
+        throw new Error(await readError(response, `加载基本面失败（${response.status}）`));
+      }
+      const data = (await response.json()) as Fundamentals;
+      setFundamentals(data);
+    } catch (error) {
+      setFundamentals(null);
+      setFundamentalsError(error instanceof Error ? error.message : "加载基本面失败");
+    } finally {
+      setFundamentalsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    setFundamentals(null);
+    void loadFundamentals(selected);
+  }, [hydrated, selected, loadFundamentals]);
+
   useEffect(() => {
     fetch("/api/config", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
@@ -290,6 +359,93 @@ export default function Dashboard() {
     setInsightError(null);
     setInsightLoading(false);
   }, [selected, range]);
+
+  /* ------------------------------- 价格提醒 ------------------------------- */
+
+  useEffect(() => {
+    if (!hydrated || alerts.length === 0) return;
+
+    const prices: Record<string, number | undefined> = {};
+    for (const item of Object.values(quotes)) prices[item.symbol] = item.price;
+    const currencyOf = (symbol: string) => quotes[symbol]?.currency ?? "USD";
+
+    const { fired, seen } = evaluateAlerts(alerts, prices, alertSeenRef.current);
+    alertSeenRef.current = seen;
+    if (fired.length === 0) return;
+
+    const triggeredAt = new Date().toISOString();
+    const firedIds = new Set(fired.map((alert) => alert.id));
+    setAlerts((prev) =>
+      prev.map((alert) =>
+        firedIds.has(alert.id)
+          ? { ...alert, triggeredAt, triggeredPrice: prices[alert.symbol] ?? null }
+          : alert,
+      ),
+    );
+
+    setToasts((prev) =>
+      [
+        ...prev,
+        ...fired.map((alert) => ({
+          id: `${alert.id}-${triggeredAt}`,
+          title: "价格提醒触发",
+          body: describeAlert(alert, (value) => formatPrice(value, currencyOf(alert.symbol))),
+          price: formatPrice(prices[alert.symbol] ?? null, currencyOf(alert.symbol)),
+        })),
+      ].slice(-3),
+    );
+
+    if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+      for (const alert of fired) {
+        try {
+          new Notification("价格提醒", {
+            body: `${describeAlert(alert, (value) =>
+              formatPrice(value, currencyOf(alert.symbol)),
+            )}（现价 ${formatPrice(prices[alert.symbol] ?? null, currencyOf(alert.symbol))}）`,
+            tag: alert.id,
+          });
+        } catch {
+          // 部分浏览器（移动端 Safari 等）不支持直接构造 Notification，忽略即可
+        }
+      }
+    }
+  }, [hydrated, alerts, quotes]);
+
+  const addAlert = useCallback(
+    (direction: AlertDirection, price: number) => {
+      setAlerts((prev) => [...prev, createAlert(selected, direction, price)].slice(-MAX_ALERTS));
+    },
+    [selected],
+  );
+
+  const removeAlert = useCallback((id: string) => {
+    delete alertSeenRef.current[id];
+    setAlerts((prev) => prev.filter((alert) => alert.id !== id));
+  }, []);
+
+  const reenableAlert = useCallback((id: string) => {
+    // 清掉观察状态，重新启用后需要再穿越一次才触发
+    delete alertSeenRef.current[id];
+    setAlerts((prev) =>
+      prev.map((alert) =>
+        alert.id === id ? { ...alert, triggeredAt: null, triggeredPrice: null } : alert,
+      ),
+    );
+  }, []);
+
+  const requestNotificationPermission = useCallback(() => {
+    if (typeof Notification === "undefined") {
+      setNotificationState("unsupported");
+      return;
+    }
+    Notification.requestPermission()
+      .then((state) => setNotificationState(state))
+      .catch(() => setNotificationState(Notification.permission));
+  }, []);
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((toast) => toast.id !== id));
+  }, []);
 
   /* --------------------------------- 交互 --------------------------------- */
 
@@ -401,6 +557,15 @@ export default function Dashboard() {
   const indicatorData = useMemo(
     () => (chart ? buildIndicatorRenderData(chart.points, indicators) : { panes: [], overlays: [] }),
     [chart, indicators],
+  );
+
+  /** 当前标的的价格提醒线（画在主图上） */
+  const chartAlertLines = useMemo(
+    () =>
+      alerts
+        .filter((alert) => alert.symbol === selected)
+        .map((alert) => ({ id: alert.id, price: alert.price, direction: alert.direction })),
+    [alerts, selected],
   );
 
   const lastUpdateLabel = lastUpdated
@@ -569,6 +734,13 @@ export default function Dashboard() {
             </span>
           </div>
         </div>
+
+        <IndexOverview
+          quotes={quotes}
+          loading={quotesLoading}
+          selected={selected}
+          onSelect={setSelected}
+        />
 
         {breadth && (
           <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border bg-card px-3 py-2 text-[11px] text-muted-foreground">
@@ -859,8 +1031,41 @@ export default function Dashboard() {
                     ))}
                   </div>
                   <div className="flex flex-wrap items-center justify-end gap-1.5">
+                    <div
+                      className="inline-flex items-center gap-0.5 rounded-lg bg-muted p-0.5"
+                      role="group"
+                      aria-label="图表类型"
+                    >
+                      {CHART_MODES.map((option) => (
+                        <button
+                          key={option.key}
+                          type="button"
+                          onClick={() => setChartMode(option.key)}
+                          aria-pressed={chartMode === option.key}
+                          title={option.title}
+                          className={`h-6 rounded-md px-1.5 text-[11px] transition-colors ${
+                            chartMode === option.key
+                              ? "bg-card font-medium text-foreground shadow-sm dark:bg-overlay dark:shadow-none"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
                     <IntervalSelect range={range} value={interval} onChange={selectInterval} />
                     <IndicatorControls configs={indicators} onChange={setIndicators} />
+                    <PriceAlerts
+                      symbol={selected}
+                      currency={currency}
+                      currentPrice={quote?.price ?? null}
+                      alerts={alerts}
+                      notificationState={notificationState}
+                      onCreate={addAlert}
+                      onRemove={removeAlert}
+                      onReenable={reenableAlert}
+                      onRequestPermission={requestNotificationPermission}
+                    />
                     <button
                       type="button"
                       onClick={exportCsv}
@@ -937,6 +1142,8 @@ export default function Dashboard() {
                       interval={interval}
                       overlays={indicatorData.overlays}
                       panes={indicatorData.panes}
+                      mode={chartMode}
+                      alertLines={chartAlertLines}
                     />
                   ) : (
                     <div className="skeleton h-[250px] w-full rounded-lg sm:h-[310px] lg:h-[360px]" />
@@ -964,6 +1171,16 @@ export default function Dashboard() {
                 ))}
               </div>
             </article>
+
+            <FundamentalsCard
+              symbol={selected}
+              price={quote?.price ?? null}
+              currency={currency}
+              data={fundamentals}
+              loading={fundamentalsLoading}
+              error={fundamentalsError}
+              onRetry={() => void loadFundamentals(selected)}
+            />
 
             {aiEnabled && (
             <div id="insight" className="scroll-mt-20">
@@ -1003,6 +1220,8 @@ export default function Dashboard() {
           </div>
         </div>
       </footer>
+
+      <AlertToasts items={toasts} onDismiss={dismissToast} />
 
     </div>
   );
