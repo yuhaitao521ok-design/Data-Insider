@@ -15,8 +15,10 @@
 - **专业走势图**：纯 SVG 实现（无图表库依赖），支持十字光标、跟随鼠标的悬浮明细（自动避让边界）、成交量、昨收参考线
 - **技术指标**：一键添加 MACD / RSI / BOLL，支持自定义参数；MACD、RSI 为副图，BOLL 叠加主图，指标配置持久化
 - **关键指标**：昨收、今日高低、成交量、区间涨跌 / 高低、52 周区间
+- **自选股概览**：一键查看自选股的上涨/下跌家数、平均涨跌幅、最强与最弱标的
+- **CSV 导出**：把当前周期 + 间隔的 OHLCV 数据导出为 CSV（含交易所当地时间与 UTC，方便 Excel / Python 分析）
 - **多数据源自动降级**：Yahoo → Nasdaq →（可选）Perplexity，页面明确标注来源
-- **AI 解读（可选）**：Perplexity `sonar` 结合最新新闻生成中文解读、要点、风险与引用链接
+- **AI 解读（可选）**：配置 `PERPLEXITY_API_KEY` 后才会显示入口与面板；Perplexity `sonar` 结合最新新闻生成中文解读、要点、风险与引用链接
 - **深色行情终端风格**，移动端 / 桌面端自适应
 - **亮 / 暗双主题**：跟随系统并可手动切换，选择持久化到 localStorage
 - **界面风格参考 [OpenRouter](https://openrouter.ai)**：Roboto / Roboto Mono 字体、细边框卡片、靛紫强调色、克制的留白与字号层级
@@ -44,7 +46,7 @@ npm run build && npm start
 | `PERPLEXITY_API_KEY` | 否 | 配置后启用「AI 解读」，并在所有行情源失败时作为兜底报价 |
 | `PERPLEXITY_MODEL` | 否 | 默认 `sonar` |
 
-不配置 Perplexity 时，行情功能完全可用，AI 面板会显示配置提示。
+不配置 Perplexity 时，行情功能完全可用，页面不会显示 AI 入口与面板，主界面更简洁。
 
 ## API
 
