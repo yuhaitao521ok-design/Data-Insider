@@ -192,7 +192,8 @@ curl 'http://localhost:3000/api/chart?symbol=NVDA&range=1Y&interval=1wk' | jq '.
 
 - **DIA 曾长期刷不出来**：旧实现把指数混在自选股的批量请求里，Nasdaq 对部分 ETF 返回 `Error while calling vendor` 时该卡片就一直是空的，只有点击（触发图表请求）才会补上。现在指数走独立接口，并且有 Nasdaq → Sina 两级兜底，DIA 稳定有数据。
 - `lib/sina.ts` 把新浪返回的 GBK 文本解析成统一 `Quote`（美股 `gb_*`、全球指数 `int_*`、A 股指数 `sh*` 三种字段格式），时间从北京时间转 ISO。
-- Sina 没有 KOSPI 与 STI，这两个指标只有 Yahoo 能提供；Yahoo 不可用时会显示 `--`。
+- Sina 只用于兜底 **恒生 / 上证 / 沪深 300 / 美股 4 个 ETF**（与 Yahoo 点位完全一致）；KOSPI、STI、日经只有 Yahoo 能提供，Yahoo 不可用时这几张卡片显示 `--`。
+- 特别说明：Sina 的 `int_nikkei` 长期停在旧值（与 Yahoo `^N225` 相差约 30%），因此日经**不使用** Sina 兜底，宁可留空也不显示错误点位。
 - 所有 Yahoo 请求共用一个并发闸门（最多 2 并发 + 150ms 间隔），避免一次页面加载的突发请求触发 429。
 
 ## 自选股面板

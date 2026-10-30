@@ -24,7 +24,8 @@ export const SINA_CODES: Record<string, string> = {
   "^HSI": "int_hangseng",
   "000001.SS": "sh000001",
   "000300.SS": "sh000300",
-  "^N225": "int_nikkei",
+  // 注意：Sina 的 int_nikkei 长期停在旧值（与 Yahoo 的 ^N225 相差 ~30%），
+  // 为避免展示错误点位，日经只走 Yahoo，不用 Sina 兜底。
 };
 
 const CODE_TO_SYMBOL: Record<string, string> = Object.fromEntries(
