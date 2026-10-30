@@ -74,7 +74,7 @@ export const RANGE_INTERVALS: Record<RangeKey, IntervalKey[]> = {
 };
 
 
-export type QuoteSource = "yahoo" | "nasdaq" | "perplexity";
+export type QuoteSource = "yahoo" | "nasdaq" | "perplexity" | "sina";
 
 export interface Quote {
   symbol: string;
@@ -156,11 +156,6 @@ export interface ChartResponse {
 
 /** 主图渲染模式：折线 / 蜡烛（K 线） */
 export type ChartMode = "line" | "candle";
-
-/** 页面顶部指数条展示的标的（第一次报价请求会和自选股合并，不额外发请求） */
-export const INDEX_SYMBOLS = ["SPY", "QQQ", "DIA"] as const;
-
-export type IndexSymbol = (typeof INDEX_SYMBOLS)[number];
 
 /** 基本面指标（市值 / 估值 / 分红 / 52 周区间） */
 export interface Fundamentals {

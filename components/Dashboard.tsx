@@ -36,7 +36,6 @@ import {
 } from "@/lib/watchlist";
 import {
   DEFAULT_WATCHLIST,
-  INDEX_SYMBOLS,
   RANGE_CONFIG,
   RANGE_KEYS,
   isIntervalAllowed,
@@ -84,6 +83,7 @@ const SOURCE_LABEL: Record<Quote["source"], string> = {
   yahoo: "Yahoo Finance",
   nasdaq: "Nasdaq",
   perplexity: "Perplexity 估算",
+  sina: "Sina",
 };
 
 type InsightData = (InsightResponse & { cached?: boolean }) | null;
@@ -111,6 +111,10 @@ export default function Dashboard() {
   const interval = resolveInterval(range, intervalByRange[range]);
 
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
+  const [indices, setIndices] = useState<Record<string, Quote>>({});
+  const [indicesLoading, setIndicesLoading] = useState(true);
+  const [indicesError, setIndicesError] = useState<string | null>(null);
+  const [indicesUpdatedAt, setIndicesUpdatedAt] = useState<string | null>(null);
   const [quotesLoading, setQuotesLoading] = useState(true);
   const [quotesError, setQuotesError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
@@ -156,6 +160,7 @@ export default function Dashboard() {
   const [insightError, setInsightError] = useState<string | null>(null);
 
   const quoteRequestRef = useRef(0);
+  const indicesRequestRef = useRef(0);
   const chartRequestRef = useRef(0);
   /** 每条提醒上一次观察到的满足状态（识别价格穿越，避免误报） */
   const alertSeenRef = useRef<Record<string, boolean>>({});
@@ -247,14 +252,13 @@ export default function Dashboard() {
 
   const loadQuotes = useCallback(
     async (options: { silent?: boolean } = {}) => {
-      // 指数条（SPY / QQQ / DIA）与自选股合并到同一个批量请求，避免额外请求
-      const symbols = Array.from(new Set<string>([...watchlist, ...INDEX_SYMBOLS]));
+      if (watchlist.length === 0) return;
       const requestId = ++quoteRequestRef.current;
       if (!options.silent) setQuotesLoading(true);
 
       try {
         const response = await fetch(
-          `/api/quotes?symbols=${encodeURIComponent(symbols.join(","))}`,
+          `/api/quotes?symbols=${encodeURIComponent(watchlist.join(","))}`,
           { cache: "no-store" },
         );
         if (!response.ok) {
@@ -273,6 +277,32 @@ export default function Dashboard() {
         setLastUpdated(data.fetchedAt);
         setStale(Boolean(data.stale));
         setQuotesError(null);
+
+        // 个别代码偶发失败（Nasdaq 的 vendor 抖动）时，1.2 秒后单独补拉一次，
+        // 避免要等下一次 30 秒轮询（或点击）才恢复。
+        const missing = watchlist.filter((symbol) => !map[symbol]);
+        if (missing.length > 0) {
+          window.setTimeout(() => {
+            void (async () => {
+              try {
+                const retry = await fetch(
+                  `/api/quotes?symbols=${encodeURIComponent(missing.join(","))}`,
+                  { cache: "no-store" },
+                );
+                if (!retry.ok) return;
+                const retryData = (await retry.json()) as { quotes: Quote[] };
+                if (retryData.quotes.length === 0) return;
+                setQuotes((prev) => {
+                  const next = { ...prev };
+                  for (const item of retryData.quotes) next[item.symbol] = item;
+                  return next;
+                });
+              } catch {
+                // 忽略：下一次轮询会继续尝试
+              }
+            })();
+          }, 1_200);
+        }
       } catch (error) {
         if (requestId !== quoteRequestRef.current) return;
         setQuotesError(error instanceof Error ? error.message : "加载行情失败");
@@ -282,6 +312,36 @@ export default function Dashboard() {
     },
     [watchlist],
   );
+
+  /** 全球指数概览：独立请求，避免与自选股互相拖累 */
+  const loadIndices = useCallback(async (options: { silent?: boolean } = {}) => {
+    const requestId = ++indicesRequestRef.current;
+    if (!options.silent) setIndicesLoading(true);
+
+    try {
+      const response = await fetch("/api/indices", { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(await readError(response, `加载指数失败（${response.status}）`));
+      }
+      const data = (await response.json()) as {
+        indices: Quote[];
+        fetchedAt: string;
+        errors?: { symbol: string; message: string }[];
+      };
+      if (requestId !== indicesRequestRef.current) return;
+
+      const map: Record<string, Quote> = {};
+      for (const item of data.indices) map[item.symbol] = item;
+      setIndices(map);
+      setIndicesUpdatedAt(data.fetchedAt);
+      setIndicesError(data.indices.length === 0 ? "指数数据暂时不可用" : null);
+    } catch (error) {
+      if (requestId !== indicesRequestRef.current) return;
+      setIndicesError(error instanceof Error ? error.message : "加载指数失败");
+    } finally {
+      if (requestId === indicesRequestRef.current) setIndicesLoading(false);
+    }
+  }, []);
 
   const loadChart = useCallback(
     async (
@@ -326,13 +386,17 @@ export default function Dashboard() {
   useEffect(() => {
     if (!hydrated) return;
     void loadQuotes();
-  }, [hydrated, loadQuotes]);
+    void loadIndices();
+  }, [hydrated, loadQuotes, loadIndices]);
 
   useEffect(() => {
     if (!autoRefresh || !hydrated) return;
-    const id = window.setInterval(() => void loadQuotes({ silent: true }), POLL_MS);
+    const id = window.setInterval(() => {
+      void loadQuotes({ silent: true });
+      void loadIndices({ silent: true });
+    }, POLL_MS);
     return () => window.clearInterval(id);
-  }, [autoRefresh, hydrated, loadQuotes]);
+  }, [autoRefresh, hydrated, loadQuotes, loadIndices]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -879,10 +943,13 @@ export default function Dashboard() {
         </div>
 
         <IndexOverview
-          quotes={quotes}
-          loading={quotesLoading}
+          quotes={indices}
+          loading={indicesLoading}
+          error={indicesError}
+          updatedAt={indicesUpdatedAt}
           selected={selected}
           onSelect={setSelected}
+          onRetry={() => void loadIndices()}
         />
 
         {breadth && (

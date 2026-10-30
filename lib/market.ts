@@ -25,11 +25,11 @@ let yahooCooldownUntil = 0;
 
 export type Provider = "yahoo" | "nasdaq";
 
-function yahooAvailable() {
+export function yahooAvailable() {
   return Date.now() >= yahooCooldownUntil;
 }
 
-function startYahooCooldown() {
+export function startYahooCooldown() {
   yahooCooldownUntil = Date.now() + YAHOO_COOLDOWN_MS;
 }
 

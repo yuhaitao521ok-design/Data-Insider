@@ -16,7 +16,7 @@
 - **专业走势图**：纯 SVG 实现（无图表库依赖），支持折线 / 蜡烛（K 线）一键切换、十字光标、跟随鼠标的悬浮明细（自动避让边界，含当根 K 线涨跌额与涨跌幅）、成交量、昨收参考线
 - **技术指标**：一键添加 MACD / RSI / BOLL，支持自定义参数；MACD、RSI 为副图，BOLL 叠加主图，指标配置持久化
 - **价格提醒**：为任意标的设定「涨到 / 跌破」目标价，价格穿越时弹出页面提示 +（可选）浏览器通知，提醒线与状态持久化到 localStorage
-- **指数概览**：页面顶部固定展示 SPY / QQQ / DIA 的报价与涨跌幅，点击即可切换查看；与自选股共用同一次批量请求
+- **全球指数概览**：美股（标普 500 / 纳指 100 / 道指 30 / 罗素 2000）+ 亚太（恒生 / 上证 / 沪深 300 / 日经 225 / KOSPI / STI）共 10 个指标，宽卡片 + 迷你走势 + 涨跌幅条，点击即可查看走势；独立 `/api/indices` 接口，单指标失败不影响其它
 - **基本面数据**：市值、市盈率 / 预期市盈率、EPS、股息率、Beta、平均成交量、1 年目标价，以及带现价游标的 52 周区间条
 - **关键指标**：昨收、今日高低、成交量、区间涨跌 / 高低、52 周区间
 - **自选股概览**：一键查看自选股的上涨/下跌家数、平均涨跌幅、最强与最弱标的
@@ -58,6 +58,7 @@ npm run build && npm start
 | --- | --- |
 | `GET /api/quotes?symbols=AAPL,MSFT` | 批量报价 + 迷你走势（一次请求，服务端缓存 15s）；每条报价带 `session`（pre/regular/post/overnight/closed）与 `extended`（盘前盘后成交） |
 | `GET /api/chart?symbol=AAPL&range=1M&interval=1d` | 指定周期 + 间隔的走势与报价；`range` 取 `1D/5D/1M/3M/6M/1Y/5Y/MAX`，`interval` 见下文「K 线间隔」 |
+| `GET /api/indices` | 全球指数概览（美股 4 + 亚太 6），Yahoo → Nasdaq（美股）/ Sina（亚太与美股备用）多级兜底，缓存 30s |
 | `GET /api/search?q=英伟达` | 代码 / 公司名搜索（Yahoo 不可用时回退到内置热门列表） |
 | `GET /api/fundamentals?symbol=AAPL` | 基本面指标（Yahoo `quoteSummary`，失败时退到 Nasdaq summary + dividends；缓存 10 分钟） |
 | `GET /api/insight?symbol=AAPL&range=1M` | Perplexity AI 解读（未配置 Key 返回 501） |
@@ -168,6 +169,31 @@ curl 'http://localhost:3000/api/chart?symbol=NVDA&range=1Y&interval=1wk' | jq '.
 - **分时图**：1D 的分钟线请求带 `includePrePost=true`，盘前 / 盘后区间画淡色阴影 + 虚线分界 + 「盘前」「盘后」标签，K 线模式下扩展时段的蜡烛透明度降到 0.45；悬浮面板的时间前会加上「盘前 / 盘后」小标签。时段范围来自 Yahoo chart 的 `currentTradingPeriod`，随 `/api/chart` 的 `sessions` 字段下发。
 - **徽标位置**：页面顶部状态条、行情卡片标题旁（含美东时间与成交量）、自选股每行（仅盘前/盘后/夜盘时显示）。
 - 记住：盘前盘后成交量小、价格跳动大，仅供盘感参考。
+
+## 全球指数概览
+
+页面顶部的宽卡片区域，一次展示 10 个指标（数据来自 `/api/indices`，30 秒刷新，与自选股请求完全独立）：
+
+| 分组 | 指标 | 代码 |
+| --- | --- | --- |
+| 美股 | 标普 500 / 纳斯达克 100 / 道琼斯 30 / 罗素 2000 | `SPY` / `QQQ` / `DIA` / `IWM` |
+| 亚太 | 恒生指数 / 上证指数 / 沪深 300 / 日经 225 / 韩国综合 / 新加坡 STI | `^HSI` / `000001.SS` / `000300.SS` / `^N225` / `^KS11` / `^STI` |
+
+每张卡片包含：中文名 + 代码、现价、涨跌幅、当日迷你走势，底部还有一条随涨跌幅伸缩的彩色条；有数据就会显示，拿不到则显示 `--`（不影响其它卡片）。点击卡片即可把该指标切为当前标的查看走势。
+
+### 数据源与兜底
+
+```
+/api/indices ──▶ Yahoo spark（一次拿全部 10 个，含迷你走势）
+                   │ 429 / 5xx / 漏数据
+                   ├─▶ 美股 4 个：Nasdaq info（按 ETF assetclass，瞬时错误自动重试一次）
+                   └─▶ 亚太 + 美股兜底：Sina 快照（gb_spy / int_hangseng / sh000001 …）
+```
+
+- **DIA 曾长期刷不出来**：旧实现把指数混在自选股的批量请求里，Nasdaq 对部分 ETF 返回 `Error while calling vendor` 时该卡片就一直是空的，只有点击（触发图表请求）才会补上。现在指数走独立接口，并且有 Nasdaq → Sina 两级兜底，DIA 稳定有数据。
+- `lib/sina.ts` 把新浪返回的 GBK 文本解析成统一 `Quote`（美股 `gb_*`、全球指数 `int_*`、A 股指数 `sh*` 三种字段格式），时间从北京时间转 ISO。
+- Sina 没有 KOSPI 与 STI，这两个指标只有 Yahoo 能提供；Yahoo 不可用时会显示 `--`。
+- 所有 Yahoo 请求共用一个并发闸门（最多 2 并发 + 150ms 间隔），避免一次页面加载的突发请求触发 429。
 
 ## 自选股面板
 
@@ -282,7 +308,7 @@ components/
   InsightPanel.tsx      AI 解读卡片
   IndicatorControls.tsx 指标添加 / 参数设置
   IntervalSelect.tsx     K 线间隔下拉
-  IndexOverview.tsx     指数概览条（SPY / QQQ / DIA）
+  IndexOverview.tsx     全球指数概览（美股 + 亚太，10 张卡片）
   SessionBadge.tsx      交易时段徽标（盘前 / 交易中 / 盘后 / 夜盘）
   PriceAlerts.tsx       价格提醒弹层
   AlertToasts.tsx       提醒 toast
@@ -293,6 +319,9 @@ lib/
   chart.ts              K 线几何计算
   alerts.ts             价格提醒（穿越判定 / 校验 / 持久化）
   watchlist.ts          自选股排序 / 拖拽移动 / 落点计算
+  index-groups.ts       全球指数定义（代码 / 中文名 / 货币）
+  indices.ts            指数编排（Yahoo → Nasdaq / Sina 兜底）
+  sina.ts               新浪财经指数与美股 ETF 兜底适配器
   quote.ts              涨跌口径归一化 + 美东时间解析
   session.ts            交易时段识别（盘前 / 盘后 / 夜盘）与文案
   yahoo-auth.ts         Yahoo crumb 授权（基本面 / 盘前盘后共用）

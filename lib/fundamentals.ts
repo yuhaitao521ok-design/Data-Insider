@@ -1,5 +1,5 @@
 import { cached } from "@/lib/cache";
-import { YAHOO_BROWSER_HEADERS, resetYahooAuth, yahooAuth, yahooHosts } from "@/lib/yahoo-auth";
+import { YAHOO_BROWSER_HEADERS, resetYahooAuth, yahooAuth, yahooFetch, yahooHosts } from "@/lib/yahoo-auth";
 import { nasdaqFundamentals } from "@/lib/nasdaq";
 import type { Fundamentals } from "@/lib/types";
 
@@ -76,7 +76,7 @@ async function yahooFundamentals(symbol: string): Promise<Fundamentals> {
     const hosts = yahooHosts();
     const host = hosts[attempt % hosts.length];
     try {
-      const response = await fetch(`${host}${path}`, {
+      const response = await yahooFetch(`${host}${path}`, {
         headers: { ...YAHOO_BROWSER_HEADERS, Cookie: auth.cookie },
         cache: "no-store",
         signal: AbortSignal.timeout(10_000),
