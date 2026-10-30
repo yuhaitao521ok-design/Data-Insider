@@ -12,7 +12,9 @@ import IndexOverview from "@/components/IndexOverview";
 import PriceAlerts from "@/components/PriceAlerts";
 import AlertToasts, { type AlertToastItem } from "@/components/AlertToasts";
 import FundamentalsCard from "@/components/FundamentalsCard";
+import SessionBadge from "@/components/SessionBadge";
 import { chartToCsv } from "@/lib/csv";
+import { isExtendedSession } from "@/lib/session";
 import {
   ALERTS_KEY,
   MAX_ALERTS,
@@ -849,6 +851,12 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+            <SessionBadge
+              session={quote?.session}
+              marketTime={quote?.marketTime}
+              volume={quote?.extended?.volume}
+              detailed
+            />
             <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2 py-0.5 text-[10.5px]">
               <span
                 className={`h-1.5 w-1.5 rounded-full ${
@@ -1048,6 +1056,9 @@ export default function Dashboard() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
                           <span className="text-[13px] font-medium leading-4">{symbol}</span>
+                          {item?.session && isExtendedSession(item.session) && (
+                            <SessionBadge session={item.session} size="xs" />
+                          )}
                           {item?.source === "perplexity" && (
                             <span
                               className="h-1 w-1 rounded-full bg-amber-500"
@@ -1132,6 +1143,13 @@ export default function Dashboard() {
                           {quote.exchange}
                         </span>
                       )}
+                      <SessionBadge
+                        session={quote?.session}
+                        marketTime={quote?.marketTime}
+                        volume={quote?.extended?.volume}
+                        detailed
+                        size="xs"
+                      />
                       {quote?.source === "perplexity" && (
                         <span
                           className="rounded-md border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] leading-4 text-amber-600 dark:text-amber-400"
@@ -1344,6 +1362,7 @@ export default function Dashboard() {
                       panes={indicatorData.panes}
                       mode={chartMode}
                       alertLines={chartAlertLines}
+                      sessions={chart.sessions}
                     />
                   ) : (
                     <div className="skeleton h-[250px] w-full rounded-lg sm:h-[310px] lg:h-[360px]" />

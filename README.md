@@ -12,6 +12,7 @@
 - **可切换 K 线间隔**：每个周期可从 1/2/5/15/30/60/90 分钟、5 日线、日线、周线、月线、季线中选择数据源实际支持的粒度，选择按周期记忆
 - **自选股**：默认 8 只热门标的，支持搜索添加（含中文别名）、移除；列表超出可视高度时在侧栏内滚动，支持**鼠标拖动排序**与**按涨跌幅排序**，顺序与排序状态持久化到 localStorage
 - **实时刷新**：报价 30 秒轮询、分时图 60 秒轮询，可一键暂停；自选股列表带迷你走势
+- **盘前 / 盘后 / 夜盘**：自动识别当前交易时段（盘前 / 交易中 / 盘后 / 夜盘 / 已收盘），盘前盘后价格与涨跌幅直接生效在报价、自选股与排序上；1D 分时图带盘前盘后阴影与淡化 K 线
 - **专业走势图**：纯 SVG 实现（无图表库依赖），支持折线 / 蜡烛（K 线）一键切换、十字光标、跟随鼠标的悬浮明细（自动避让边界，含当根 K 线涨跌额与涨跌幅）、成交量、昨收参考线
 - **技术指标**：一键添加 MACD / RSI / BOLL，支持自定义参数；MACD、RSI 为副图，BOLL 叠加主图，指标配置持久化
 - **价格提醒**：为任意标的设定「涨到 / 跌破」目标价，价格穿越时弹出页面提示 +（可选）浏览器通知，提醒线与状态持久化到 localStorage
@@ -55,7 +56,7 @@ npm run build && npm start
 
 | 路由 | 说明 |
 | --- | --- |
-| `GET /api/quotes?symbols=AAPL,MSFT` | 批量报价 + 迷你走势（一次请求，服务端缓存 15s） |
+| `GET /api/quotes?symbols=AAPL,MSFT` | 批量报价 + 迷你走势（一次请求，服务端缓存 15s）；每条报价带 `session`（pre/regular/post/overnight/closed）与 `extended`（盘前盘后成交） |
 | `GET /api/chart?symbol=AAPL&range=1M&interval=1d` | 指定周期 + 间隔的走势与报价；`range` 取 `1D/5D/1M/3M/6M/1Y/5Y/MAX`，`interval` 见下文「K 线间隔」 |
 | `GET /api/search?q=英伟达` | 代码 / 公司名搜索（Yahoo 不可用时回退到内置热门列表） |
 | `GET /api/fundamentals?symbol=AAPL` | 基本面指标（Yahoo `quoteSummary`，失败时退到 Nasdaq summary + dividends；缓存 10 分钟） |
@@ -97,6 +98,7 @@ curl 'http://localhost:3000/api/chart?symbol=NVDA&range=1Y&interval=1wk' | jq '.
 - Yahoo 支持分钟/小时/日/周/月/季全部间隔；Nasdaq 只有日线，周/月/季在 `lib/nasdaq.ts` 内由日线聚合。
 - **涨跌幅口径**：所有报价的 `price / previousClose / change / changePercent` 都经 `lib/quote.ts:reconcileChange()` 归一化，优先用「上一个交易日收盘」重算，保证三个数字自洽；`chartPreviousClose`（区间起点前一日收盘）绝不参与涨跌幅计算。
 - **报价以 `/api/quotes` 为准**：图表接口返回的 `quote` 可能来自更早的缓存（甚至上一个交易日），只用于补齐缺失标的，不会覆盖批量报价——否则会出现「切换周期后涨跌幅退回上一个交易日」的问题。
+- **盘前 / 盘后**：Yahoo 侧在 spark 之后额外请求一次 `v7/finance/quote`（带 crumb，一次覆盖全部代码）补充 `marketState` 与 `preMarket*` / `postMarket*`；该请求失败时静默降级，只失去时段信息，不影响报价。Nasdaq 侧由 `marketStatus` + `primaryData/secondaryData` 直接得到。
 - Nasdaq 的成交时间（如 `Oct 28, 2026 9:33 AM ET`）由 `parseEasternTimestamp()` 解析为 UTC（自动处理夏令时），页面因此能显示真实的「美东时间」而不是 `--`。
 - Yahoo / Nasdaq 均为公开非官方接口，字段可能变更，请勿用于生产交易决策。
 
@@ -146,6 +148,26 @@ curl 'http://localhost:3000/api/chart?symbol=NVDA&range=1Y&interval=1wk' | jq '.
 - 指标选择与参数写入 `localStorage`，刷新后自动恢复
 - 若当前周期数据点不足（例如 1M 只有约 22 个点，而 MACD 需要 34 个），图表上方会提示并给出「切换到更长周期」按钮
 - 计算全部在浏览器完成（`lib/indicators.ts`），不新增接口请求，也不依赖第三方指标库
+
+## 盘前 / 盘后 / 夜盘
+
+页面会自动判断交易所当前所处的时段，并用不同颜色的徽标标出来：
+
+| 时段 | 徽标 | 数据来源 | 说明 |
+| --- | --- | --- | --- |
+| 盘前 04:00–09:30 ET | 琥珀色「盘前」 | Yahoo `v7/finance/quote` 的 `preMarket*`、Nasdaq `marketStatus=Pre-Market` 的 `primaryData` | 价格、涨跌幅、成交量、成交时间齐全 |
+| 交易中 09:30–16:00 ET | 绿色「交易中」 | 常规报价 | 与普通行情一致 |
+| 盘后 16:00–20:00 ET | 紫色「盘后」 | Yahoo `postMarket*`、Nasdaq `marketStatus=After-Hours` | 同上 |
+| 夜盘 20:00–04:00 ET | 天蓝「夜盘」 | 只能识别时段（Yahoo `marketState=POSTPOST`） | 两家免费源都不提供夜盘逐笔价格，此时展示上一个常规收盘价，徽标只表示「现在是夜盘」 |
+| 已收盘 | 灰色「已收盘」 | — | 周末 / 节假日 |
+
+细节：
+
+- **数值口径**：盘前 / 盘后时，报价主字段（`price / change / changePercent / marketTime`）直接切换成该时段的最新成交，涨跌基准是**上一个常规收盘价**，因此列表里的「盘前 −1.95%」与主价格、涨跌幅排名始终一致（`lib/quote.ts:reconcileChange()` 保证三者自洽）。
+- **怎么拿到**：Yahoo 走 `v7/finance/quote`（需要 crumb，`lib/yahoo-auth.ts` 自动握手并缓存 30 分钟，一次请求覆盖全部自选股）；crumb 不可用时静默降级，不影响主行情。Nasdaq 的 `info` 接口本身就区分 `primaryData`（当前时段）与 `secondaryData`（上一个常规收盘），无需额外请求。
+- **分时图**：1D 的分钟线请求带 `includePrePost=true`，盘前 / 盘后区间画淡色阴影 + 虚线分界 + 「盘前」「盘后」标签，K 线模式下扩展时段的蜡烛透明度降到 0.45；悬浮面板的时间前会加上「盘前 / 盘后」小标签。时段范围来自 Yahoo chart 的 `currentTradingPeriod`，随 `/api/chart` 的 `sessions` 字段下发。
+- **徽标位置**：页面顶部状态条、行情卡片标题旁（含美东时间与成交量）、自选股每行（仅盘前/盘后/夜盘时显示）。
+- 记住：盘前盘后成交量小、价格跳动大，仅供盘感参考。
 
 ## 自选股面板
 
@@ -261,6 +283,7 @@ components/
   IndicatorControls.tsx 指标添加 / 参数设置
   IntervalSelect.tsx     K 线间隔下拉
   IndexOverview.tsx     指数概览条（SPY / QQQ / DIA）
+  SessionBadge.tsx      交易时段徽标（盘前 / 交易中 / 盘后 / 夜盘）
   PriceAlerts.tsx       价格提醒弹层
   AlertToasts.tsx       提醒 toast
   FundamentalsCard.tsx  基本面卡片
@@ -271,6 +294,8 @@ lib/
   alerts.ts             价格提醒（穿越判定 / 校验 / 持久化）
   watchlist.ts          自选股排序 / 拖拽移动 / 落点计算
   quote.ts              涨跌口径归一化 + 美东时间解析
+  session.ts            交易时段识别（盘前 / 盘后 / 夜盘）与文案
+  yahoo-auth.ts         Yahoo crumb 授权（基本面 / 盘前盘后共用）
   fundamentals.ts       基本面数据编排（Yahoo crumb + Nasdaq 兜底）
   indicators.ts         MACD / RSI / BOLL 计算与校验
   yahoo.ts              Yahoo Finance 适配器

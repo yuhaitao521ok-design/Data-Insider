@@ -1,5 +1,7 @@
 /** 主图蜡烛（K 线）几何计算，抽成纯函数便于测试。 */
 
+import type { ChartSessions } from "@/lib/types";
+
 export interface CandleInput {
   open: number | null;
   high: number | null;
@@ -80,4 +82,74 @@ export function barChange(
 
   const change = point.close - base;
   return { change, changePercent: (change / base) * 100, base };
+}
+
+/* -------------------------------------------------------------------------- */
+/*                          盘前 / 盘后时段（分时图）                          */
+/* -------------------------------------------------------------------------- */
+
+export interface SessionBand {
+  key: "pre" | "post";
+  label: string;
+  x0: number;
+  x1: number;
+}
+
+const SESSION_BAND_LABEL: Record<SessionBand["key"], string> = {
+  pre: "盘前",
+  post: "盘后",
+};
+
+/**
+ * 把盘前 / 盘后时间范围换算成图上的横向区间（用于绘制阴影与标签）。
+ * `pad` 是半根 K 线的宽度，避免阴影把首尾柱体切掉。
+ */
+export function buildSessionBands(
+  sessions: ChartSessions | undefined,
+  points: { t: number }[],
+  xFor: (index: number) => number,
+  pad = 0,
+): SessionBand[] {
+  if (!sessions || points.length === 0) return [];
+
+  const bands: SessionBand[] = [];
+
+  const add = (key: SessionBand["key"], range?: [number, number] | null) => {
+    if (!range) return;
+    const [start, end] = range;
+
+    let first = -1;
+    let last = -1;
+    for (let index = 0; index < points.length; index += 1) {
+      const { t } = points[index];
+      if (t < start || t > end) continue;
+      if (first === -1) first = index;
+      last = index;
+    }
+    if (first === -1 || last === -1) return;
+
+    const x0 = xFor(first) - pad;
+    const x1 = xFor(last) + pad;
+    if (x1 - x0 < 0.5) return;
+
+    bands.push({ key, label: SESSION_BAND_LABEL[key], x0, x1 });
+  };
+
+  add("pre", sessions.pre);
+  add("post", sessions.post);
+  return bands;
+}
+
+/** 判断某个时间点属于盘前 / 常规 / 盘后，用于淡化扩展时段的 K 线 */
+export function sessionOfTime(
+  t: number,
+  sessions: ChartSessions | undefined,
+): "pre" | "regular" | "post" {
+  if (!sessions) return "regular";
+  const inRange = (range?: [number, number] | null) =>
+    Boolean(range && t >= range[0] && t <= range[1]);
+
+  if (inRange(sessions.pre)) return "pre";
+  if (inRange(sessions.post)) return "post";
+  return "regular";
 }

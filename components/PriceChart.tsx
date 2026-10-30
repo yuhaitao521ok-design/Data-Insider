@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import type { ChartMode, ChartPoint, IntervalKey, RangeKey } from "@/lib/types";
+import type { ChartMode, ChartPoint, ChartSessions, IntervalKey, RangeKey } from "@/lib/types";
 import type { ChartOverlay, ChartPane } from "@/lib/indicators";
-import type { CandleShape } from "@/lib/chart";
-import { barChange, buildCandles } from "@/lib/chart";
+import type { CandleShape, SessionBand } from "@/lib/chart";
+import { barChange, buildCandles, buildSessionBands, sessionOfTime } from "@/lib/chart";
 import { formatIndicatorValue } from "@/lib/indicators";
 import {
   formatAxisTime,
@@ -39,6 +39,8 @@ interface PriceChartProps {
   mode?: ChartMode;
   /** 当前标的价格提醒线 */
   alertLines?: ChartAlertLine[];
+  /** 分时图的盘前 / 常规 / 盘后时间范围（用于时段阴影） */
+  sessions?: ChartSessions;
 }
 
 const PAD_TOP = 18;
@@ -113,6 +115,10 @@ interface Geometry {
   candles: CandleShape[];
   /** 价格提醒线 */
   alertMarkers: AlertMarker[];
+  /** 盘前 / 盘后阴影区间 */
+  sessionBands: SessionBand[];
+  /** 每个点是否属于盘前/盘后（用于淡化） */
+  extendedPoints: boolean[];
 }
 
 const formatTick = (value: number): string =>
@@ -159,6 +165,7 @@ export default function PriceChart({
   panes = [],
   mode = "line",
   alertLines = [],
+  sessions,
 }: PriceChartProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -256,6 +263,11 @@ export default function PriceChart({
     const candleStep = innerWidth / Math.max(points.length, 1);
     const candles: CandleShape[] =
       mode === "candle" ? buildCandles(points, { xFor, yFor, step: candleStep }) : [];
+
+    /* --------------------------- 盘前 / 盘后时段 --------------------------- */
+
+    const sessionBands = buildSessionBands(sessions, points, xFor, candleStep / 2);
+    const extendedPoints = points.map((point) => sessionOfTime(point.t, sessions) !== "regular");
 
     const maxVolume = Math.max(...points.map((point) => point.volume ?? 0), 1);
     const volumeTop = priceBottom + VOLUME_GAP;
@@ -479,8 +491,22 @@ export default function PriceChart({
       panesBottom,
       candles,
       alertMarkers,
+      sessionBands,
+      extendedPoints,
     };
-  }, [points, range, interval, timezone, reference, overlays, panes, mode, alertLines, size]);
+  }, [
+    points,
+    range,
+    interval,
+    timezone,
+    reference,
+    overlays,
+    panes,
+    mode,
+    alertLines,
+    sessions,
+    size,
+  ]);
 
 
   if (!geometry) {
@@ -525,6 +551,7 @@ export default function PriceChart({
       : changeUp
         ? "text-positive-text"
         : "text-negative-text";
+  const hoverSession = hover !== null ? sessionOfTime(points[hover].t, sessions) : "regular";
   const changeAmountLabel =
     hoverChange.change === null
       ? "--"
@@ -571,6 +598,44 @@ export default function PriceChart({
             <stop offset="100%" style={{ stopColor: stroke }} stopOpacity="0" />
           </linearGradient>
         </defs>
+
+        {geometry.sessionBands.map((band) => (
+          <g key={`session-${band.key}`}>
+            <rect
+              x={band.x0}
+              y={geometry.padTop}
+              width={Math.max(band.x1 - band.x0, 0)}
+              height={Math.max(geometry.priceBottom - geometry.padTop, 0)}
+              style={{ fill: "var(--chart-extended)" }}
+            />
+            <line
+              x1={band.x0}
+              x2={band.x0}
+              y1={geometry.padTop}
+              y2={geometry.priceBottom}
+              strokeWidth="1"
+              strokeDasharray="3 3"
+              style={{ stroke: "var(--chart-reference)" }}
+            />
+            <line
+              x1={band.x1}
+              x2={band.x1}
+              y1={geometry.padTop}
+              y2={geometry.priceBottom}
+              strokeWidth="1"
+              strokeDasharray="3 3"
+              style={{ stroke: "var(--chart-reference)" }}
+            />
+            <text
+              x={band.x0 + 4}
+              y={geometry.padTop + 9}
+              fontSize="8.5"
+              style={{ fill: "var(--chart-label)" }}
+            >
+              {band.label}
+            </text>
+          </g>
+        ))}
 
         {geometry.gridLines.map((line) => (
           <g key={line.y}>
@@ -656,8 +721,10 @@ export default function PriceChart({
           <g>
             {geometry.candles.map((candle, index) => {
               const color = candle.up ? "var(--positive)" : "var(--negative)";
+              // 盘前 / 盘后的蜡烛淡化，突出常规交易时段
+              const opacity = geometry.extendedPoints[index] ? 0.45 : 1;
               return (
-                <g key={`candle-${points[index]?.t ?? index}`}>
+                <g key={`candle-${points[index]?.t ?? index}`} opacity={opacity}>
                   <line
                     x1={candle.x}
                     x2={candle.x}
@@ -906,8 +973,13 @@ export default function PriceChart({
           style={{ left: tooltipLeft, top: tooltipTop }}
         >
           <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/50 px-2.5 py-1.5">
-            <span className="text-[10px] leading-4 text-muted-foreground">
-              {formatFullTime(hovered.t, timezone)}
+            <span className="flex min-w-0 items-center gap-1 text-[10px] leading-4 text-muted-foreground">
+              {hoverSession !== "regular" && (
+                <span className="shrink-0 rounded-sm bg-muted px-1 text-[9px] leading-[14px] text-foreground/70">
+                  {hoverSession === "pre" ? "盘前" : "盘后"}
+                </span>
+              )}
+              <span className="truncate">{formatFullTime(hovered.t, timezone)}</span>
             </span>
             <span
               className={`num inline-flex items-center gap-0.5 rounded-full px-1.5 py-[1px] text-[10px] font-medium leading-4 ${changeToneClass}`}
