@@ -93,6 +93,41 @@ interface NasdaqChart {
 
 const assetClassCache = new Map<string, "stocks" | "etf">();
 
+/**
+ * 已知 ETF 直接按 `etf` 查询：Nasdaq 对 ETF 用 `stocks` 会返回
+ * "Error while calling vendor"，先打一次只会白白消耗配额并放大失败率。
+ */
+const KNOWN_ETFS = [
+  "SPY",
+  "QQQ",
+  "DIA",
+  "IWM",
+  "VOO",
+  "VTI",
+  "IVV",
+  "VEA",
+  "VWO",
+  "EEM",
+  "EFA",
+  "GLD",
+  "SLV",
+  "TLT",
+  "ARKK",
+  "XLK",
+  "XLF",
+  "XLE",
+  "XLV",
+  "XLY",
+  "XLI",
+  "XLP",
+  "XLU",
+  "XLB",
+  "XLRE",
+];
+for (const symbol of KNOWN_ETFS) assetClassCache.set(symbol, "etf");
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 function parseNumber(value: string | number | null | undefined): number | null {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
   if (!value) return null;
@@ -121,28 +156,40 @@ function parse52Week(value: string | undefined): { low: number | null; high: num
 }
 
 export async function requestNasdaq<T>(path: string): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(`${BASE}${path}`, {
-      headers: HEADERS,
-      cache: "no-store",
-      signal: AbortSignal.timeout(12_000),
-    });
-  } catch {
-    throw new NasdaqError("连接 Nasdaq 接口超时", 504);
+  let lastError: NasdaqError | null = null;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    let response: Response;
+    try {
+      response = await fetch(`${BASE}${path}`, {
+        headers: HEADERS,
+        cache: "no-store",
+        signal: AbortSignal.timeout(12_000),
+      });
+    } catch {
+      throw new NasdaqError("连接 Nasdaq 接口超时", 504);
+    }
+
+    if (response.status === 404) throw new NasdaqError("Nasdaq 未找到该代码", 404, "not_found");
+    if (!response.ok) throw new NasdaqError(`Nasdaq 接口异常（${response.status}）`);
+
+    const body = (await response.json()) as NasdaqEnvelope<T>;
+    if (!body.data) {
+      const message = body.status?.bCodeMessage?.[0]?.errorMessage || "Nasdaq 未返回有效数据";
+      lastError = new NasdaqError(message, 502);
+      // "Error while calling vendor" 等是瞬时错误，重试一次往往就恢复了
+      const transient = /vendor|internal|timeout|temporar|unavailable/i.test(message);
+      if (transient && attempt === 0) {
+        await sleep(250);
+        continue;
+      }
+      throw lastError;
+    }
+
+    return body.data;
   }
 
-  if (response.status === 404) throw new NasdaqError("Nasdaq 未找到该代码", 404, "not_found");
-  if (!response.ok) throw new NasdaqError(`Nasdaq 接口异常（${response.status}）`);
-
-  const body = (await response.json()) as NasdaqEnvelope<T>;
-  if (!body.data) {
-    throw new NasdaqError(
-      body.status?.bCodeMessage?.[0]?.errorMessage || "Nasdaq 未返回有效数据",
-      502,
-    );
-  }
-  return body.data;
+  throw lastError ?? new NasdaqError("Nasdaq 未返回有效数据", 502);
 }
 
 async function fetchInfo(symbol: string): Promise<NasdaqInfo> {

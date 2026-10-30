@@ -1,7 +1,7 @@
 import { cached } from "@/lib/cache";
 import { reconcileChange } from "@/lib/quote";
 import { sessionFromYahooState } from "@/lib/session";
-import { YAHOO_BROWSER_HEADERS, resetYahooAuth, yahooAuth, yahooHosts } from "@/lib/yahoo-auth";
+import { YAHOO_BROWSER_HEADERS, resetYahooAuth, yahooAuth, yahooFetch, yahooHosts } from "@/lib/yahoo-auth";
 import {
   INTERVAL_CONFIG,
   RANGE_CONFIG,
@@ -51,7 +51,7 @@ async function fetchYahooJson<T>(path: string): Promise<T> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const host = HOSTS[(attempt + Math.floor(Math.random() * HOSTS.length)) % HOSTS.length];
     try {
-      const response = await fetch(`${host}${path}`, {
+      const response = await yahooFetch(`${host}${path}`, {
         headers: YAHOO_BROWSER_HEADERS,
         cache: "no-store",
         signal: AbortSignal.timeout(10_000),
@@ -65,7 +65,7 @@ async function fetchYahooJson<T>(path: string): Promise<T> {
           429,
           "rate_limited",
         );
-        await sleep(250 * (attempt + 1) + Math.random() * 250);
+        await sleep(700 * (attempt + 1) + Math.random() * 400);
         continue;
       }
 
@@ -284,7 +284,7 @@ async function fetchExtendedQuotes(symbols: string[]): Promise<Map<string, Yahoo
   const path = `/v7/finance/quote?symbols=${encodeURIComponent(symbols.join(","))}&crumb=${encodeURIComponent(auth.crumb)}`;
   const [host] = HOSTS;
 
-  const response = await fetch(`${host}${path}`, {
+  const response = await yahooFetch(`${host}${path}`, {
     headers: { ...YAHOO_BROWSER_HEADERS, Cookie: auth.cookie },
     cache: "no-store",
     signal: AbortSignal.timeout(10_000),

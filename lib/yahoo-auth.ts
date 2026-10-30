@@ -28,7 +28,7 @@ export function yahooHosts(): string[] {
 }
 
 async function fetchYahooAuth(): Promise<YahooAuth> {
-  const cookieResponse = await fetch("https://fc.yahoo.com", {
+  const cookieResponse = await yahooFetch("https://fc.yahoo.com", {
     headers: { "User-Agent": YAHOO_BROWSER_HEADERS["User-Agent"], Accept: "*/*" },
     cache: "no-store",
     signal: AbortSignal.timeout(8_000),
@@ -42,7 +42,7 @@ async function fetchYahooAuth(): Promise<YahooAuth> {
   if (!match) throw new Error("Yahoo 没有下发授权 Cookie");
 
   const cookie = `A3=${match[1]}`;
-  const crumbResponse = await fetch("https://query1.finance.yahoo.com/v1/test/getcrumb", {
+  const crumbResponse = await yahooFetch("https://query1.finance.yahoo.com/v1/test/getcrumb", {
     headers: { ...YAHOO_BROWSER_HEADERS, Cookie: cookie },
     cache: "no-store",
     signal: AbortSignal.timeout(8_000),
@@ -78,4 +78,54 @@ export async function yahooAuth(): Promise<YahooAuth> {
 /** 授权失效（401/403）时清掉缓存，下次重新握手 */
 export function resetYahooAuth() {
   authCache = null;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                            请求节流（防 429）                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Yahoo 对同一 IP 的突发请求很敏感（一次页面加载会同时打 spark / v7 / chart /
+ * quoteSummary），因此这里做一个全局并发闸门 + 最小间隔，把请求排队发出。
+ */
+const MAX_CONCURRENT = 2;
+const MIN_INTERVAL_MS = 150;
+
+let activeRequests = 0;
+let lastStartedAt = 0;
+const waiters: Array<() => void> = [];
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function releaseSlot() {
+  activeRequests -= 1;
+  const next = waiters.shift();
+  if (next) next();
+}
+
+async function acquireSlot() {
+  if (activeRequests < MAX_CONCURRENT) {
+    activeRequests += 1;
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    waiters.push(() => {
+      activeRequests += 1;
+      resolve();
+    });
+  });
+}
+
+/** 所有 Yahoo 请求都走这里：限制并发并保持最小间隔 */
+export async function yahooFetch(input: string, init?: RequestInit): Promise<Response> {
+  await acquireSlot();
+  try {
+    const wait = Math.max(0, lastStartedAt + MIN_INTERVAL_MS - Date.now());
+    if (wait > 0) await delay(wait);
+    lastStartedAt = Date.now();
+    return await fetch(input, init);
+  } finally {
+    releaseSlot();
+  }
 }
