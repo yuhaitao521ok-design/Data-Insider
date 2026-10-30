@@ -4,10 +4,12 @@ import {
   type ChartResponse,
   type Fundamentals,
   type IntervalKey,
+  type ExtendedQuote,
   type Quote,
   type RangeKey,
 } from "@/lib/types";
 import { parseEasternTimestamp, reconcileChange } from "@/lib/quote";
+import { sessionFromNasdaqStatus } from "@/lib/session";
 
 /**
  * Nasdaq 官方行情接口（无需 API Key），作为 Yahoo 的兜底数据源。
@@ -191,6 +193,21 @@ function infoToQuote(symbol: string, info: NasdaqInfo, assetClass: "stocks" | "e
     changePercent: parseNumber(primary.percentageChange),
   });
 
+  // 盘前 / 盘后时 primaryData 就是扩展时段成交，secondaryData 是上一个常规收盘
+  const session = sessionFromNasdaqStatus(info.marketStatus);
+  const marketTime = parseDate(primary.lastTradeTimestamp);
+  const extended: ExtendedQuote | null =
+    (session === "pre" || session === "post") && reconciled.changePercent !== null
+      ? {
+          session,
+          price,
+          change: reconciled.change,
+          changePercent: reconciled.changePercent,
+          marketTime,
+          volume: parseNumber(primary.volume),
+        }
+      : null;
+
   return {
     symbol: (info.symbol || symbol).toUpperCase(),
     name: cleanCompanyName(info.companyName, symbol),
@@ -200,10 +217,12 @@ function infoToQuote(symbol: string, info: NasdaqInfo, assetClass: "stocks" | "e
     changePercent: reconciled.changePercent,
     currency: "USD",
     exchange: info.exchange || (assetClass === "etf" ? "ETF" : "NASDAQ"),
-    marketTime: parseDate(primary.lastTradeTimestamp),
+    marketTime,
     sparkline: [],
     source: "nasdaq",
     estimated: false,
+    session,
+    extended,
   };
 }
 
@@ -492,6 +511,8 @@ export async function nasdaqChart(
   });
   const previousClose = reconciled.previousClose ?? parseNumber(data.previousClose);
   const week52 = parse52Week(info.keyStats?.fiftyTwoWeekHighLow?.value);
+  const session = sessionFromNasdaqStatus(info.marketStatus);
+  const marketTime = parseDate(info.primaryData?.lastTradeTimestamp);
 
   const quote: Quote = {
     symbol: (info.symbol || symbol).toUpperCase(),
@@ -502,10 +523,22 @@ export async function nasdaqChart(
     changePercent: reconciled.changePercent,
     currency: "USD",
     exchange: info.exchange || (assetClass === "etf" ? "ETF" : "NASDAQ"),
-    marketTime: parseDate(info.primaryData?.lastTradeTimestamp),
+    marketTime,
     sparkline: rawPoints.slice(-40).map((point) => point.close),
     source: "nasdaq",
     estimated: false,
+    session,
+    extended:
+      (session === "pre" || session === "post") && reconciled.changePercent !== null
+        ? {
+            session,
+            price,
+            change: reconciled.change,
+            changePercent: reconciled.changePercent,
+            marketTime,
+            volume: parseNumber(info.primaryData?.volume),
+          }
+        : null,
   };
 
   return {

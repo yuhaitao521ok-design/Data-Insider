@@ -1,12 +1,17 @@
 import { cached } from "@/lib/cache";
 import { reconcileChange } from "@/lib/quote";
+import { sessionFromYahooState } from "@/lib/session";
+import { YAHOO_BROWSER_HEADERS, resetYahooAuth, yahooAuth, yahooHosts } from "@/lib/yahoo-auth";
 import {
   INTERVAL_CONFIG,
   RANGE_CONFIG,
   defaultIntervalFor,
   isIntervalAllowed,
+  isIntradayInterval,
   type ChartPoint,
   type ChartResponse,
+  type ChartSessions,
+  type ExtendedQuote,
   type IntervalKey,
   type Quote,
   type RangeKey,
@@ -25,15 +30,7 @@ import {
  * 上层还有进程内缓存，尽量降低被限流的概率。
  */
 
-const HOSTS = ["https://query2.finance.yahoo.com", "https://query1.finance.yahoo.com"];
-
-const BROWSER_HEADERS: Record<string, string> = {
-  "User-Agent":
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-  Accept: "application/json, text/plain, */*",
-  "Accept-Language": "en-US,en;q=0.9",
-  Referer: "https://finance.yahoo.com/",
-};
+const HOSTS = yahooHosts();
 
 export class UpstreamError extends Error {
   constructor(
@@ -55,7 +52,7 @@ async function fetchYahooJson<T>(path: string): Promise<T> {
     const host = HOSTS[(attempt + Math.floor(Math.random() * HOSTS.length)) % HOSTS.length];
     try {
       const response = await fetch(`${host}${path}`, {
-        headers: BROWSER_HEADERS,
+        headers: YAHOO_BROWSER_HEADERS,
         cache: "no-store",
         signal: AbortSignal.timeout(10_000),
       });
@@ -108,6 +105,11 @@ interface YahooMeta {
   regularMarketVolume?: number;
   previousClose?: number;
   chartPreviousClose?: number;
+  currentTradingPeriod?: {
+    pre?: { start?: number; end?: number };
+    regular?: { start?: number; end?: number };
+    post?: { start?: number; end?: number };
+  };
   fiftyTwoWeekHigh?: number;
   fiftyTwoWeekLow?: number;
   longName?: string;
@@ -253,6 +255,149 @@ async function fetchSpark(symbols: string[]): Promise<YahooSparkResponse> {
   return fetchYahooJson<YahooSparkResponse>(path);
 }
 
+/* -------------------------------------------------------------------------- */
+/*                          盘前 / 盘后（夜盘）报价                             */
+/* -------------------------------------------------------------------------- */
+
+interface YahooV7Quote {
+  symbol?: string;
+  marketState?: string;
+  hasPrePostMarketData?: boolean;
+  regularMarketPrice?: number;
+  regularMarketTime?: number;
+  preMarketPrice?: number;
+  preMarketTime?: number;
+  postMarketPrice?: number;
+  postMarketTime?: number;
+}
+
+interface YahooV7Response {
+  quoteResponse?: {
+    result?: YahooV7Quote[] | null;
+    error?: { description?: string } | null;
+  };
+}
+
+/** v7/finance/quote 需要 crumb；一次可以拿多个代码的盘前盘后字段 */
+async function fetchExtendedQuotes(symbols: string[]): Promise<Map<string, YahooV7Quote>> {
+  const auth = await yahooAuth();
+  const path = `/v7/finance/quote?symbols=${encodeURIComponent(symbols.join(","))}&crumb=${encodeURIComponent(auth.crumb)}`;
+  const [host] = HOSTS;
+
+  const response = await fetch(`${host}${path}`, {
+    headers: { ...YAHOO_BROWSER_HEADERS, Cookie: auth.cookie },
+    cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  if (response.status === 401 || response.status === 403) {
+    resetYahooAuth();
+    throw new Error("Yahoo v7 报价授权失效");
+  }
+  if (!response.ok) {
+    throw new Error(`Yahoo v7 报价异常（${response.status}）`);
+  }
+
+  const data = (await response.json()) as YahooV7Response;
+  const items = new Map<string, YahooV7Quote>();
+  for (const item of data.quoteResponse?.result ?? []) {
+    if (item.symbol) items.set(item.symbol.toUpperCase(), item);
+  }
+  return items;
+}
+
+/** 当前时段对应的扩展报价（只有处于盘前/盘后/夜盘且拿到价格时才有） */
+function extendedFromItem(
+  item: YahooV7Quote,
+): { session: ExtendedQuote["session"]; price: number; time: number | null } | null {
+  const state = (item.marketState ?? "").toUpperCase();
+
+  if ((state === "PRE" || state === "PREPRE") && typeof item.preMarketPrice === "number") {
+    return { session: "pre", price: item.preMarketPrice, time: item.preMarketTime ?? null };
+  }
+  if (state === "POST" && typeof item.postMarketPrice === "number") {
+    return { session: "post", price: item.postMarketPrice, time: item.postMarketTime ?? null };
+  }
+  // POSTPOST = 20:00–04:00 ET 的夜盘；Yahoo 只保留最后一笔扩展时段成交
+  if (state === "POSTPOST" && typeof item.postMarketPrice === "number") {
+    return { session: "overnight", price: item.postMarketPrice, time: item.postMarketTime ?? null };
+  }
+  return null;
+}
+
+/**
+ * 用 v7 报价补充「当前时段 + 盘前/盘后成交」。
+ * 盘前 / 盘后的涨跌基准是上一个常规收盘价（PRE 时是昨收，POST 时是当日收盘），
+ * 所以主字段（price / change / changePercent）直接切换成扩展时段的最新价。
+ */
+function applyExtendedQuote(quote: Quote, item: YahooV7Quote): Quote {
+  const session = sessionFromYahooState(item.marketState);
+  const target = extendedFromItem(item);
+
+  if (!target) {
+    return { ...quote, session, extended: null };
+  }
+
+  const base =
+    typeof item.regularMarketPrice === "number" ? item.regularMarketPrice : quote.previousClose;
+  const reconciled = reconcileChange({ price: target.price, previousClose: base });
+  const marketTime = target.time ? new Date(target.time * 1000).toISOString() : quote.marketTime;
+
+  const extended: ExtendedQuote = {
+    session: target.session as ExtendedQuote["session"],
+    price: target.price,
+    change: reconciled.change,
+    changePercent: reconciled.changePercent,
+    marketTime,
+    volume: null,
+  };
+
+  return {
+    ...quote,
+    price: target.price,
+    previousClose: reconciled.previousClose ?? quote.previousClose,
+    change: reconciled.change,
+    changePercent: reconciled.changePercent,
+    marketTime,
+    session,
+    extended,
+  };
+}
+
+/** 把 v7 的盘前盘后数据合并进 spark 的结果；失败时保持原样（不阻塞报价） */
+async function enrichExtended(quotes: Quote[]): Promise<Quote[]> {
+  if (quotes.length === 0) return quotes;
+
+  try {
+    const items = await fetchExtendedQuotes(quotes.map((quote) => quote.symbol));
+    return quotes.map((quote) => {
+      const item = items.get(quote.symbol);
+      return item ? applyExtendedQuote(quote, item) : quote;
+    });
+  } catch (error) {
+    console.warn("[yahoo] 盘前盘后报价不可用：", (error as Error)?.message);
+    return quotes;
+  }
+}
+
+/** 从 chart meta 的 currentTradingPeriod 提取分时图时段范围 */
+function chartSessionsFrom(
+  period: YahooMeta["currentTradingPeriod"],
+): ChartSessions | undefined {
+  if (!period) return undefined;
+
+  const toRange = (slot?: { start?: number; end?: number }): [number, number] | null =>
+    slot && typeof slot.start === "number" && typeof slot.end === "number" && slot.end > slot.start
+      ? [slot.start, slot.end]
+      : null;
+
+  const pre = toRange(period.pre);
+  const regular = toRange(period.regular);
+  const post = toRange(period.post);
+  if (!pre && !regular && !post) return undefined;
+  return { pre, regular, post };
+}
+
 async function fetchChartRaw(
   symbol: string,
   rangeKey: RangeKey,
@@ -260,7 +405,9 @@ async function fetchChartRaw(
 ): Promise<YahooChartResult> {
   const rangeConfig = RANGE_CONFIG[rangeKey];
   const intervalConfig = INTERVAL_CONFIG[intervalKey];
-  const path = `/v8/finance/chart/${encodeURIComponent(symbol)}?range=${rangeConfig.range}&interval=${intervalConfig.yahoo}&includePrePost=false&events=div%2Csplit`;
+  // 分时图带上盘前/盘后成交（日线及以上不受影响），用于绘制时段阴影
+  const includePrePost = isIntradayInterval(intervalKey);
+  const path = `/v8/finance/chart/${encodeURIComponent(symbol)}?range=${rangeConfig.range}&interval=${intervalConfig.yahoo}&includePrePost=${includePrePost}&events=div%2Csplit`;
   const data = await fetchYahooJson<YahooChartResponse>(path);
   const result = data.chart?.result?.[0];
   if (!result) {
@@ -341,7 +488,10 @@ export async function getQuotes(symbols: string[]): Promise<{
     const order = new Map(symbols.map((symbol, index) => [symbol, index]));
     quotes.sort((a, b) => (order.get(a.symbol) ?? 99) - (order.get(b.symbol) ?? 99));
 
-    return { quotes, errors, fetchedAt: new Date().toISOString() };
+    // 补充「当前时段 + 盘前盘后成交」；失败不影响报价本身
+    const enriched = await enrichExtended(quotes);
+
+    return { quotes: enriched, errors, fetchedAt: new Date().toISOString() };
   });
 
   return { ...result.value, cached: result.cached, stale: result.stale };
@@ -367,6 +517,10 @@ export async function getChart(
 
     const meta = raw.meta;
     const quote = buildQuote(meta, points.slice(-60).map((point) => point.close));
+    const sessions =
+      range === "1D" && isIntradayInterval(interval)
+        ? chartSessionsFrom(meta.currentTradingPeriod)
+        : undefined;
     const highs = points.map((point) => point.high ?? point.close);
     const lows = points.map((point) => point.low ?? point.close);
 
@@ -392,6 +546,7 @@ export async function getChart(
         currency: quote.currency,
       },
       quote,
+      sessions,
       fetchedAt: new Date().toISOString(),
     } satisfies ChartResponse;
   });

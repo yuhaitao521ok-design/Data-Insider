@@ -93,6 +93,17 @@ export interface Quote {
   source: QuoteSource;
   /** 兜底数据（例如 Perplexity 估算）时为 true */
   estimated: boolean;
+  /** 当前所处交易时段：盘前 / 交易中 / 盘后 / 夜盘 / 已收盘 */
+  session?: MarketSession;
+  /** 盘前 / 盘后 / 夜盘的成交明细（此时 price 等主字段即为该时段的最新价） */
+  extended?: ExtendedQuote | null;
+}
+
+/** 分时图各交易时段的时间范围（秒级 Unix 时间戳） */
+export interface ChartSessions {
+  pre?: [number, number] | null;
+  regular?: [number, number] | null;
+  post?: [number, number] | null;
 }
 
 export interface QuotesResponse {
@@ -138,6 +149,8 @@ export interface ChartResponse {
   points: ChartPoint[];
   meta: ChartMeta;
   quote: Quote;
+  /** 分时图（1D）的盘前 / 常规 / 盘后时间范围，用于绘制时段阴影 */
+  sessions?: ChartSessions;
   fetchedAt: string;
 }
 
@@ -174,6 +187,20 @@ export interface Fundamentals {
   industry: string | null;
   source: "yahoo" | "nasdaq";
   fetchedAt: string;
+}
+
+/** 交易所当前的交易时段 */
+export type MarketSession = "pre" | "regular" | "post" | "overnight" | "closed";
+
+/** 盘前 / 盘后 / 夜盘的成交明细（价格与涨跌均相对上一个常规收盘价） */
+export interface ExtendedQuote {
+  session: "pre" | "post" | "overnight";
+  price: number;
+  change: number | null;
+  changePercent: number | null;
+  marketTime: string | null;
+  /** 该时段成交量（Nasdaq 提供，Yahoo 无此字段） */
+  volume: number | null;
 }
 
 export interface SearchResult {
