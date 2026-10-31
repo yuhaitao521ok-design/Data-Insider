@@ -26,6 +26,7 @@ import {
   type PriceAlert,
 } from "@/lib/alerts";
 import {
+  addToWatchlist,
   dropIndexAt,
   isWatchlistSort,
   moveItem,
@@ -36,6 +37,8 @@ import {
 } from "@/lib/watchlist";
 import {
   DEFAULT_WATCHLIST,
+  MAX_WATCHLIST,
+  QUOTE_CHUNK_SIZE,
   RANGE_CONFIG,
   RANGE_KEYS,
   isIntervalAllowed,
@@ -178,7 +181,7 @@ export default function Dashboard() {
               (item): item is string =>
                 typeof item === "string" && /^[A-Z0-9.^=-]{1,12}$/.test(item),
             )
-            .slice(0, 20);
+            .slice(0, MAX_WATCHLIST);
           if (cleaned.length > 0) {
             setWatchlist(cleaned);
             setSelected(cleaned[0]);
@@ -256,26 +259,50 @@ export default function Dashboard() {
       const requestId = ++quoteRequestRef.current;
       if (!options.silent) setQuotesLoading(true);
 
+      // 自选股最多 50 只，分段请求：URL 不会过长，单段失败也不拖累其它段
+      const chunks: string[][] = [];
+      for (let index = 0; index < watchlist.length; index += QUOTE_CHUNK_SIZE) {
+        chunks.push(watchlist.slice(index, index + QUOTE_CHUNK_SIZE));
+      }
+
       try {
-        const response = await fetch(
-          `/api/quotes?symbols=${encodeURIComponent(watchlist.join(","))}`,
-          { cache: "no-store" },
+        const settled = await Promise.allSettled(
+          chunks.map(async (chunk) => {
+            const response = await fetch(
+              `/api/quotes?symbols=${encodeURIComponent(chunk.join(","))}`,
+              { cache: "no-store" },
+            );
+            if (!response.ok) {
+              throw new Error(await readError(response, `加载行情失败（${response.status}）`));
+            }
+            return (await response.json()) as {
+              quotes: Quote[];
+              fetchedAt: string;
+              stale: boolean;
+            };
+          }),
         );
-        if (!response.ok) {
-          throw new Error(await readError(response, `加载行情失败（${response.status}）`));
-        }
-        const data = (await response.json()) as {
-          quotes: Quote[];
-          fetchedAt: string;
-          stale: boolean;
-        };
         if (requestId !== quoteRequestRef.current) return;
 
+        const payloads = settled.flatMap((item) =>
+          item.status === "fulfilled" ? [item.value] : [],
+        );
+        if (payloads.length === 0) {
+          const firstError = settled.find((item) => item.status === "rejected");
+          throw new Error(
+            firstError && firstError.status === "rejected" && firstError.reason instanceof Error
+              ? firstError.reason.message
+              : "加载行情失败",
+          );
+        }
+
         const map: Record<string, Quote> = {};
-        for (const item of data.quotes) map[item.symbol] = item;
+        for (const payload of payloads) {
+          for (const item of payload.quotes) map[item.symbol] = item;
+        }
         setQuotes(map);
-        setLastUpdated(data.fetchedAt);
-        setStale(Boolean(data.stale));
+        setLastUpdated(payloads[payloads.length - 1].fetchedAt);
+        setStale(payloads.some((payload) => payload.stale));
         setQuotesError(null);
 
         // 个别代码偶发失败（Nasdaq 的 vendor 抖动）时，1.2 秒后单独补拉一次，
@@ -648,8 +675,27 @@ export default function Dashboard() {
 
   /* --------------------------------- 交互 --------------------------------- */
 
-  function addSymbol(symbol: string) {
-    setWatchlist((prev) => (prev.includes(symbol) ? prev : [...prev, symbol].slice(0, 20)));
+  function addSymbol(rawSymbol: string) {
+    const symbol = rawSymbol.trim().toUpperCase();
+    const result = addToWatchlist(watchlist, symbol, MAX_WATCHLIST);
+
+    if (result.status === "full") {
+      // 以前这里会静默丢弃，用户只会觉得「加了没反应」
+      setToasts((prev) =>
+        [
+          ...prev,
+          {
+            id: `watchlist-full-${Date.now()}`,
+            title: "自选股已满",
+            body: `最多 ${MAX_WATCHLIST} 只，请先在左侧移除部分标的再加 ${symbol}`,
+          },
+        ].slice(-3),
+      );
+      setSelected(symbol);
+      return;
+    }
+
+    if (result.status === "added") setWatchlist(result.list);
     setSelected(symbol);
   }
 
@@ -1015,8 +1061,17 @@ export default function Dashboard() {
             <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
               <div className="flex items-center gap-2">
                 <h2 className="text-[13px] font-medium">自选股</h2>
-                <span className="num rounded-full bg-muted px-1.5 text-[10px] leading-4 text-muted-foreground">
-                  {watchlist.length}
+                <span
+                  title={`自选股 ${watchlist.length} / ${MAX_WATCHLIST}`}
+                  className={`num rounded-full px-1.5 text-[10px] leading-4 ${
+                    watchlist.length >= MAX_WATCHLIST
+                      ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                      : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {watchlist.length >= MAX_WATCHLIST
+                    ? `${watchlist.length}/${MAX_WATCHLIST}`
+                    : watchlist.length}
                 </span>
               </div>
               <div className="flex items-center gap-1">
