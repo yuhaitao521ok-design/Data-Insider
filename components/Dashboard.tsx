@@ -67,6 +67,7 @@ import {
   type InsightResponse,
   type Quote,
   type RangeKey,
+  type SearchResult,
 } from "@/lib/types";
 import {
   buildIndicatorRenderData,
@@ -163,6 +164,11 @@ export default function Dashboard() {
   const [addSymbolInput, setAddSymbolInput] = useState("");
   const [addSymbolGroup, setAddSymbolGroup] = useState<string | null>(null);
   const [addSymbolError, setAddSymbolError] = useState<string | null>(null);
+  /** 行内添加框的搜索建议（与顶部搜索走同一个 /api/search） */
+  const [addResults, setAddResults] = useState<SearchResult[]>([]);
+  const [addSearchLoading, setAddSearchLoading] = useState(false);
+  const [addActiveIndex, setAddActiveIndex] = useState(-1);
+  const addSearchAbortRef = useRef<AbortController | null>(null);
   const [drag, setDrag] = useState<{
     symbol: string;
     from: number;
@@ -735,6 +741,51 @@ export default function Dashboard() {
     };
   }, [groupMenu, creatingGroup, addBoxOpen]);
 
+  /* ---------------------- 行内添加框：搜索代码 / 公司 ---------------------- */
+
+  useEffect(() => {
+    if (!addBoxOpen) {
+      setAddResults([]);
+      setAddActiveIndex(-1);
+      setAddSearchLoading(false);
+      return;
+    }
+
+    const keyword = addSymbolInput.trim();
+    if (keyword.length === 0) {
+      setAddResults([]);
+      setAddActiveIndex(-1);
+      setAddSearchLoading(false);
+      return;
+    }
+
+    const timer = window.setTimeout(async () => {
+      addSearchAbortRef.current?.abort();
+      const controller = new AbortController();
+      addSearchAbortRef.current = controller;
+      setAddSearchLoading(true);
+
+      try {
+        const response = await fetch(`/api/search?q=${encodeURIComponent(keyword)}`, {
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error("search failed");
+        const data = (await response.json()) as { results?: SearchResult[] };
+        if (addSearchAbortRef.current !== controller) return;
+        setAddResults((data.results ?? []).slice(0, 6));
+        setAddActiveIndex(-1);
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          setAddResults([]);
+        }
+      } finally {
+        if (addSearchAbortRef.current === controller) setAddSearchLoading(false);
+      }
+    }, 260);
+
+    return () => window.clearTimeout(timer);
+  }, [addBoxOpen, addSymbolInput]);
+
   /* ------------------------------ 自选股排序 ------------------------------ */
 
   /** 按当前排序模式计算出的展示顺序（手动 / 涨跌幅降序 / 涨跌幅升序） */
@@ -1041,14 +1092,21 @@ export default function Dashboard() {
     setCreatingGroup(false);
   }
 
-  /** 行内快速添加：代码 + 目标分组 */
-  function submitAddFromBox() {
-    const symbol = addSymbolInput.trim().toUpperCase();
-    if (!/^[A-Z0-9.^=-]{1,12}$/.test(symbol)) {
-      setAddSymbolError("请输入有效的股票代码，如 AAPL / 000001.SS / ^HSI");
+  /** 行内快速添加：代码 + 目标分组（symbolOverride 用于点击搜索结果时直接加入） */
+  function submitAdd(symbolOverride?: string) {
+    const raw = (symbolOverride ?? addSymbolInput).trim().toUpperCase();
+
+    if (!/^[A-Z0-9.^=-]{1,12}$/.test(raw)) {
+      // 输入的是公司名（如 "apple"）时，直接取第一条搜索结果
+      if (!symbolOverride && addResults.length > 0) {
+        submitAdd(addResults[0].symbol);
+        return;
+      }
+      setAddSymbolError("请输入有效的股票代码，或从下方搜索结果里选择");
       return;
     }
 
+    const symbol = raw;
     const exists = watchlist.includes(symbol);
     const result = addToWatchlist(watchlist, symbol, MAX_WATCHLIST);
 
@@ -1077,11 +1135,10 @@ export default function Dashboard() {
     setAddSymbolInput("");
     setAddSymbolError(null);
     setAddBoxOpen(false);
+    setAddResults([]);
+    setAddActiveIndex(-1);
 
-    notify(
-      exists ? "已在自选股" : "已加入自选股",
-      `${symbol} → ${groupName ?? "未分组"}`,
-    );
+    notify(exists ? "已在自选股" : "已加入自选股", `${symbol} → ${groupName ?? "未分组"}`);
   }
 
   /* -------------------------------- 派生数据 ------------------------------- */
@@ -1510,10 +1567,8 @@ export default function Dashboard() {
             </div>
 
             {addBoxOpen && (
-              <div
-                ref={addBoxRef}
-                className="flex items-center gap-1 border-b border-border bg-muted/30 px-2 py-1.5"
-              >
+              <div ref={addBoxRef} className="border-b border-border bg-muted/30">
+                <div className="flex items-center gap-1 px-2 py-1.5">
                 <input
                   autoFocus
                   value={addSymbolInput}
@@ -1522,7 +1577,23 @@ export default function Dashboard() {
                     setAddSymbolError(null);
                   }}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter") submitAddFromBox();
+                    if (event.key === "ArrowDown") {
+                      event.preventDefault();
+                      setAddActiveIndex((prev) => Math.min(prev + 1, addResults.length - 1));
+                      return;
+                    }
+                    if (event.key === "ArrowUp") {
+                      event.preventDefault();
+                      setAddActiveIndex((prev) => Math.max(prev - 1, -1));
+                      return;
+                    }
+                    if (event.key === "Enter") {
+                      if (addActiveIndex >= 0 && addResults[addActiveIndex]) {
+                        submitAdd(addResults[addActiveIndex].symbol);
+                      } else {
+                        submitAdd();
+                      }
+                    }
                   }}
                   maxLength={12}
                   spellCheck={false}
@@ -1547,18 +1618,58 @@ export default function Dashboard() {
                 </select>
                 <button
                   type="button"
-                  onClick={submitAddFromBox}
+                  onClick={() => submitAdd()}
                   className="h-7 shrink-0 rounded-md bg-foreground px-2 text-[11px] font-medium text-background transition-opacity hover:opacity-90"
                 >
                   添加
                 </button>
-              </div>
-            )}
+                </div>
 
-            {addSymbolError && (
-              <p className="border-b border-border bg-negative-soft px-2 py-1 text-[10.5px] leading-4 text-negative-text">
-                {addSymbolError}
-              </p>
+                {addSymbolError && (
+                  <p className="px-2 pb-1 text-[10.5px] leading-4 text-negative-text">
+                    {addSymbolError}
+                  </p>
+                )}
+
+                {addSymbolInput.trim().length > 0 && (
+                  <div className="scroll-thin max-h-[188px] overflow-y-auto border-t border-border bg-card">
+                    {addSearchLoading && addResults.length === 0 ? (
+                      <p className="px-2 py-1.5 text-[10.5px] text-muted-foreground">搜索中…</p>
+                    ) : addResults.length > 0 ? (
+                      addResults.map((item, index) => (
+                        <button
+                          key={`${item.symbol}-${index}`}
+                          type="button"
+                          onClick={() => submitAdd(item.symbol)}
+                          onMouseEnter={() => setAddActiveIndex(index)}
+                          className={`flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors ${
+                            addActiveIndex === index ? "bg-muted" : "hover:bg-muted"
+                          }`}
+                        >
+                          <span className="w-[52px] shrink-0 truncate text-[11px] font-medium text-foreground">
+                            {item.symbol}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[10.5px] leading-4 text-foreground/85">
+                              {item.name}
+                            </span>
+                            <span className="block truncate text-[9px] leading-3 text-muted-foreground">
+                              {item.exchange} · {item.type}
+                            </span>
+                          </span>
+                          <span className="shrink-0 rounded border border-border px-1 text-[9px] leading-4 text-muted-foreground">
+                            加入
+                          </span>
+                        </button>
+                      ))
+                    ) : (
+                      <p className="px-2 py-1.5 text-[10.5px] leading-4 text-muted-foreground">
+                        没有搜到匹配的公司，可检查代码拼写后按回车直接添加
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
 
             {creatingGroup && (
