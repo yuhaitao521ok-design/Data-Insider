@@ -4,7 +4,17 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ChartMode, ChartPoint, ChartSessions, IntervalKey, RangeKey } from "@/lib/types";
 import type { ChartOverlay, ChartPane } from "@/lib/indicators";
 import type { CandleShape, SessionBand } from "@/lib/chart";
-import { barChange, buildCandles, buildSessionBands, sessionOfTime } from "@/lib/chart";
+import {
+  barChange,
+  buildCandles,
+  buildSessionBands,
+  clampViewport,
+  fullWindow,
+  panViewport,
+  sessionOfTime,
+  zoomViewport,
+  type ZoomWindow,
+} from "@/lib/chart";
 import { formatIndicatorValue } from "@/lib/indicators";
 import {
   formatAxisTime,
@@ -154,15 +164,15 @@ function numericValues(values: (number | null)[]): number[] {
 }
 
 export default function PriceChart({
-  points,
+  points: allPoints,
   range,
   interval,
   timezone,
   currency,
   positive,
   reference,
-  overlays = [],
-  panes = [],
+  overlays: allOverlays = [],
+  panes: allPanes = [],
   mode = "line",
   alertLines = [],
   sessions,
@@ -172,8 +182,60 @@ export default function PriceChart({
   const [hover, setHover] = useState<number | null>(null);
   const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
   const [tooltipHeight, setTooltipHeight] = useState(0);
+  /** 缩放视窗（null = 展示全部数据） */
+  const [viewport, setViewport] = useState<ZoomWindow | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const gradientId = useId().replace(/[:]/g, "");
+
+  /* ------------------------------ 缩放视窗 ------------------------------ */
+
+  const totalPoints = allPoints.length;
+  const view = useMemo(
+    () => (viewport ? clampViewport(viewport, totalPoints) : fullWindow(totalPoints)),
+    [viewport, totalPoints],
+  );
+  const isZoomed = view.end - view.start < totalPoints - 1;
+
+  /** 只把可视区间喂给几何计算，缩放后依然清晰（不用 viewBox 缩放） */
+  const points = useMemo(
+    () => allPoints.slice(view.start, view.end + 1),
+    [allPoints, view.start, view.end],
+  );
+  const overlays = useMemo(
+    () =>
+      allOverlays.map((overlay) => ({
+        ...overlay,
+        series: overlay.series.map((series) => ({
+          ...series,
+          values: series.values.slice(view.start, view.end + 1),
+        })),
+        band: overlay.band
+          ? {
+              ...overlay.band,
+              upper: overlay.band.upper.slice(view.start, view.end + 1),
+              lower: overlay.band.lower.slice(view.start, view.end + 1),
+            }
+          : undefined,
+      })),
+    [allOverlays, view.start, view.end],
+  );
+  const panes = useMemo(
+    () =>
+      allPanes.map((pane) => ({
+        ...pane,
+        series: pane.series.map((series) => ({
+          ...series,
+          values: series.values.slice(view.start, view.end + 1),
+        })),
+      })),
+    [allPanes, view.start, view.end],
+  );
+
+  // 换周期 / 换间隔 / 换标的（首根时间变化）时复位缩放
+  const seriesKey = `${range}|${interval}|${allPoints[0]?.t ?? 0}`;
+  useEffect(() => {
+    setViewport(null);
+  }, [seriesKey]);
 
   useEffect(() => {
     const element = wrapRef.current;
@@ -192,6 +254,36 @@ export default function PriceChart({
     const element = tooltipRef.current;
     if (element) setTooltipHeight(element.offsetHeight);
   }, [hover, panes.length, overlays.length]);
+
+  useEffect(() => {
+    const element = wrapRef.current;
+    if (!element) return;
+
+    function handleWheel(event: WheelEvent) {
+      if (allPoints.length < 24) return;
+      // 阻止页面滚动，改为缩放图表
+      event.preventDefault();
+
+      const rect = element!.getBoundingClientRect();
+      const innerWidth = Math.max(rect.width - PAD_LEFT - PAD_RIGHT, 1);
+      const ratio = (event.clientX - rect.left - PAD_LEFT) / innerWidth;
+
+      setViewport((previous) => {
+        const current = previous
+          ? clampViewport(previous, allPoints.length)
+          : fullWindow(allPoints.length);
+        const next = event.shiftKey
+          ? panViewport(current, allPoints.length, (event.deltaY > 0 ? 1 : -1) * 0.18)
+          : zoomViewport(current, allPoints.length, ratio, event.deltaY);
+
+        // 已经缩回全量时清空状态，避免显示「重置」按钮
+        return next.end - next.start >= allPoints.length - 1 ? null : next;
+      });
+    }
+
+    element.addEventListener("wheel", handleWheel, { passive: false });
+    return () => element.removeEventListener("wheel", handleWheel);
+  }, [allPoints.length]);
 
   const geometry = useMemo<Geometry | null>(() => {
     const width = size.width;
@@ -536,7 +628,7 @@ export default function PriceChart({
   // 当根 K 线的涨跌：以上一根收盘价为基准，首根分时点用昨收
   const hoverChange =
     hover !== null
-      ? barChange(points, hover, reference ?? null)
+      ? barChange(allPoints, view.start + hover, reference ?? null)
       : { change: null, changePercent: null, base: null };
   const changeUp = (hoverChange.changePercent ?? 0) >= 0;
   const changeToneClass =
@@ -588,6 +680,8 @@ export default function PriceChart({
   return (
     <div
       ref={wrapRef}
+      onDoubleClick={() => setViewport(null)}
+      title={isZoomed ? "双击可复位缩放（Shift + 滚轮平移）" : "滚轮可缩放（Shift + 滚轮平移，双击复位）"}
       className="relative w-full [--chart-h:250px] sm:[--chart-h:310px] lg:[--chart-h:370px]"
       style={{ height: `calc(var(--chart-h) + ${panes.length * (PANE_HEIGHT + PANE_GAP)}px)` }}
     >
@@ -965,6 +1059,27 @@ export default function PriceChart({
           }}
         />
       </svg>
+
+      {isZoomed && (
+        <button
+          type="button"
+          onClick={() => setViewport(null)}
+          className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md border border-border bg-card/90 px-1.5 py-0.5 text-[10px] text-muted-foreground shadow-sm backdrop-blur transition-colors hover:text-foreground"
+          aria-label="重置缩放"
+          title="重置缩放（也可以双击图表）"
+        >
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M4 10 4 4h6M20 14v6h-6M4 4l6.5 6.5M20 20l-6.5-6.5"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          已放大 · 双击复位
+        </button>
+      )}
 
       {hovered && (
         <div
