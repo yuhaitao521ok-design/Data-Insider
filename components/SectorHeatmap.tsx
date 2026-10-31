@@ -1,6 +1,6 @@
 "use client";
 
-import { SECTOR_DEFINITIONS } from "@/lib/markets";
+import { SECTOR_DEFINITIONS } from "@/lib/market-panels";
 import { formatPercent } from "@/lib/format";
 import type { Quote } from "@/lib/types";
 
