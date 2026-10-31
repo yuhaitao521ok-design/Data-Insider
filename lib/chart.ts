@@ -224,3 +224,27 @@ export function clampViewport(current: ZoomWindow, total: number, minSpan = 12):
   const start = clampNumber(current.start, 0, Math.max(0, maxSpan - span));
   return { start: Math.round(start), end: Math.round(start + span) };
 }
+
+/**
+ * 按比例缩放（用于双指捏合）：`scale > 1` 表示放大（可视点数变少）。
+ */
+export function zoomByScale(
+  current: ZoomWindow,
+  total: number,
+  pointerRatio: number,
+  scale: number,
+  minSpan = 12,
+): ZoomWindow {
+  const maxSpan = Math.max(1, total - 1);
+  if (maxSpan <= 1 || !Number.isFinite(scale) || scale <= 0) return fullWindow(total);
+
+  const ratio = clampNumber(pointerRatio, 0, 1);
+  const span = clampNumber(current.end - current.start, 1, maxSpan);
+  const lowestSpan = Math.min(Math.max(minSpan, 1), maxSpan);
+  const nextSpan = clampNumber(span / scale, lowestSpan, maxSpan);
+
+  const anchor = current.start + ratio * span;
+  const start = clampNumber(anchor - ratio * nextSpan, 0, Math.max(0, maxSpan - nextSpan));
+
+  return { start: Math.round(start), end: Math.round(start + nextSpan) };
+}

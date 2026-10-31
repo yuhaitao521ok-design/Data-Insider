@@ -12,6 +12,7 @@ import {
   fullWindow,
   panViewport,
   sessionOfTime,
+  zoomByScale,
   zoomViewport,
   type ZoomWindow,
 } from "@/lib/chart";
@@ -184,6 +185,11 @@ export default function PriceChart({
   const [tooltipHeight, setTooltipHeight] = useState(0);
   /** 缩放视窗（null = 展示全部数据） */
   const [viewport, setViewport] = useState<ZoomWindow | null>(null);
+  const [panning, setPanning] = useState(false);
+  /** 当前按下的指针（双指 = 捏合） */
+  const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const panRef = useRef<{ pointerId: number; startX: number; startView: ZoomWindow; moved: boolean } | null>(null);
+  const pinchRef = useRef<{ distance: number; ratio: number } | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const gradientId = useId().replace(/[:]/g, "");
 
@@ -237,6 +243,11 @@ export default function PriceChart({
     setViewport(null);
   }, [seriesKey]);
 
+  // 视窗变化后旧的 hover 下标已失效，直接清掉（下一次 pointermove 会重新定位）
+  useEffect(() => {
+    setHover(null);
+  }, [view.start, view.end]);
+
   useEffect(() => {
     const element = wrapRef.current;
     if (!element) return;
@@ -284,6 +295,103 @@ export default function PriceChart({
     element.addEventListener("wheel", handleWheel, { passive: false });
     return () => element.removeEventListener("wheel", handleWheel);
   }, [allPoints.length]);
+
+  /** 指针横坐标 → 绘图区比例（0 = 最左，1 = 最右） */
+  function ratioFromClientX(clientX: number): number {
+    const rect = wrapRef.current?.getBoundingClientRect();
+    if (!rect) return 0.5;
+    const innerWidth = Math.max(rect.width - PAD_LEFT - PAD_RIGHT, 1);
+    return (clientX - rect.left - PAD_LEFT) / innerWidth;
+  }
+
+  /** 拖拽平移 / 双指捏合缩放 */
+  function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+    if (pointersRef.current.size === 2) {
+      const [a, b] = Array.from(pointersRef.current.values());
+      pinchRef.current = {
+        distance: Math.hypot(a.x - b.x, a.y - b.y),
+        ratio: ratioFromClientX((a.x + b.x) / 2),
+      };
+      panRef.current = null;
+      setPanning(false);
+      return;
+    }
+
+    if (pointersRef.current.size === 1 && allPoints.length > 1) {
+      panRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startView: view,
+        moved: false,
+      };
+    }
+  }
+
+  function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    if (pointersRef.current.has(event.pointerId)) {
+      pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    }
+
+    const pinch = pinchRef.current;
+    if (pinch && pointersRef.current.size === 2) {
+      const [a, b] = Array.from(pointersRef.current.values());
+      const distance = Math.hypot(a.x - b.x, a.y - b.y);
+      if (distance > 0 && pinch.distance > 0) {
+        const scale = distance / pinch.distance;
+        pinchRef.current = { distance, ratio: pinch.ratio };
+        if (Math.abs(scale - 1) > 0.01) {
+          setViewport((previous) => {
+            const current = previous
+              ? clampViewport(previous, allPoints.length)
+              : fullWindow(allPoints.length);
+            const next = zoomByScale(current, allPoints.length, pinch.ratio, scale);
+            return next.end - next.start >= allPoints.length - 1 ? null : next;
+          });
+        }
+      }
+      return;
+    }
+
+    const pan = panRef.current;
+    if (!pan || pan.pointerId !== event.pointerId) return;
+
+    const dx = event.clientX - pan.startX;
+    if (!pan.moved) {
+      if (Math.abs(dx) < 4) return;
+      pan.moved = true;
+      setPanning(true);
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    }
+
+    const rect = wrapRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const innerWidth = Math.max(rect.width - PAD_LEFT - PAD_RIGHT, 1);
+    const span = pan.startView.end - pan.startView.start;
+    if (span <= 0) return;
+
+    // 向右拖 = 看更早的数据
+    const delta = (-dx / innerWidth) * span;
+    const maxStart = Math.max(0, allPoints.length - 1 - span);
+    const start = Math.min(Math.max(pan.startView.start + delta, 0), maxStart);
+    setViewport({ start: Math.round(start), end: Math.round(start + span) });
+    setHover(null);
+  }
+
+  function handlePointerEnd(event: React.PointerEvent<HTMLDivElement>) {
+    pointersRef.current.delete(event.pointerId);
+    if (pointersRef.current.size < 2) pinchRef.current = null;
+
+    if (panRef.current?.pointerId === event.pointerId) {
+      panRef.current = null;
+      setPanning(false);
+    }
+
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    }
+  }
 
   const geometry = useMemo<Geometry | null>(() => {
     const width = size.width;
@@ -614,10 +722,24 @@ export default function PriceChart({
   }
 
   const stroke = positive ? "var(--positive)" : "var(--negative)";
-  const hovered = hover !== null ? points[hover] : null;
-  const hoverIndex = hover ?? 0;
+  // 缩放后可视点数会变少，hover 可能是旧下标 → 先夹到有效范围再取点，避免 undefined 崩溃
+  const safeHover = hover !== null ? Math.min(hover, points.length - 1) : null;
+  const hovered = safeHover !== null ? points[safeHover] ?? null : null;
+  const hoverIndex = safeHover ?? 0;
   const hoverGeom =
-    hover !== null ? { x: geometry.xFor(hover), y: geometry.yFor(points[hover].close) } : null;
+    safeHover !== null && points[safeHover]
+      ? { x: geometry.xFor(safeHover), y: geometry.yFor(points[safeHover].close) }
+      : null;
+  const zoomRangeLabel =
+    points.length > 1
+      ? `${formatAxisTime(points[0].t, range, timezone, interval)} ~ ${formatAxisTime(
+          points[points.length - 1].t,
+          range,
+          timezone,
+          interval,
+        )}`
+      : "";
+
   const TOOLTIP_WIDTH = 228;
   const TOOLTIP_OFFSET = 14;
   // 鼠标还没进入图表时（例如键盘打开）用一个兜底锚点
@@ -627,8 +749,8 @@ export default function PriceChart({
 
   // 当根 K 线的涨跌：以上一根收盘价为基准，首根分时点用昨收
   const hoverChange =
-    hover !== null
-      ? barChange(allPoints, view.start + hover, reference ?? null)
+    safeHover !== null
+      ? barChange(allPoints, view.start + safeHover, reference ?? null)
       : { change: null, changePercent: null, base: null };
   const changeUp = (hoverChange.changePercent ?? 0) >= 0;
   const changeToneClass =
@@ -643,7 +765,10 @@ export default function PriceChart({
       : changeUp
         ? "text-positive-text"
         : "text-negative-text";
-  const hoverSession = hover !== null ? sessionOfTime(points[hover].t, sessions) : "regular";
+  const hoverSession =
+    safeHover !== null && points[safeHover]
+      ? sessionOfTime(points[safeHover].t, sessions)
+      : "regular";
   const changeAmountLabel =
     hoverChange.change === null
       ? "--"
@@ -681,9 +806,18 @@ export default function PriceChart({
     <div
       ref={wrapRef}
       onDoubleClick={() => setViewport(null)}
-      title={isZoomed ? "双击可复位缩放（Shift + 滚轮平移）" : "滚轮可缩放（Shift + 滚轮平移，双击复位）"}
-      className="relative w-full [--chart-h:250px] sm:[--chart-h:310px] lg:[--chart-h:370px]"
-      style={{ height: `calc(var(--chart-h) + ${panes.length * (PANE_HEIGHT + PANE_GAP)}px)` }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerEnd}
+      onPointerCancel={handlePointerEnd}
+      title={isZoomed ? "拖动平移 · 双击复位" : "滚轮缩放 · 拖动平移 · 双击复位"}
+      className={`relative w-full [--chart-h:250px] sm:[--chart-h:310px] lg:[--chart-h:370px] ${
+        panning ? "cursor-grabbing" : isZoomed ? "cursor-grab" : ""
+      }`}
+      style={{
+        height: `calc(var(--chart-h) + ${panes.length * (PANE_HEIGHT + PANE_GAP)}px)`,
+        touchAction: "none",
+      }}
     >
       <svg width={geometry.width} height={geometry.height} className="block overflow-visible">
         <defs>
@@ -1045,6 +1179,7 @@ export default function PriceChart({
           height={geometry.height}
           fill="transparent"
           onPointerMove={(event) => {
+            if (panning) return;
             const rect = event.currentTarget.getBoundingClientRect();
             const offsetX = event.clientX - rect.left;
             const offsetY = event.clientY - rect.top;
@@ -1061,24 +1196,21 @@ export default function PriceChart({
       </svg>
 
       {isZoomed && (
-        <button
-          type="button"
-          onClick={() => setViewport(null)}
-          className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md border border-border bg-card/90 px-1.5 py-0.5 text-[10px] text-muted-foreground shadow-sm backdrop-blur transition-colors hover:text-foreground"
-          aria-label="重置缩放"
-          title="重置缩放（也可以双击图表）"
-        >
-          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path
-              d="M4 10 4 4h6M20 14v6h-6M4 4l6.5 6.5M20 20l-6.5-6.5"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          已放大 · 双击复位
-        </button>
+        <div className="absolute right-2 top-2 z-10 flex items-center gap-1.5 rounded-md border border-border bg-card/90 px-1.5 py-0.5 text-[10px] text-muted-foreground shadow-sm backdrop-blur">
+          <span className="num text-foreground/80">{zoomRangeLabel}</span>
+          <span className="num opacity-60">
+            {points.length}/{totalPoints}
+          </span>
+          <button
+            type="button"
+            onClick={() => setViewport(null)}
+            className="rounded px-1 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="重置缩放"
+            title="重置缩放（也可以双击图表）"
+          >
+            重置
+          </button>
+        </div>
       )}
 
       {hovered && (
