@@ -1,7 +1,7 @@
 "use client";
 
 import Sparkline from "@/components/Sparkline";
-import { CROSS_ASSET_DEFINITIONS } from "@/lib/markets";
+import { CROSS_ASSET_DEFINITIONS } from "@/lib/market-panels";
 import { formatNumber, formatPercent } from "@/lib/format";
 import type { Quote } from "@/lib/types";
 

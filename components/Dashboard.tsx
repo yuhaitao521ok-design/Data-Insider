@@ -21,6 +21,7 @@ import GroupSummary from "@/components/GroupSummary";
 import { chartToCsv } from "@/lib/csv";
 import { isExtendedSession } from "@/lib/session";
 import { buildTechnicalSummary } from "@/lib/technical";
+import { matchLocalSuggestions, mergeSuggestions } from "@/lib/local-suggest";
 import {
   ALERTS_KEY,
   MAX_ALERTS,
@@ -168,6 +169,7 @@ export default function Dashboard() {
   const [addResults, setAddResults] = useState<SearchResult[]>([]);
   const [addSearchLoading, setAddSearchLoading] = useState(false);
   const [addActiveIndex, setAddActiveIndex] = useState(-1);
+  const [addSearchError, setAddSearchError] = useState<string | null>(null);
   const addSearchAbortRef = useRef<AbortController | null>(null);
   const [drag, setDrag] = useState<{
     symbol: string;
@@ -748,6 +750,7 @@ export default function Dashboard() {
       setAddResults([]);
       setAddActiveIndex(-1);
       setAddSearchLoading(false);
+      setAddSearchError(null);
       return;
     }
 
@@ -756,6 +759,7 @@ export default function Dashboard() {
       setAddResults([]);
       setAddActiveIndex(-1);
       setAddSearchLoading(false);
+      setAddSearchError(null);
       return;
     }
 
@@ -764,21 +768,32 @@ export default function Dashboard() {
       const controller = new AbortController();
       addSearchAbortRef.current = controller;
       setAddSearchLoading(true);
+      setAddSearchError(null);
+
+      // 8 秒没响应就中断，避免一直卡在「搜索中…」
+      const timeoutId = window.setTimeout(() => controller.abort(), 8_000);
 
       try {
         const response = await fetch(`/api/search?q=${encodeURIComponent(keyword)}`, {
           signal: controller.signal,
         });
-        if (!response.ok) throw new Error("search failed");
+        if (!response.ok) throw new Error(`搜索接口异常（${response.status}）`);
         const data = (await response.json()) as { results?: SearchResult[] };
         if (addSearchAbortRef.current !== controller) return;
         setAddResults((data.results ?? []).slice(0, 6));
         setAddActiveIndex(-1);
       } catch (error) {
-        if (!(error instanceof DOMException && error.name === "AbortError")) {
-          setAddResults([]);
-        }
+        // 被后续输入取消的请求不算错误
+        if (addSearchAbortRef.current !== controller) return;
+        const aborted = error instanceof DOMException && error.name === "AbortError";
+        setAddResults([]);
+        setAddSearchError(
+          aborted
+            ? "搜索超时了，可以直接回车添加代码，或稍后重试"
+            : "搜索接口暂时不可用，可以直接回车添加代码",
+        );
       } finally {
+        window.clearTimeout(timeoutId);
         if (addSearchAbortRef.current === controller) setAddSearchLoading(false);
       }
     }, 260);
@@ -802,6 +817,13 @@ export default function Dashboard() {
     [visibleWatchlist, groups, groupMap],
   );
   const hasGroups = groups.length > 0;
+
+  /** 本地兜底建议：即使搜索接口挂了，输入代码/公司名也能立刻看到候选 */
+  const localAddSuggestions = useMemo(() => matchLocalSuggestions(addSymbolInput, 6), [addSymbolInput]);
+  const addSuggestions = useMemo(
+    () => mergeSuggestions(addResults, localAddSuggestions, 6),
+    [addResults, localAddSuggestions],
+  );
 
   const notify = useCallback((title: string, body: string) => {
     setToasts((prev) =>
@@ -1632,39 +1654,54 @@ export default function Dashboard() {
                 )}
 
                 {addSymbolInput.trim().length > 0 && (
-                  <div className="scroll-thin max-h-[188px] overflow-y-auto border-t border-border bg-card">
-                    {addSearchLoading && addResults.length === 0 ? (
+                  <div
+                    className="scroll-thin max-h-[200px] overflow-y-auto border-t border-border bg-card"
+                    aria-label="搜索结果"
+                  >
+                    {addSuggestions.length > 0 ? (
+                      addSuggestions.map((item, index) => {
+                        const inList = watchlist.includes(item.symbol);
+                        const memberGroup = inList ? groupNameOf(item.symbol) ?? "未分组" : null;
+
+                        return (
+                          <button
+                            key={`${item.symbol}-${index}`}
+                            type="button"
+                            onClick={() => submitAdd(item.symbol)}
+                            onMouseEnter={() => setAddActiveIndex(index)}
+                            className={`flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors ${
+                              addActiveIndex === index ? "bg-muted" : "hover:bg-muted"
+                            }`}
+                          >
+                            <span className="w-[50px] shrink-0 truncate text-[11px] font-medium text-foreground">
+                              {item.symbol}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-[10.5px] leading-4 text-foreground/85">
+                                {item.name}
+                              </span>
+                              <span className="block truncate text-[9px] leading-3 text-muted-foreground">
+                                {item.exchange} · {item.type}
+                              </span>
+                            </span>
+                            <span
+                              className={`max-w-[92px] shrink-0 truncate rounded border px-1 text-[9px] leading-4 ${
+                                inList
+                                  ? "border-positive/40 bg-positive-soft text-positive-text"
+                                  : "border-border text-muted-foreground"
+                              }`}
+                              title={inList ? `已在自选股（${memberGroup}）` : "点击加入自选股"}
+                            >
+                              {inList ? `已在 · ${memberGroup}` : "加入"}
+                            </span>
+                          </button>
+                        );
+                      })
+                    ) : addSearchLoading ? (
                       <p className="px-2 py-1.5 text-[10.5px] text-muted-foreground">搜索中…</p>
-                    ) : addResults.length > 0 ? (
-                      addResults.map((item, index) => (
-                        <button
-                          key={`${item.symbol}-${index}`}
-                          type="button"
-                          onClick={() => submitAdd(item.symbol)}
-                          onMouseEnter={() => setAddActiveIndex(index)}
-                          className={`flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors ${
-                            addActiveIndex === index ? "bg-muted" : "hover:bg-muted"
-                          }`}
-                        >
-                          <span className="w-[52px] shrink-0 truncate text-[11px] font-medium text-foreground">
-                            {item.symbol}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-[10.5px] leading-4 text-foreground/85">
-                              {item.name}
-                            </span>
-                            <span className="block truncate text-[9px] leading-3 text-muted-foreground">
-                              {item.exchange} · {item.type}
-                            </span>
-                          </span>
-                          <span className="shrink-0 rounded border border-border px-1 text-[9px] leading-4 text-muted-foreground">
-                            加入
-                          </span>
-                        </button>
-                      ))
                     ) : (
                       <p className="px-2 py-1.5 text-[10.5px] leading-4 text-muted-foreground">
-                        没有搜到匹配的公司，可检查代码拼写后按回车直接添加
+                        {addSearchError ?? "没有搜到匹配的公司，可检查代码拼写后按回车直接添加"}
                       </p>
                     )}
                   </div>
