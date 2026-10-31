@@ -268,6 +268,7 @@ curl 'http://localhost:3000/api/chart?symbol=NVDA&range=1Y&interval=1wk' | jq '.
 - 叠加指标（BOLL）、副图（MACD / RSI）、成交量、提醒线、盘前盘后阴影、悬浮明细的指标数值都按同一窗口切片
 - 换周期 / 换间隔 / 换标的会自动复位；数据点少于 24 根时不启用缩放
 - 视窗变化会清掉旧的悬浮状态，避免下标越界（早期版本的崩溃点）
+- 拖拽加固：鼠标按下会 `preventDefault` + 容器 `select-none`（避免第二次拖拽变成「拖动选中的文字」）；`pointerup / pointercancel` 同时在 `window` 上监听，拖到图表外松手也能正确收尾；鼠标按下时会清掉残留的鼠标指针，捏合只认 **两个 touch/pen 指针**，不会被误判
 
 ## 价格提醒
 
