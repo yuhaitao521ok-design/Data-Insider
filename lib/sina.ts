@@ -142,3 +142,85 @@ export async function sinaIndexQuotes(symbols: string[]): Promise<Quote[]> {
   if (quotes.length === 0) throw new Error("Sina 没有返回指数数据");
   return quotes;
 }
+
+/* -------------------------------------------------------------------------- */
+/*                        跨资产兜底（纽约黄金 / 原油）                        */
+/* -------------------------------------------------------------------------- */
+
+/** 新浪外盘期货代码：只有黄金、原油的字段格式稳定，其余（VIX / 美元指数 / BTC）不兜底 */
+export const SINA_FUTURES_CODES: Record<string, string> = {
+  "GC=F": "hf_GC",
+  "CL=F": "hf_CL",
+};
+
+const FUTURES_TO_SYMBOL: Record<string, string> = Object.fromEntries(
+  // 新浪返回的变量名会被统一小写（hq_str_hf_gc），这里 key 也必须小写
+  Object.entries(SINA_FUTURES_CODES).map(([symbol, code]) => [code.toLowerCase(), symbol]),
+);
+
+/**
+ * 解析新浪外盘期货：`当前价,,买价,卖价,最高,最低,时间,昨结算,开盘,…`
+ * 涨跌以上一结算价为基准。
+ */
+export function parseSinaFutures(payload: string): Quote[] {
+  const quotes: Quote[] = [];
+  const pattern = /var hq_str_([a-z0-9_]+)="([^"]*)";/gi;
+
+  for (const match of payload.matchAll(pattern)) {
+    const code = match[1].toLowerCase();
+    const symbol = FUTURES_TO_SYMBOL[code];
+    if (!symbol) continue;
+
+    const fields = match[2].split(",");
+    if (fields.length < 8) continue;
+
+    const price = toNumber(fields[0]);
+    const previousClose = toNumber(fields[7]);
+    if (price === null || price <= 0 || previousClose === null || previousClose <= 0) continue;
+
+    const reconciled = reconcileChange({ price, previousClose });
+
+    quotes.push({
+      symbol,
+      name: fields[13]?.trim() || symbol,
+      price,
+      previousClose: reconciled.previousClose,
+      change: reconciled.change,
+      changePercent: reconciled.changePercent,
+      currency: "USD",
+      exchange: "Sina",
+      // 期货时间戳格式与股票不同，这里用抓取时间兜底
+      marketTime: new Date().toISOString(),
+      sparkline: [],
+      source: "sina",
+      estimated: false,
+    });
+  }
+
+  return quotes;
+}
+
+/** 拉取黄金 / 原油兜底报价（Yahoo 不可用时） */
+export async function sinaFuturesQuotes(symbols: string[]): Promise<Quote[]> {
+  const codes = Array.from(
+    new Set(
+      symbols
+        .map((symbol) => SINA_FUTURES_CODES[symbol])
+        .filter((code): code is string => Boolean(code)),
+    ),
+  );
+  if (codes.length === 0) return [];
+
+  const response = await fetch(`${ENDPOINT}${codes.join(",")}`, {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+      Referer: "https://finance.sina.com.cn/",
+    },
+    cache: "no-store",
+    signal: AbortSignal.timeout(8_000),
+  });
+
+  if (!response.ok) throw new Error(`Sina 期货接口异常（${response.status}）`);
+  return parseSinaFutures(decodeText(await response.arrayBuffer()));
+}

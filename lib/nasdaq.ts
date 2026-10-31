@@ -114,6 +114,7 @@ const KNOWN_ETFS = [
   "TLT",
   "ARKK",
   "XLK",
+  "XLC",
   "XLF",
   "XLE",
   "XLV",
