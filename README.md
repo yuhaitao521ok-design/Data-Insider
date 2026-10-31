@@ -179,7 +179,7 @@ curl 'http://localhost:3000/api/chart?symbol=NVDA&range=1Y&interval=1wk' | jq '.
 
 | 模块 | 内容 | 数据来源 |
 | --- | --- | --- |
-| **跨资产** | VIX、美债 10 年（按百分比显示）、美元指数、黄金、原油 WTI、比特币，带迷你走势 | Yahoo spark（一次批量）；Yahoo 不可用时黄金 / 原油退到 Sina，其余留 `--` |
+| **跨资产** | VIX、美债 10 年（按百分比显示）、美元指数、黄金、原油 WTI、比特币，带迷你走势；**点击任意一行即切换为该标的走势**，选中行高亮 | Yahoo spark（一次批量）；Yahoo 不可用时黄金 / 原油退到 Sina，其余留 `--`。走势同样只有 Yahoo 提供，失败时图表下方会说明原因 |
 | **板块热力** | 11 个 SPDR 行业 ETF（XLK/XLC/XLY/XLP/XLF/XLV/XLI/XLE/XLB/XLU/XLRE），底色按涨跌幅深浅着色，点击切换为该标的 | Yahoo spark；不可用时退到 Nasdaq |
 
 - 两者合并成一个 `/api/markets` 请求（17 个代码，30 秒刷新），失败时右栏显示「点击重试」，不影响主行情
