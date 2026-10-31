@@ -25,6 +25,19 @@ let yahooCooldownUntil = 0;
 
 export type Provider = "yahoo" | "nasdaq";
 
+/**
+ * Nasdaq 兜底只覆盖美股 / ETF：
+ * 指数（^VIX）、期货（GC=F）、加密（BTC-USD）、外汇（DX-Y.NYB）都没有，
+ * 对这些代码直接跳过兜底，避免返回 "Symbol not exists." 这类误导性错误。
+ */
+export function nasdaqCovers(symbol: string): boolean {
+  if (symbol.startsWith("^")) return false;
+  if (symbol.includes("=")) return false;
+  if (symbol.endsWith("-USD")) return false;
+  if (/-[A-Z]{3}$/.test(symbol)) return false;
+  return true;
+}
+
 export function yahooAvailable() {
   return Date.now() >= yahooCooldownUntil;
 }
@@ -110,7 +123,7 @@ export async function loadChart(
       }
     }
 
-    if (intervalConfig.nasdaq && range !== "1D" && range !== "5D") {
+    if (intervalConfig.nasdaq && range !== "1D" && range !== "5D" && nasdaqCovers(symbol)) {
       try {
         return await nasdaqChart(symbol, range, interval);
       } catch (error) {
@@ -121,6 +134,13 @@ export async function loadChart(
     }
 
     if (yahooError instanceof UpstreamError) {
+      if (!nasdaqCovers(symbol)) {
+        throw new UpstreamError(
+          `${symbol} 的走势仅 Yahoo Finance 提供，当前不可用（${yahooError.message}）`,
+          yahooError.status,
+          yahooError.code,
+        );
+      }
       if (yahooError.code === "rate_limited") {
         throw new UpstreamError(
           `${intervalConfig.label}数据仅 Yahoo Finance 提供，当前触发限流；可稍后重试或切换到日线`, 

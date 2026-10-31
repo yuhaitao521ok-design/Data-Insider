@@ -22,6 +22,7 @@ import { chartToCsv } from "@/lib/csv";
 import { isExtendedSession } from "@/lib/session";
 import { buildTechnicalSummary } from "@/lib/technical";
 import { matchLocalSuggestions, mergeSuggestions } from "@/lib/local-suggest";
+import { CROSS_ASSET_DEFINITIONS } from "@/lib/market-panels";
 import {
   ALERTS_KEY,
   MAX_ALERTS,
@@ -1167,7 +1168,15 @@ export default function Dashboard() {
 
   // 顶部大价格与涨跌幅统一走批量报价（每 30 秒刷新），图表 quote 只作为兜底，
   // 否则切换周期后会出现「价格/涨跌幅停留在上一个交易日」的问题。
-  const quote = quotes[selected] ?? chart?.quote ?? null;
+  /** 跨资产（指数 / 期货 / 加密）只有 Yahoo 提供走势，失败时给个说明 */
+  const selectedIsCrossAsset = CROSS_ASSET_DEFINITIONS.some((item) => item.symbol === selected);
+
+  const quote =
+    quotes[selected] ??
+    sectorQuotes[selected] ??
+    crossQuotes[selected] ??
+    chart?.quote ??
+    null;
   const changePercent = quote?.changePercent ?? null;
   const positive = (changePercent ?? 0) >= 0;
   const inWatchlist = watchlist.includes(selected);
@@ -2246,6 +2255,11 @@ export default function Dashboard() {
                       <p className="max-w-md px-4 text-center text-[12px] leading-5 text-muted-foreground">
                         {chartError}
                       </p>
+                      {selectedIsCrossAsset && (
+                        <p className="max-w-md px-4 text-center text-[10.5px] leading-4 text-muted-foreground/80">
+                          跨资产（指数 / 期货 / 加密）的走势仅 Yahoo Finance 提供，遇到限流稍后重试即可。
+                        </p>
+                      )}
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
@@ -2344,7 +2358,12 @@ export default function Dashboard() {
             className="min-w-0 space-y-4 lg:col-span-2 xl:col-span-1"
             aria-label="市场全景"
           >
-            <CrossAssetPanel quotes={crossQuotes} loading={marketsLoading} />
+            <CrossAssetPanel
+              quotes={crossQuotes}
+              loading={marketsLoading}
+              selected={selected}
+              onSelect={setSelected}
+            />
             <SectorHeatmap
               quotes={sectorQuotes}
               loading={marketsLoading}
