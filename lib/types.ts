@@ -242,6 +242,15 @@ export const RANGE_CONFIG: Record<
   MAX: { label: "全部", range: "max", defaultInterval: "1mo" },
 };
 
+/** 自选股数量上限（客户端持久化、批量报价都按这个来） */
+export const MAX_WATCHLIST = 50;
+
+/** 单次 /api/quotes 请求允许的最大代码数（客户端会按 QUOTE_CHUNK_SIZE 分段） */
+export const MAX_QUOTE_SYMBOLS = 60;
+
+/** 客户端每段请求多少个代码（避免 URL 过长、也让单段失败不拖累全部） */
+export const QUOTE_CHUNK_SIZE = 25;
+
 export const DEFAULT_WATCHLIST = [
   "AAPL",
   "MSFT",

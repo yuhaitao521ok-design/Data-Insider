@@ -94,3 +94,33 @@ export function dropIndexAt(
 
   return rects.length - 1;
 }
+
+/* -------------------------------------------------------------------------- */
+/*                              自选股增删与上限                              */
+/* -------------------------------------------------------------------------- */
+
+export type AddWatchlistStatus = "added" | "exists" | "full";
+
+export interface AddWatchlistResult {
+  list: string[];
+  status: AddWatchlistStatus;
+}
+
+/**
+ * 往自选股里加一只标的。
+ *
+ * 之前是「追加后 slice(0, 20)」——满 20 只时新标会被静默丢掉，用户以为没反应。
+ * 现在拆成三种明确结果，UI 可以据此提示「已达上限」。
+ */
+export function addToWatchlist(
+  list: string[],
+  symbol: string,
+  max: number,
+): AddWatchlistResult {
+  const normalized = symbol.trim().toUpperCase();
+  if (!normalized) return { list, status: "exists" };
+  if (list.includes(normalized)) return { list, status: "exists" };
+  if (list.length >= max) return { list, status: "full" };
+
+  return { list: [...list, normalized], status: "added" };
+}

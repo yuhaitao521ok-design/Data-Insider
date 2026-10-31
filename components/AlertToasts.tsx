@@ -6,7 +6,8 @@ export interface AlertToastItem {
   id: string;
   title: string;
   body: string;
-  price: string;
+  /** 价格提醒触发时显示现价；普通提示可以省略 */
+  price?: string;
 }
 
 interface AlertToastsProps {
@@ -50,7 +51,9 @@ export default function AlertToasts({ items, onDismiss }: AlertToastsProps) {
             <div className="min-w-0 flex-1">
               <p className="text-[12px] font-medium leading-4">{item.title}</p>
               <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">{item.body}</p>
-              <p className="num mt-1 text-[12px] text-foreground/85">现价 {item.price}</p>
+              {item.price && (
+                <p className="num mt-1 text-[12px] text-foreground/85">现价 {item.price}</p>
+              )}
             </div>
             <button
               type="button"

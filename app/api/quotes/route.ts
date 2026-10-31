@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { loadQuotes } from "@/lib/market";
 import { hasPerplexityKey, perplexityQuote } from "@/lib/perplexity";
 import { cacheHeaders, errorStatus, jsonError, parseSymbols } from "@/lib/http";
-import type { Quote, QuotesResponse } from "@/lib/types";
+import { MAX_QUOTE_SYMBOLS, type Quote, type QuotesResponse } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,7 +33,7 @@ async function perplexityFallback(symbols: string[]) {
 }
 
 export async function GET(request: NextRequest) {
-  const symbols = parseSymbols(request.nextUrl.searchParams.get("symbols"));
+  const symbols = parseSymbols(request.nextUrl.searchParams.get("symbols"), MAX_QUOTE_SYMBOLS);
 
   if (symbols.length === 0) {
     return jsonError("请提供至少一个有效的股票代码，例如 ?symbols=AAPL,MSFT", 400, "invalid_request");
