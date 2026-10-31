@@ -14,8 +14,13 @@ import AlertToasts, { type AlertToastItem } from "@/components/AlertToasts";
 import FundamentalsCard from "@/components/FundamentalsCard";
 import SessionBadge from "@/components/SessionBadge";
 import GroupPicker from "@/components/GroupPicker";
+import CrossAssetPanel from "@/components/CrossAssetPanel";
+import SectorHeatmap from "@/components/SectorHeatmap";
+import TechnicalSummaryCard from "@/components/TechnicalSummaryCard";
+import GroupSummary from "@/components/GroupSummary";
 import { chartToCsv } from "@/lib/csv";
 import { isExtendedSession } from "@/lib/session";
+import { buildTechnicalSummary } from "@/lib/technical";
 import {
   ALERTS_KEY,
   MAX_ALERTS,
@@ -127,6 +132,10 @@ export default function Dashboard() {
 
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
   const [indices, setIndices] = useState<Record<string, Quote>>({});
+  const [sectorQuotes, setSectorQuotes] = useState<Record<string, Quote>>({});
+  const [crossQuotes, setCrossQuotes] = useState<Record<string, Quote>>({});
+  const [marketsLoading, setMarketsLoading] = useState(true);
+  const [marketsError, setMarketsError] = useState<string | null>(null);
   const [indicesLoading, setIndicesLoading] = useState(true);
   const [indicesError, setIndicesError] = useState<string | null>(null);
   const [indicesUpdatedAt, setIndicesUpdatedAt] = useState<string | null>(null);
@@ -197,6 +206,7 @@ export default function Dashboard() {
 
   const quoteRequestRef = useRef(0);
   const indicesRequestRef = useRef(0);
+  const marketsRequestRef = useRef(0);
   const chartRequestRef = useRef(0);
   /** 每条提醒上一次观察到的满足状态（识别价格穿越，避免误报） */
   const alertSeenRef = useRef<Record<string, boolean>>({});
@@ -465,20 +475,49 @@ export default function Dashboard() {
     [],
   );
 
+  /** 右栏市场全景：板块热力图 + 跨资产（独立请求） */
+  const loadMarkets = useCallback(async (options: { silent?: boolean } = {}) => {
+    const requestId = ++marketsRequestRef.current;
+    if (!options.silent) setMarketsLoading(true);
+
+    try {
+      const response = await fetch("/api/markets", { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(await readError(response, `加载市场面板失败（${response.status}）`));
+      }
+      const data = (await response.json()) as { sectors: Quote[]; crossAssets: Quote[] };
+      if (requestId !== marketsRequestRef.current) return;
+
+      const toMap = (list: Quote[]) =>
+        Object.fromEntries(list.map((quote) => [quote.symbol, quote])) as Record<string, Quote>;
+
+      setSectorQuotes(toMap(data.sectors ?? []));
+      setCrossQuotes(toMap(data.crossAssets ?? []));
+      setMarketsError(null);
+    } catch (error) {
+      if (requestId !== marketsRequestRef.current) return;
+      setMarketsError(error instanceof Error ? error.message : "加载市场面板失败");
+    } finally {
+      if (requestId === marketsRequestRef.current) setMarketsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!hydrated) return;
     void loadQuotes();
     void loadIndices();
-  }, [hydrated, loadQuotes, loadIndices]);
+    void loadMarkets();
+  }, [hydrated, loadQuotes, loadIndices, loadMarkets]);
 
   useEffect(() => {
     if (!autoRefresh || !hydrated) return;
     const id = window.setInterval(() => {
       void loadQuotes({ silent: true });
       void loadIndices({ silent: true });
+      void loadMarkets({ silent: true });
     }, POLL_MS);
     return () => window.clearInterval(id);
-  }, [autoRefresh, hydrated, loadQuotes, loadIndices]);
+  }, [autoRefresh, hydrated, loadQuotes, loadIndices, loadMarkets]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -1115,6 +1154,11 @@ export default function Dashboard() {
     };
   }, [chart, indicators, range]);
 
+  const technicalSummary = useMemo(
+    () => (chart ? buildTechnicalSummary(chart.points, chart.meta) : null),
+    [chart],
+  );
+
   const indicatorData = useMemo(
     () => (chart ? buildIndicatorRenderData(chart.points, indicators) : { panes: [], overlays: [] }),
     [chart, indicators],
@@ -1367,7 +1411,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        <div className="grid items-start gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
+        <div className="grid items-start gap-4 lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)_320px]">
           <aside
             id="watchlist"
             className="scroll-mt-20 overflow-hidden rounded-xl border border-border bg-card lg:sticky lg:top-[68px] lg:flex lg:max-h-[calc(100vh-88px)] lg:flex-col"
@@ -1832,6 +1876,8 @@ export default function Dashboard() {
               })}
             </div>
 
+            {hasGroups && <GroupSummary sections={watchlistSections} quotes={quotes} />}
+
             <div className="mt-auto hidden items-center justify-between border-t border-border px-4 py-2 text-[10.5px] text-muted-foreground lg:flex">
               <span className="truncate">
                 {sortMode === "manual" ? "Yahoo / Nasdaq" : `按${sortWatchlistLabel(sortMode)}`}
@@ -2115,6 +2161,10 @@ export default function Dashboard() {
               </div>
             </article>
 
+            {technicalSummary && (
+              <TechnicalSummaryCard summary={technicalSummary} range={range} interval={interval} />
+            )}
+
             <FundamentalsCard
               symbol={selected}
               price={quote?.price ?? null}
@@ -2141,6 +2191,28 @@ export default function Dashboard() {
 
 
           </section>
+
+          <aside
+            className="min-w-0 space-y-4 lg:col-span-2 xl:col-span-1"
+            aria-label="市场全景"
+          >
+            <CrossAssetPanel quotes={crossQuotes} loading={marketsLoading} />
+            <SectorHeatmap
+              quotes={sectorQuotes}
+              loading={marketsLoading}
+              selected={selected}
+              onSelect={setSelected}
+            />
+            {marketsError && (
+              <button
+                type="button"
+                onClick={() => void loadMarkets()}
+                className="w-full rounded-lg border border-border bg-card px-3 py-2 text-left text-[10.5px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                市场面板加载失败：{marketsError}（点击重试）
+              </button>
+            )}
+          </aside>
         </div>
 
       </main>

@@ -16,6 +16,8 @@
 - **专业走势图**：纯 SVG 实现（无图表库依赖），支持折线 / 蜡烛（K 线）一键切换、十字光标、跟随鼠标的悬浮明细（自动避让边界，含当根 K 线涨跌额与涨跌幅）、成交量、昨收参考线
 - **技术指标**：一键添加 MACD / RSI / BOLL，支持自定义参数；MACD、RSI 为副图，BOLL 叠加主图，指标配置持久化
 - **价格提醒**：为任意标的设定「涨到 / 跌破」目标价，价格穿越时弹出页面提示 +（可选）浏览器通知，提醒线与状态持久化到 localStorage
+- **市场全景（右栏）**：板块热力图（11 个 SPDR 行业 ETF，按涨跌幅上色）+ 跨资产（VIX / 美债 10 年 / 美元指数 / 黄金 / 原油 / BTC），点击板块可直接看走势
+- **技术面摘要**：图表下方自动给出结论（偏多 / 中性 / 偏空）+ 均线排列、RSI、BOLL 位置、量比、ATR、52 周位置、连涨连跌（固定参数、无需手动加指标）
 - **全球指数概览**：美股（标普 500 / 纳指 100 / 道指 30 / 罗素 2000）+ 亚太（恒生 / 上证 / 沪深 300 / 日经 225 / KOSPI / STI）共 10 个指标，宽卡片 + 迷你走势 + 涨跌幅条，点击即可查看走势；独立 `/api/indices` 接口，单指标失败不影响其它
 - **基本面数据**：市值、市盈率 / 预期市盈率、EPS、股息率、Beta、平均成交量、1 年目标价，以及带现价游标的 52 周区间条
 - **关键指标**：昨收、今日高低、成交量、区间涨跌 / 高低、52 周区间
@@ -58,6 +60,7 @@ npm run build && npm start
 | --- | --- |
 | `GET /api/quotes?symbols=AAPL,MSFT` | 批量报价 + 迷你走势（一次最多 60 个代码，服务端缓存 15s）；每条报价带 `session`（pre/regular/post/overnight/closed）与 `extended`（盘前盘后成交） |
 | `GET /api/chart?symbol=AAPL&range=1M&interval=1d` | 指定周期 + 间隔的走势与报价；`range` 取 `1D/5D/1M/3M/6M/1Y/5Y/MAX`，`interval` 见下文「K 线间隔」 |
+| `GET /api/markets` | 右栏市场全景：板块 11 个 + 跨资产 6 个（Yahoo → Nasdaq 板块 / Sina 黄金原油 兜底，缓存 30s） |
 | `GET /api/indices` | 全球指数概览（美股 4 + 亚太 6），Yahoo → Nasdaq（美股）/ Sina（亚太与美股备用）多级兜底，缓存 30s |
 | `GET /api/search?q=英伟达` | 代码 / 公司名搜索（Yahoo 不可用时回退到内置热门列表） |
 | `GET /api/fundamentals?symbol=AAPL` | 基本面指标（Yahoo `quoteSummary`，失败时退到 Nasdaq summary + dividends；缓存 10 分钟） |
@@ -170,6 +173,28 @@ curl 'http://localhost:3000/api/chart?symbol=NVDA&range=1Y&interval=1wk' | jq '.
 - **徽标位置**：页面顶部状态条、行情卡片标题旁（含美东时间与成交量）、自选股每行（仅盘前/盘后/夜盘时显示）。
 - 记住：盘前盘后成交量小、价格跳动大，仅供盘感参考。
 
+## 市场全景（右栏）与三栏布局
+
+屏幕 ≥1280px 时页面变成三栏 `300px 自选股 | 主内容 | 320px 市场全景`；1024–1279px 时右栏自动落到主内容下方（板块热力图会铺成 3 列），手机端顺序不变。
+
+| 模块 | 内容 | 数据来源 |
+| --- | --- | --- |
+| **跨资产** | VIX、美债 10 年（按百分比显示）、美元指数、黄金、原油 WTI、比特币，带迷你走势 | Yahoo spark（一次批量）；Yahoo 不可用时黄金 / 原油退到 Sina，其余留 `--` |
+| **板块热力** | 11 个 SPDR 行业 ETF（XLK/XLC/XLY/XLP/XLF/XLV/XLI/XLE/XLB/XLU/XLRE），底色按涨跌幅深浅着色，点击切换为该标的 | Yahoo spark；不可用时退到 Nasdaq |
+
+- 两者合并成一个 `/api/markets` 请求（17 个代码，30 秒刷新），失败时右栏显示「点击重试」，不影响主行情
+- 配色用 `color-mix(in srgb, var(--positive|--negative) N%, transparent)`，深浅随涨跌幅线性变化（±3% 封顶）
+
+## 技术面摘要
+
+图表下方常驻一张「技术面」卡片，**不需要手动添加指标**，参数固定（MA5/20/60、RSI14、BOLL20、ATR14）：
+
+- 顶部：结论徽标（偏多 / 中性 / 偏空）+ 分值（−100 ~ +100）+ 一条以 0 为中点的条形
+- 明细：均线排列、RSI 状态、BOLL 位置（含带宽）、量比（对比 20 日均量）、ATR 波动率、距 52 周高/低、连涨连跌
+- 与图表指标的区别：图表指标是逐点数值（要自己判读），摘要给的是**结论**，且包含指标菜单里没有的 ATR、量比、连涨天数、52 周位置
+- 数据点不足 20 根时提示「切换更长周期」，切周期会自动重算
+- 计算在 `lib/technical.ts`（复用 `lib/indicators.ts` 的 sma / rsi / bollinger），零额外请求
+
 ## 全球指数概览
 
 页面顶部的宽卡片区域，一次展示 10 个指标（数据来自 `/api/indices`，30 秒刷新，与自选股请求完全独立）：
@@ -205,6 +230,7 @@ curl 'http://localhost:3000/api/chart?symbol=NVDA&range=1Y&interval=1wk' | jq '.
 - **拖动排序**：按住任意标的上下拖动即可调整顺序（移动超过 6px 才算拖动，不影响单击切换标的）；拖动时源项半透明、目标位置高亮，松手后立即生效并写入 localStorage
 - **行内快速添加**：标题栏「＋」展开输入框，填代码（自动转大写）+ 选目标分组，回车或点「添加」即可直接归类；已在自选股里的代码不会重复添加，会自动移动到所选分组
 - **标签分组**：标题栏「分组」新建分类（最多 12 个、名称 ≤ 12 字），点行内代码旁的标签把标的归类；分组标题可折叠、重命名、删除（删除后标的回到「未分组」不会丢）；**把标的拖到别的分组的行上会同时换组并调整位置**，拖到分组标题则归入该组末尾；「按涨跌幅排序」在每个分组内部生效
+- 左栏底部的「分组表现」会按分组统计平均涨跌幅与成员数量（只统计有报价的标的）
 - 分组在桌面端展示（移动端列表仍是横向滚动，但标签照常显示）。分组与归属分别存在 `data-insider:watchlist-groups:v1` / `data-insider:watchlist-group-map:v1`
 - **按涨跌幅排序**：表头的「涨跌幅 ↕」按钮循环切换 `手动 → 涨跌幅降序 ↓ → 涨跌幅升序 ↑ → 手动`，没有报价的标的始终排在最后；排序状态也持久化
 - 在自动排序状态下拖动任意标的，会把当前展示顺序**固化**为新的手动顺序并退出自动排序，避免「刚排好又被刷新打乱」
@@ -317,6 +343,10 @@ components/
   IndexOverview.tsx     全球指数概览（美股 + 亚太，10 张卡片）
   SessionBadge.tsx      交易时段徽标（盘前 / 交易中 / 盘后 / 夜盘）
   GroupPicker.tsx       自选股分组选择器（行内弹层）
+  SectorHeatmap.tsx     板块热力图
+  CrossAssetPanel.tsx   跨资产面板
+  TechnicalSummaryCard.tsx 技术面摘要卡片
+  GroupSummary.tsx      分组表现（左栏底部）
   PriceAlerts.tsx       价格提醒弹层
   AlertToasts.tsx       提醒 toast
   FundamentalsCard.tsx  基本面卡片
@@ -327,6 +357,8 @@ lib/
   alerts.ts             价格提醒（穿越判定 / 校验 / 持久化）
   watchlist.ts          自选股排序 / 拖拽移动 / 落点计算
   index-groups.ts       全球指数定义（代码 / 中文名 / 货币）
+  markets.ts            板块热力 + 跨资产（右栏）数据编排
+  technical.ts          技术面摘要计算（均线 / RSI / BOLL / 量比 / ATR / 连涨）
   indices.ts            指数编排（Yahoo → Nasdaq / Sina 兜底）
   sina.ts               新浪财经指数与美股 ETF 兜底适配器
   quote.ts              涨跌口径归一化 + 美东时间解析
