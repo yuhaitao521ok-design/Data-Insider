@@ -143,6 +143,8 @@ export default function Dashboard() {
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [groupPicker, setGroupPicker] = useState<string | null>(null);
   const [groupMenu, setGroupMenu] = useState<string | null>(null);
+  const groupMenuRef = useRef<HTMLDivElement>(null);
+  const newGroupRef = useRef<HTMLDivElement>(null);
   const [renamingGroup, setRenamingGroup] = useState<string | null>(null);
   const [creatingGroup, setCreatingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
@@ -632,6 +634,48 @@ export default function Dashboard() {
   const dismissToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
+
+  /* -------------------------- 弹层：点外部 / Esc 收起 -------------------------- */
+
+  useEffect(() => {
+    if (!groupMenu && !creatingGroup) return;
+
+    function handlePointerDown(event: MouseEvent) {
+      const target = event.target as Node | null;
+      const targetElement = event.target as Element | null;
+
+      if (groupMenu && !groupMenuRef.current?.contains(target)) {
+        setGroupMenu(null);
+        setRenamingGroup(null);
+      }
+
+      if (
+        creatingGroup &&
+        !newGroupRef.current?.contains(target) &&
+        !targetElement?.closest?.("[data-group-create-toggle]")
+      ) {
+        setCreatingGroup(false);
+        setNewGroupName("");
+      }
+    }
+
+    function handleKey(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setGroupMenu(null);
+      setRenamingGroup(null);
+      if (creatingGroup) {
+        setCreatingGroup(false);
+        setNewGroupName("");
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleKey);
+    };
+  }, [groupMenu, creatingGroup]);
 
   /* ------------------------------ 自选股排序 ------------------------------ */
 
@@ -1288,6 +1332,7 @@ export default function Dashboard() {
                     setCreatingGroup((prev) => !prev);
                     setNewGroupName("");
                   }}
+                  data-group-create-toggle
                   aria-label="新建分组"
                   title="新建分组（把标的分类）"
                   className={`inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[10.5px] transition-colors ${
@@ -1352,7 +1397,10 @@ export default function Dashboard() {
             </div>
 
             {creatingGroup && (
-              <div className="hidden items-center gap-1 border-b border-border px-2 py-1.5 lg:flex">
+              <div
+                ref={newGroupRef}
+                className="hidden items-center gap-1 border-b border-border px-2 py-1.5 lg:flex"
+              >
                 <input
                   autoFocus
                   value={newGroupName}
@@ -1434,7 +1482,10 @@ export default function Dashboard() {
                         </button>
 
                         {section.id !== UNGROUPED_ID && (
-                          <div className="relative">
+                          <div
+                            className="relative"
+                            ref={groupMenu === section.id ? groupMenuRef : undefined}
+                          >
                             <button
                               type="button"
                               onClick={() => {
