@@ -124,3 +124,123 @@ export function addToWatchlist(
 
   return { list: [...list, normalized], status: "added" };
 }
+
+/* -------------------------------------------------------------------------- */
+/*                              自选股分组（标签）                            */
+/* -------------------------------------------------------------------------- */
+
+export interface WatchlistGroup {
+  id: string;
+  name: string;
+}
+
+/** 未分组的分组 id（不落库，仅内部使用） */
+export const UNGROUPED_ID = "__ungrouped__";
+export const UNGROUPED_NAME = "未分组";
+
+/** 分组数量与名称长度上限 */
+export const MAX_GROUPS = 12;
+export const MAX_GROUP_NAME = 12;
+
+/** 从 localStorage 读到的任意值里挑出合法分组（重名、超长、超量都会被清理） */
+export function sanitizeGroups(raw: unknown): WatchlistGroup[] {
+  if (!Array.isArray(raw)) return [];
+
+  const groups: WatchlistGroup[] = [];
+  const names = new Set<string>();
+
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const candidate = item as Record<string, unknown>;
+    if (typeof candidate.id !== "string" || typeof candidate.name !== "string") continue;
+
+    const name = candidate.name.trim().slice(0, MAX_GROUP_NAME);
+    if (!name || names.has(name.toLowerCase())) continue;
+
+    names.add(name.toLowerCase());
+    groups.push({ id: candidate.id.slice(0, 32) || `g${groups.length}`, name });
+    if (groups.length >= MAX_GROUPS) break;
+  }
+
+  return groups;
+}
+
+/** 过滤「标的 → 分组」映射：只保留存在且合法的分组与代码 */
+export function sanitizeAssignment(
+  raw: unknown,
+  groups: WatchlistGroup[],
+): Record<string, string> {
+  if (!raw || typeof raw !== "object") return {};
+
+  const validIds = new Set(groups.map((group) => group.id));
+  const assignment: Record<string, string> = {};
+
+  for (const [symbol, groupId] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof groupId !== "string" || !validIds.has(groupId)) continue;
+    if (!/^[A-Z0-9.^=-]{1,12}$/.test(symbol)) continue;
+    assignment[symbol] = groupId;
+  }
+
+  return assignment;
+}
+
+/** 新建分组；重名 / 超过上限 / 空名称时返回 null */
+export function createGroup(
+  name: string,
+  groups: WatchlistGroup[],
+  now = Date.now(),
+): { group: WatchlistGroup; groups: WatchlistGroup[] } | null {
+  const trimmed = name.trim().slice(0, MAX_GROUP_NAME);
+  if (!trimmed) return null;
+  if (groups.length >= MAX_GROUPS) return null;
+  if (groups.some((group) => group.name.toLowerCase() === trimmed.toLowerCase())) return null;
+
+  const group: WatchlistGroup = {
+    id: `g${now.toString(36)}${Math.random().toString(36).slice(2, 5)}`,
+    name: trimmed,
+  };
+
+  return { group, groups: [...groups, group] };
+}
+
+export interface WatchlistSection {
+  id: string;
+  name: string;
+  symbols: string[];
+}
+
+/**
+ * 把（已排序的）自选股按分组切成若干段。
+ * - 分段内部保持传入顺序（所以「按涨跌幅排序」是在每个分组内生效）
+ * - 未知分组归入「未分组」
+ * - 没有任何分组时只返回一个「未分组」段（此时 UI 不显示分组标题）
+ */
+export function groupSections(
+  symbols: string[],
+  groups: WatchlistGroup[],
+  assignment: Record<string, string>,
+): WatchlistSection[] {
+  const buckets = new Map<string, string[]>();
+  buckets.set(UNGROUPED_ID, []);
+  for (const group of groups) buckets.set(group.id, []);
+
+  for (const symbol of symbols) {
+    const groupId = assignment[symbol];
+    const key = groupId && buckets.has(groupId) ? groupId : UNGROUPED_ID;
+    buckets.get(key)!.push(symbol);
+  }
+
+  const sections: WatchlistSection[] = groups.map((group) => ({
+    id: group.id,
+    name: group.name,
+    symbols: buckets.get(group.id) ?? [],
+  }));
+
+  const ungrouped = buckets.get(UNGROUPED_ID) ?? [];
+  // 已经有分组时，空的「未分组」不必占位；分组本身即使为空也保留（方便往里拖）
+  if (ungrouped.length > 0 || groups.length === 0) {
+    sections.push({ id: UNGROUPED_ID, name: UNGROUPED_NAME, symbols: ungrouped });
+  }
+
+  return sections;
+}
