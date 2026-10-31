@@ -153,3 +153,74 @@ export function sessionOfTime(
   if (inRange(sessions.post)) return "post";
   return "regular";
 }
+
+/* -------------------------------------------------------------------------- */
+/*                            图表缩放（滚轮 / 视窗）                          */
+/* -------------------------------------------------------------------------- */
+
+export interface ZoomWindow {
+  /** 可视区间起始下标（含） */
+  start: number;
+  /** 可视区间结束下标（含） */
+  end: number;
+}
+
+const clampNumber = (value: number, min: number, max: number) =>
+  Math.min(Math.max(value, min), max);
+
+/** 全量区间（未缩放） */
+export function fullWindow(total: number): ZoomWindow {
+  return { start: 0, end: Math.max(0, total - 1) };
+}
+
+/**
+ * 以指针位置为锚点缩放视窗。
+ *
+ * - `pointerRatio`：指针在绘图区里的横向比例（0 = 最左，1 = 最右）
+ * - `deltaY < 0`（向上滚）= 放大（可视点数变少）；反之缩小
+ * - 可视点数限制在 [minSpan, total-1]，并且不会移出数据范围
+ */
+export function zoomViewport(
+  current: ZoomWindow,
+  total: number,
+  pointerRatio: number,
+  deltaY: number,
+  minSpan = 12,
+): ZoomWindow {
+  const maxSpan = Math.max(1, total - 1);
+  if (maxSpan <= 1) return fullWindow(total);
+
+  const ratio = clampNumber(pointerRatio, 0, 1);
+  const span = clampNumber(current.end - current.start, 1, maxSpan);
+  // 一格滚轮约 100；触控板会给出更小的值，这里按步数叠加，最多一次 4 步
+  const steps = clampNumber(Math.abs(deltaY) / 100, 1, 4);
+  const factor = Math.pow(deltaY < 0 ? 0.82 : 1.22, steps);
+  const lowestSpan = Math.min(Math.max(minSpan, 1), maxSpan);
+  const nextSpan = clampNumber(span * factor, lowestSpan, maxSpan);
+
+  // 锚点处的数据下标在缩放前后保持在同一横向位置
+  const anchor = current.start + ratio * span;
+  const start = clampNumber(anchor - ratio * nextSpan, 0, Math.max(0, maxSpan - nextSpan));
+
+  return { start: Math.round(start), end: Math.round(start + nextSpan) };
+}
+
+/** 平移视窗（shift + 滚轮 / 拖动），保持跨度不变 */
+export function panViewport(
+  current: ZoomWindow,
+  total: number,
+  deltaRatio: number,
+): ZoomWindow {
+  const maxSpan = Math.max(1, total - 1);
+  const span = clampNumber(current.end - current.start, 1, maxSpan);
+  const start = clampNumber(current.start + deltaRatio * span, 0, Math.max(0, maxSpan - span));
+  return { start: Math.round(start), end: Math.round(start + span) };
+}
+
+/** 把视窗夹回有效范围（数据点变少时用） */
+export function clampViewport(current: ZoomWindow, total: number, minSpan = 12): ZoomWindow {
+  const maxSpan = Math.max(1, total - 1);
+  const span = clampNumber(current.end - current.start, Math.min(minSpan, maxSpan), maxSpan);
+  const start = clampNumber(current.start, 0, Math.max(0, maxSpan - span));
+  return { start: Math.round(start), end: Math.round(start + span) };
+}
