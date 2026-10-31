@@ -145,9 +145,15 @@ export default function Dashboard() {
   const [groupMenu, setGroupMenu] = useState<string | null>(null);
   const groupMenuRef = useRef<HTMLDivElement>(null);
   const newGroupRef = useRef<HTMLDivElement>(null);
+  const addBoxRef = useRef<HTMLDivElement>(null);
   const [renamingGroup, setRenamingGroup] = useState<string | null>(null);
   const [creatingGroup, setCreatingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
+  /** 行内快速添加（代码 + 目标分组） */
+  const [addBoxOpen, setAddBoxOpen] = useState(false);
+  const [addSymbolInput, setAddSymbolInput] = useState("");
+  const [addSymbolGroup, setAddSymbolGroup] = useState<string | null>(null);
+  const [addSymbolError, setAddSymbolError] = useState<string | null>(null);
   const [drag, setDrag] = useState<{
     symbol: string;
     from: number;
@@ -638,7 +644,7 @@ export default function Dashboard() {
   /* -------------------------- 弹层：点外部 / Esc 收起 -------------------------- */
 
   useEffect(() => {
-    if (!groupMenu && !creatingGroup) return;
+    if (!groupMenu && !creatingGroup && !addBoxOpen) return;
 
     function handlePointerDown(event: MouseEvent) {
       const target = event.target as Node | null;
@@ -657,6 +663,15 @@ export default function Dashboard() {
         setCreatingGroup(false);
         setNewGroupName("");
       }
+
+      if (
+        addBoxOpen &&
+        !addBoxRef.current?.contains(target) &&
+        !targetElement?.closest?.("[data-add-toggle]")
+      ) {
+        setAddBoxOpen(false);
+        setAddSymbolError(null);
+      }
     }
 
     function handleKey(event: KeyboardEvent) {
@@ -667,6 +682,10 @@ export default function Dashboard() {
         setCreatingGroup(false);
         setNewGroupName("");
       }
+      if (addBoxOpen) {
+        setAddBoxOpen(false);
+        setAddSymbolError(null);
+      }
     }
 
     document.addEventListener("mousedown", handlePointerDown);
@@ -675,7 +694,7 @@ export default function Dashboard() {
       document.removeEventListener("mousedown", handlePointerDown);
       window.removeEventListener("keydown", handleKey);
     };
-  }, [groupMenu, creatingGroup]);
+  }, [groupMenu, creatingGroup, addBoxOpen]);
 
   /* ------------------------------ 自选股排序 ------------------------------ */
 
@@ -976,10 +995,54 @@ export default function Dashboard() {
     URL.revokeObjectURL(url);
   }
 
-  function focusSearch() {
-    const input = document.querySelector<HTMLInputElement>('input[aria-label="搜索股票"]');
-    input?.focus();
-    input?.select();
+  function toggleAddBox() {
+    setAddBoxOpen((prev) => !prev);
+    setAddSymbolError(null);
+    setGroupMenu(null);
+    setCreatingGroup(false);
+  }
+
+  /** 行内快速添加：代码 + 目标分组 */
+  function submitAddFromBox() {
+    const symbol = addSymbolInput.trim().toUpperCase();
+    if (!/^[A-Z0-9.^=-]{1,12}$/.test(symbol)) {
+      setAddSymbolError("请输入有效的股票代码，如 AAPL / 000001.SS / ^HSI");
+      return;
+    }
+
+    const exists = watchlist.includes(symbol);
+    const result = addToWatchlist(watchlist, symbol, MAX_WATCHLIST);
+
+    if (result.status === "full") {
+      setAddSymbolError(`自选股已满（最多 ${MAX_WATCHLIST} 只），请先移除部分标的`);
+      return;
+    }
+
+    if (result.status === "added") setWatchlist(result.list);
+
+    // 已在自选股时不强行改成「未分组」，只在明确选了分组时移动
+    if (addSymbolGroup || !exists) {
+      setGroupMap((prev) => {
+        const next = { ...prev };
+        if (addSymbolGroup) next[symbol] = addSymbolGroup;
+        else delete next[symbol];
+        return next;
+      });
+    }
+
+    const groupName = addSymbolGroup
+      ? groups.find((group) => group.id === addSymbolGroup)?.name ?? null
+      : null;
+
+    setSelected(symbol);
+    setAddSymbolInput("");
+    setAddSymbolError(null);
+    setAddBoxOpen(false);
+
+    notify(
+      exists ? "已在自选股" : "已加入自选股",
+      `${symbol} → ${groupName ?? "未分组"}`,
+    );
   }
 
   /* -------------------------------- 派生数据 ------------------------------- */
@@ -1379,10 +1442,16 @@ export default function Dashboard() {
                 </button>
                 <button
                   type="button"
-                  onClick={focusSearch}
-                  className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  onClick={toggleAddBox}
+                  data-add-toggle
+                  aria-expanded={addBoxOpen}
+                  className={`flex h-6 w-6 items-center justify-center rounded-md transition-colors ${
+                    addBoxOpen
+                      ? "bg-accent-soft text-accent"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
                   aria-label="添加自选股"
-                  title="添加自选股"
+                  title="添加自选股（可直接选分组）"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path
@@ -1395,6 +1464,58 @@ export default function Dashboard() {
                 </button>
               </div>
             </div>
+
+            {addBoxOpen && (
+              <div
+                ref={addBoxRef}
+                className="flex items-center gap-1 border-b border-border bg-muted/30 px-2 py-1.5"
+              >
+                <input
+                  autoFocus
+                  value={addSymbolInput}
+                  onChange={(event) => {
+                    setAddSymbolInput(event.target.value.toUpperCase());
+                    setAddSymbolError(null);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") submitAddFromBox();
+                  }}
+                  maxLength={12}
+                  spellCheck={false}
+                  autoComplete="off"
+                  placeholder="股票代码，如 AAPL"
+                  aria-label="输入股票代码"
+                  className="h-7 min-w-0 flex-1 rounded-md border border-border bg-card px-1.5 text-[11px] uppercase tracking-wide outline-none placeholder:normal-case placeholder:tracking-normal focus:border-accent/60"
+                />
+                <select
+                  value={addSymbolGroup ?? ""}
+                  onChange={(event) => setAddSymbolGroup(event.target.value || null)}
+                  aria-label="选择分组"
+                  title="加入哪个分组"
+                  className="h-7 max-w-[104px] shrink-0 rounded-md border border-border bg-card px-1 text-[11px] text-foreground outline-none focus:border-accent/60"
+                >
+                  <option value="">未分组</option>
+                  {groups.map((group) => (
+                    <option key={group.id} value={group.id}>
+                      {group.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={submitAddFromBox}
+                  className="h-7 shrink-0 rounded-md bg-foreground px-2 text-[11px] font-medium text-background transition-opacity hover:opacity-90"
+                >
+                  添加
+                </button>
+              </div>
+            )}
+
+            {addSymbolError && (
+              <p className="border-b border-border bg-negative-soft px-2 py-1 text-[10.5px] leading-4 text-negative-text">
+                {addSymbolError}
+              </p>
+            )}
 
             {creatingGroup && (
               <div
