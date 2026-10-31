@@ -13,6 +13,7 @@ import PriceAlerts from "@/components/PriceAlerts";
 import AlertToasts, { type AlertToastItem } from "@/components/AlertToasts";
 import FundamentalsCard from "@/components/FundamentalsCard";
 import SessionBadge from "@/components/SessionBadge";
+import GroupPicker from "@/components/GroupPicker";
 import { chartToCsv } from "@/lib/csv";
 import { isExtendedSession } from "@/lib/session";
 import {
@@ -27,12 +28,20 @@ import {
 } from "@/lib/alerts";
 import {
   addToWatchlist,
+  createGroup,
   dropIndexAt,
+  groupSections,
   isWatchlistSort,
   moveItem,
   nextWatchlistSort,
+  sanitizeAssignment,
+  sanitizeGroups,
   sortWatchlist,
   sortWatchlistLabel,
+  UNGROUPED_ID,
+  MAX_GROUP_NAME,
+  MAX_GROUPS,
+  type WatchlistGroup,
   type WatchlistSort,
 } from "@/lib/watchlist";
 import {
@@ -74,6 +83,9 @@ const INDICATORS_KEY = "data-insider:indicators:v1";
 const INTERVALS_KEY = "data-insider:intervals:v1";
 const CHART_MODE_KEY = "data-insider:chart-mode:v1";
 const WATCHLIST_SORT_KEY = "data-insider:watchlist-sort:v1";
+const GROUPS_KEY = "data-insider:watchlist-groups:v1";
+const GROUP_MAP_KEY = "data-insider:watchlist-group-map:v1";
+const GROUP_COLLAPSED_KEY = "data-insider:watchlist-groups-collapsed:v1";
 const POLL_MS = 30_000;
 const INTRADAY_POLL_MS = 60_000;
 
@@ -125,17 +137,30 @@ export default function Dashboard() {
 
   const [chartMode, setChartMode] = useState<ChartMode>("line");
   const [sortMode, setSortMode] = useState<WatchlistSort>("manual");
+  const [groups, setGroups] = useState<WatchlistGroup[]>([]);
+  /** 标的 → 分组 id；没有记录即「未分组」 */
+  const [groupMap, setGroupMap] = useState<Record<string, string>>({});
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [groupPicker, setGroupPicker] = useState<string | null>(null);
+  const [groupMenu, setGroupMenu] = useState<string | null>(null);
+  const [renamingGroup, setRenamingGroup] = useState<string | null>(null);
+  const [creatingGroup, setCreatingGroup] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
   const [drag, setDrag] = useState<{
     symbol: string;
     from: number;
     to: number;
     order: string[];
+    targetSymbol?: string | null;
+    headerGroupId?: string | null;
   } | null>(null);
   const dragRef = useRef<{
     symbol: string;
     from: number;
     to: number;
     order: string[];
+    targetSymbol?: string | null;
+    headerGroupId?: string | null;
     startX: number;
     startY: number;
     pointerId: number;
@@ -214,6 +239,22 @@ export default function Dashboard() {
       if (savedMode === "line" || savedMode === "candle") setChartMode(savedMode);
       const savedSort = window.localStorage.getItem(WATCHLIST_SORT_KEY);
       if (isWatchlistSort(savedSort)) setSortMode(savedSort);
+      const savedGroups = window.localStorage.getItem(GROUPS_KEY);
+      const restoredGroups = savedGroups ? sanitizeGroups(JSON.parse(savedGroups)) : [];
+      if (restoredGroups.length > 0) setGroups(restoredGroups);
+      const savedGroupMap = window.localStorage.getItem(GROUP_MAP_KEY);
+      if (savedGroupMap) {
+        setGroupMap(sanitizeAssignment(JSON.parse(savedGroupMap), restoredGroups));
+      }
+      const savedCollapsed = window.localStorage.getItem(GROUP_COLLAPSED_KEY);
+      if (savedCollapsed) {
+        const parsed = JSON.parse(savedCollapsed) as Record<string, unknown>;
+        const next: Record<string, boolean> = {};
+        for (const [key, value] of Object.entries(parsed ?? {})) {
+          if (value === true) next[key] = true;
+        }
+        setCollapsedGroups(next);
+      }
       const savedAlerts = window.localStorage.getItem(ALERTS_KEY);
       if (savedAlerts) setAlerts(sanitizeAlerts(JSON.parse(savedAlerts)));
       if (typeof Notification !== "undefined") {
@@ -235,6 +276,9 @@ export default function Dashboard() {
       window.localStorage.setItem(INTERVALS_KEY, JSON.stringify(intervalByRange));
       window.localStorage.setItem(CHART_MODE_KEY, chartMode);
       window.localStorage.setItem(WATCHLIST_SORT_KEY, sortMode);
+      window.localStorage.setItem(GROUPS_KEY, JSON.stringify(groups));
+      window.localStorage.setItem(GROUP_MAP_KEY, JSON.stringify(groupMap));
+      window.localStorage.setItem(GROUP_COLLAPSED_KEY, JSON.stringify(collapsedGroups));
       window.localStorage.setItem(ALERTS_KEY, JSON.stringify(alerts));
     } catch {
       // 忽略写入失败
@@ -247,6 +291,9 @@ export default function Dashboard() {
     intervalByRange,
     chartMode,
     sortMode,
+    groups,
+    groupMap,
+    collapsedGroups,
     alerts,
     hydrated,
   ]);
@@ -596,20 +643,106 @@ export default function Dashboard() {
   /** 拖拽过程中冻结展示顺序，避免轮询刷新导致列表在指针下跳动 */
   const visibleWatchlist = drag ? drag.order : displayedWatchlist;
 
-  function handleItemPointerDown(
-    event: React.PointerEvent<HTMLDivElement>,
-    symbol: string,
-    index: number,
-  ) {
+  /** 按分组切段：段内保持排序结果，所以「按涨跌幅排序」在每个分组内生效 */
+  const watchlistSections = useMemo(
+    () => groupSections(visibleWatchlist, groups, groupMap),
+    [visibleWatchlist, groups, groupMap],
+  );
+  const hasGroups = groups.length > 0;
+
+  const notify = useCallback((title: string, body: string) => {
+    setToasts((prev) =>
+      [
+        ...prev,
+        {
+          id: `notice-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+          title,
+          body,
+        },
+      ].slice(-3),
+    );
+  }, []);
+
+  /* ------------------------------- 分组操作 ------------------------------- */
+
+  function assignGroup(symbol: string, groupId: string | null) {
+    setGroupMap((prev) => {
+      const next = { ...prev };
+      if (groupId) next[symbol] = groupId;
+      else delete next[symbol];
+      return next;
+    });
+    setGroupPicker(null);
+  }
+
+  /** 新建分组；assignSymbol 有值时顺便把该标的归入新分组。返回错误信息或 null */
+  function createGroupAndAssign(name: string, assignSymbol?: string): string | null {
+    const result = createGroup(name, groups);
+    if (!result) {
+      return groups.length >= MAX_GROUPS ? `最多 ${MAX_GROUPS} 个分组` : "分组名称为空或已存在";
+    }
+
+    setGroups(result.groups);
+    if (assignSymbol) {
+      setGroupMap((prev) => ({ ...prev, [assignSymbol]: result.group.id }));
+      setGroupPicker(null);
+    }
+    setNewGroupName("");
+    setCreatingGroup(false);
+    return null;
+  }
+
+  function renameGroupTo(groupId: string, name: string): string | null {
+    const trimmed = name.trim().slice(0, MAX_GROUP_NAME);
+    if (!trimmed) return "名称不能为空";
+    if (
+      groups.some(
+        (group) => group.id !== groupId && group.name.toLowerCase() === trimmed.toLowerCase(),
+      )
+    ) {
+      return "已存在同名分组";
+    }
+
+    setGroups((prev) =>
+      prev.map((group) => (group.id === groupId ? { ...group, name: trimmed } : group)),
+    );
+    setRenamingGroup(null);
+    setGroupMenu(null);
+    return null;
+  }
+
+  function deleteGroup(groupId: string) {
+    setGroups((prev) => prev.filter((group) => group.id !== groupId));
+    // 分组删掉后标的回到「未分组」，不会从自选股里消失
+    setGroupMap((prev) =>
+      Object.fromEntries(Object.entries(prev).filter(([, id]) => id !== groupId)),
+    );
+    setGroupMenu(null);
+  }
+
+  function toggleGroupCollapsed(groupId: string) {
+    setCollapsedGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
+  }
+
+  function groupNameOf(symbol: string): string | null {
+    const groupId = groupMap[symbol];
+    if (!groupId) return null;
+    return groups.find((group) => group.id === groupId)?.name ?? null;
+  }
+
+  function handleItemPointerDown(event: React.PointerEvent<HTMLDivElement>, symbol: string) {
     // 触摸设备保留原生滚动，不做拖拽
     if (event.pointerType === "touch") return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
 
+    const index = visibleWatchlist.indexOf(symbol);
     dragRef.current = {
       symbol,
-      from: index,
-      to: index,
-      order: displayedWatchlist,
+      from: index < 0 ? 0 : index,
+      to: index < 0 ? 0 : index,
+      order: visibleWatchlist,
+      targetSymbol: null,
+      headerGroupId: null,
       startX: event.clientX,
       startY: event.clientY,
       pointerId: event.pointerId,
@@ -630,18 +763,64 @@ export default function Dashboard() {
 
     const list = watchlistListRef.current;
     if (!list) return;
-    const rects = Array.from(
-      list.querySelectorAll<HTMLElement>("[data-watchlist-item]"),
-    ).map((item) => item.getBoundingClientRect());
-    const target = dropIndexAt(rects, { x: event.clientX, y: event.clientY });
 
-    state.to = target;
+    // 拖到分组标题上 = 归入该分组（空分组也能成为落点）
+    const header = Array.from(
+      list.querySelectorAll<HTMLElement>("[data-watchlist-group]"),
+    ).find((element) => {
+      const rect = element.getBoundingClientRect();
+      return (
+        event.clientX >= rect.left &&
+        event.clientX <= rect.right &&
+        event.clientY >= rect.top &&
+        event.clientY <= rect.bottom
+      );
+    });
+
+    if (header) {
+      const groupId = header.dataset.watchlistGroup ?? UNGROUPED_ID;
+      if (state.headerGroupId === groupId) return;
+      state.headerGroupId = groupId;
+      state.targetSymbol = null;
+      setDrag({
+        symbol: state.symbol,
+        from: state.from,
+        to: state.to,
+        order: state.order,
+        targetSymbol: null,
+        headerGroupId: groupId,
+      });
+      return;
+    }
+
+    const items = Array.from(list.querySelectorAll<HTMLElement>("[data-watchlist-item]"));
+    const rects = items.map((item) => item.getBoundingClientRect());
+    const targetIndex = dropIndexAt(rects, { x: event.clientX, y: event.clientY });
+    const targetSymbol = items[targetIndex]?.dataset.symbol ?? null;
+
+    state.to = targetIndex;
+    state.targetSymbol = targetSymbol;
+    state.headerGroupId = null;
     setDrag({
       symbol: state.symbol,
       from: state.from,
-      to: state.to,
+      to: targetIndex,
       order: state.order,
+      targetSymbol,
+      headerGroupId: null,
     });
+  }
+
+  /** 把标的移到某个分组的末尾（拖到分组标题时用） */
+  function moveToGroupEnd(symbol: string, groupId: string | null, order: string[]): string[] {
+    const without = order.filter((item) => item !== symbol);
+    const lastInGroup = [...without]
+      .reverse()
+      .find((item) => (groupMap[item] ?? null) === groupId);
+    const insertAt = lastInGroup ? without.indexOf(lastInGroup) + 1 : without.length;
+    const next = [...without];
+    next.splice(insertAt, 0, symbol);
+    return next;
   }
 
   function finishDrag(event: React.PointerEvent<HTMLDivElement>, commit: boolean) {
@@ -660,14 +839,42 @@ export default function Dashboard() {
       suppressClickRef.current = false;
     }, 0);
 
-    if (commit && state.from !== state.to) {
-      setWatchlist((current) => {
-        // 拖拽期间发生过增删则放弃本次排序，避免丢数据
-        if (current.length !== state.order.length) return current;
-        return moveItem(state.order, state.from, state.to);
-      });
-      // 任何排序模式下拖拽，都把当前展示顺序固化为新的手动顺序
-      if (sortMode !== "manual") setSortMode("manual");
+    if (commit) {
+      const dragged = state.symbol;
+      const currentGroup = groupMap[dragged] ?? null;
+
+      const applyGroup = (targetGroup: string | null) => {
+        if (currentGroup === targetGroup) return;
+        setGroupMap((prev) => {
+          const next = { ...prev };
+          if (targetGroup) next[dragged] = targetGroup;
+          else delete next[dragged];
+          return next;
+        });
+      };
+
+      if (state.headerGroupId) {
+        const targetGroup = state.headerGroupId === UNGROUPED_ID ? null : state.headerGroupId;
+        setWatchlist((current) =>
+          current.length !== state.order.length
+            ? current
+            : moveToGroupEnd(dragged, targetGroup, state.order),
+        );
+        applyGroup(targetGroup);
+        if (sortMode !== "manual") setSortMode("manual");
+      } else if (state.targetSymbol && state.targetSymbol !== dragged) {
+        const targetSymbol = state.targetSymbol;
+        setWatchlist((current) => {
+          // 拖拽期间发生过增删则放弃本次排序，避免丢数据
+          if (current.length !== state.order.length) return current;
+          const from = state.order.indexOf(dragged);
+          const to = state.order.indexOf(targetSymbol);
+          if (from < 0 || to < 0) return current;
+          return moveItem(state.order, from, to);
+        });
+        applyGroup(groupMap[targetSymbol] ?? null);
+        if (sortMode !== "manual") setSortMode("manual");
+      }
     }
 
     setDrag(null);
@@ -1077,6 +1284,30 @@ export default function Dashboard() {
               <div className="flex items-center gap-1">
                 <button
                   type="button"
+                  onClick={() => {
+                    setCreatingGroup((prev) => !prev);
+                    setNewGroupName("");
+                  }}
+                  aria-label="新建分组"
+                  title="新建分组（把标的分类）"
+                  className={`inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[10.5px] transition-colors ${
+                    creatingGroup
+                      ? "bg-accent-soft text-accent"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path
+                      d="M4 6.5A2.5 2.5 0 0 1 6.5 4h3.2l1.8 2H17.5A2.5 2.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5v-10Z"
+                      stroke="currentColor"
+                      strokeWidth="1.7"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  分组
+                </button>
+                <button
+                  type="button"
                   onClick={() => setSortMode((prev) => nextWatchlistSort(prev))}
                   aria-pressed={sortMode !== "manual"}
                   aria-label={`按涨跌幅排序（当前：${sortWatchlistLabel(sortMode)}）`}
@@ -1120,111 +1351,310 @@ export default function Dashboard() {
               </div>
             </div>
 
+            {creatingGroup && (
+              <div className="hidden items-center gap-1 border-b border-border px-2 py-1.5 lg:flex">
+                <input
+                  autoFocus
+                  value={newGroupName}
+                  maxLength={MAX_GROUP_NAME}
+                  onChange={(event) => setNewGroupName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      const message = createGroupAndAssign(newGroupName);
+                      if (message) notify("分组", message);
+                    }
+                    if (event.key === "Escape") setCreatingGroup(false);
+                  }}
+                  placeholder="分组名称，如 科技 / 指数"
+                  aria-label="新分组名称"
+                  className="h-6 min-w-0 flex-1 rounded-md border border-border bg-card px-1.5 text-[11px] outline-none focus:border-accent/60"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const message = createGroupAndAssign(newGroupName);
+                    if (message) notify("分组", message);
+                  }}
+                  className="h-6 shrink-0 rounded-md bg-foreground px-2 text-[10.5px] font-medium text-background"
+                >
+                  创建
+                </button>
+              </div>
+            )}
+
             <div
               ref={watchlistListRef}
               className="scroll-thin flex gap-1 overflow-x-auto p-2 lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-y-auto"
               aria-label="自选股列表（可拖动排序）"
             >
-              {visibleWatchlist.map((symbol, index) => {
-                const item = quotes[symbol];
-                const up = (item?.changePercent ?? 0) >= 0;
-                const isDragging = drag?.symbol === symbol;
-                const isDropTarget = drag !== null && drag.to === index && drag.symbol !== symbol;
+              {watchlistSections.map((section) => {
+                const collapsed = Boolean(collapsedGroups[section.id]);
+                const isGroupDropTarget = drag?.headerGroupId === section.id;
+
                 return (
-                  <div
-                    key={symbol}
-                    data-watchlist-item
-                    onPointerDown={(event) => handleItemPointerDown(event, symbol, index)}
-                    onPointerMove={handleItemPointerMove}
-                    onPointerUp={(event) => finishDrag(event, true)}
-                    onPointerCancel={(event) => finishDrag(event, false)}
-                    className={`group relative w-[236px] shrink-0 select-none rounded-lg border transition-colors lg:w-auto ${
-                      isDragging
-                        ? "z-10 cursor-grabbing border-accent/50 bg-card opacity-70 shadow-[var(--shadow-pop)]"
-                        : `cursor-grab ${
-                            selected === symbol
-                              ? "border-border bg-muted"
-                              : "border-transparent hover:bg-hover"
-                          }`
-                    } ${isDropTarget ? "border-accent/40 bg-accent-soft/30" : ""}`}
-                  >
-                    <span
-                      className="pointer-events-none absolute left-1 top-1/2 -translate-y-1/2 text-muted-foreground/60 opacity-0 transition-opacity group-hover:opacity-100"
-                      aria-hidden="true"
-                    >
-                      <svg width="9" height="14" viewBox="0 0 10 16" fill="currentColor">
-                        <circle cx="3" cy="4" r="1.1" />
-                        <circle cx="7" cy="4" r="1.1" />
-                        <circle cx="3" cy="8" r="1.1" />
-                        <circle cx="7" cy="8" r="1.1" />
-                        <circle cx="3" cy="12" r="1.1" />
-                        <circle cx="7" cy="12" r="1.1" />
-                      </svg>
-                    </span>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        // 拖拽松手后的 click 不应该切换选中
-                        if (suppressClickRef.current) {
-                          suppressClickRef.current = false;
-                          return;
-                        }
-                        setSelected(symbol);
-                      }}
-                      className="flex w-full items-center gap-2 py-2 pl-4 pr-2.5 text-left"
-                      aria-label={`查看 ${symbol} 行情`}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[13px] font-medium leading-4">{symbol}</span>
-                          {item?.session && isExtendedSession(item.session) && (
-                            <SessionBadge session={item.session} size="xs" />
-                          )}
-                          {item?.source === "perplexity" && (
-                            <span
-                              className="h-1 w-1 rounded-full bg-amber-500"
-                              title="AI 估算报价"
-                            />
-                          )}
-                        </div>
-                        <p className="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground">
-                          {item?.name ?? (quotesLoading ? "加载中…" : "暂无数据")}
-                        </p>
-                      </div>
-
-                      <Sparkline
-                        data={item?.sparkline ?? []}
-                        positive={up}
-                        className="h-6 w-12 shrink-0"
-                      />
-
-                      <div className="w-[68px] shrink-0 text-right">
-                        <p className="num text-[12.5px] leading-4">
-                          {item ? formatPrice(item.price, item.currency) : "--"}
-                        </p>
-                        <p
-                          className={`num mt-0.5 text-[11px] leading-4 ${
-                            up ? "text-positive-text" : "text-negative-text"
-                          }`}
-                        >
-                          {formatPercent(item?.changePercent)}
-                        </p>
-                      </div>
-                    </button>
-
-                    {watchlist.length > 1 && (
-                      <button
-                        type="button"
-                        onPointerDown={(event) => event.stopPropagation()}
-                        onClick={() => removeSymbol(symbol)}
-                        className="absolute -right-1 -top-1 hidden h-4 w-4 items-center justify-center rounded-full border border-border bg-card text-[10px] leading-none text-muted-foreground shadow-sm transition-colors hover:border-negative/40 hover:text-negative-text group-hover:flex"
-                        title={`从自选股移除 ${symbol}`}
-                        aria-label={`移除 ${symbol}`}
+                  <div key={section.id} className="contents lg:flex lg:shrink-0 lg:flex-col lg:gap-1">
+                    {hasGroups && (
+                      <div
+                        data-watchlist-group={section.id}
+                        className={`hidden items-center gap-1 rounded-md px-1.5 py-1 lg:flex ${
+                          isGroupDropTarget ? "bg-accent-soft/50 ring-1 ring-accent/30" : ""
+                        }`}
                       >
-                        ×
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => toggleGroupCollapsed(section.id)}
+                          aria-expanded={!collapsed}
+                          title={collapsed ? "展开分组" : "收起分组"}
+                          className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+                        >
+                          <svg
+                            width="9"
+                            height="9"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            aria-hidden="true"
+                            className={`shrink-0 text-muted-foreground transition-transform ${
+                              collapsed ? "-rotate-90" : ""
+                            }`}
+                          >
+                            <path
+                              d="m6 9 6 6 6-6"
+                              stroke="currentColor"
+                              strokeWidth="2.4"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                          <span className="truncate text-[10.5px] font-medium text-foreground/80">
+                            {section.name}
+                          </span>
+                          <span className="num shrink-0 rounded-full bg-muted px-1 text-[9px] leading-4 text-muted-foreground">
+                            {section.symbols.length}
+                          </span>
+                        </button>
+
+                        {section.id !== UNGROUPED_ID && (
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setGroupMenu((prev) => (prev === section.id ? null : section.id));
+                                setRenamingGroup(null);
+                              }}
+                              disabled={Boolean(drag?.symbol)}
+                              aria-label={`${section.name} 分组操作`}
+                              title="分组操作"
+                              className="flex h-5 w-5 items-center justify-center rounded text-[12px] leading-none text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+                            >
+                              ⋯
+                            </button>
+
+                            {groupMenu === section.id && (
+                              <div className="absolute right-0 top-full z-50 mt-1 w-[150px] rounded-lg border border-border bg-popover p-1 shadow-[var(--shadow-pop)]">
+                                {renamingGroup === section.id ? (
+                                  <input
+                                    autoFocus
+                                    defaultValue={section.name}
+                                    maxLength={MAX_GROUP_NAME}
+                                    aria-label="重命名分组"
+                                    onKeyDown={(event) => {
+                                      if (event.key === "Enter") {
+                                        const message = renameGroupTo(
+                                          section.id,
+                                          event.currentTarget.value,
+                                        );
+                                        if (message) notify("分组", message);
+                                      }
+                                      if (event.key === "Escape") setRenamingGroup(null);
+                                    }}
+                                    onBlur={() => setRenamingGroup(null)}
+                                    className="h-6 w-full rounded-md border border-border bg-card px-1.5 text-[11px] outline-none focus:border-accent/60"
+                                  />
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => setRenamingGroup(section.id)}
+                                      className="flex w-full items-center rounded-md px-1.5 py-1 text-left text-[11px] text-foreground/85 transition-colors hover:bg-muted"
+                                    >
+                                      重命名
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => deleteGroup(section.id)}
+                                      className="flex w-full items-center rounded-md px-1.5 py-1 text-left text-[11px] text-negative-text transition-colors hover:bg-negative-soft"
+                                    >
+                                      删除分组（标的保留）
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     )}
+
+                    {(!hasGroups || !collapsed) &&
+                      section.symbols.map((symbol) => {
+                        const item = quotes[symbol];
+                        const up = (item?.changePercent ?? 0) >= 0;
+                        const isDragging = drag?.symbol === symbol;
+                        const isDropTarget =
+                          drag?.targetSymbol === symbol && drag.symbol !== symbol;
+                        const groupName = groupNameOf(symbol);
+
+                        return (
+                          <div
+                            key={symbol}
+                            data-watchlist-item
+                            data-symbol={symbol}
+                            onPointerDown={(event) => handleItemPointerDown(event, symbol)}
+                            onPointerMove={handleItemPointerMove}
+                            onPointerUp={(event) => finishDrag(event, true)}
+                            onPointerCancel={(event) => finishDrag(event, false)}
+                            className={`group relative w-[236px] shrink-0 select-none rounded-lg border transition-colors lg:w-auto ${
+                              isDragging
+                                ? "z-10 cursor-grabbing border-accent/50 bg-card opacity-70 shadow-[var(--shadow-pop)]"
+                                : `cursor-grab ${
+                                    selected === symbol
+                                      ? "border-border bg-muted"
+                                      : "border-transparent hover:bg-hover"
+                                  }`
+                            } ${isDropTarget ? "border-accent/40 bg-accent-soft/30" : ""}`}
+                          >
+                            <span
+                              className="pointer-events-none absolute left-1 top-1/2 -translate-y-1/2 text-muted-foreground/60 opacity-0 transition-opacity group-hover:opacity-100"
+                              aria-hidden="true"
+                            >
+                              <svg width="9" height="14" viewBox="0 0 10 16" fill="currentColor">
+                                <circle cx="3" cy="4" r="1.1" />
+                                <circle cx="7" cy="4" r="1.1" />
+                                <circle cx="3" cy="8" r="1.1" />
+                                <circle cx="7" cy="8" r="1.1" />
+                                <circle cx="3" cy="12" r="1.1" />
+                                <circle cx="7" cy="12" r="1.1" />
+                              </svg>
+                            </span>
+
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => {
+                                // 拖拽松手后的 click 不应该切换选中
+                                if (suppressClickRef.current) {
+                                  suppressClickRef.current = false;
+                                  return;
+                                }
+                                setSelected(symbol);
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  setSelected(symbol);
+                                }
+                              }}
+                              className="flex w-full cursor-pointer items-center gap-2 py-2 pl-4 pr-2.5 text-left"
+                              aria-label={`查看 ${symbol} 行情`}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[13px] font-medium leading-4">{symbol}</span>
+                                  {item?.session && isExtendedSession(item.session) && (
+                                    <SessionBadge session={item.session} size="xs" />
+                                  )}
+                                  <button
+                                    type="button"
+                                    onPointerDown={(event) => event.stopPropagation()}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setGroupPicker((prev) => (prev === symbol ? null : symbol));
+                                    }}
+                                    aria-label={`${symbol} 分组`}
+                                    title={groupName ? `分组：${groupName}` : "设置分组"}
+                                    className="shrink-0 rounded-sm text-muted-foreground transition-colors hover:text-foreground"
+                                  >
+                                    {groupName ? (
+                                      <span className="block max-w-[56px] truncate rounded-sm bg-muted px-1 text-[9px] leading-4 transition-colors hover:bg-accent-soft hover:text-accent">
+                                        {groupName}
+                                      </span>
+                                    ) : (
+                                      <svg
+                                        width="10"
+                                        height="10"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        aria-hidden="true"
+                                        className="opacity-0 transition-opacity group-hover:opacity-70"
+                                      >
+                                        <path
+                                          d="M20 12.5 12.5 20a2.1 2.1 0 0 1-3 0L4 14.5V4h10.5L20 9.5a2.1 2.1 0 0 1 0 3Z"
+                                          stroke="currentColor"
+                                          strokeWidth="1.7"
+                                          strokeLinejoin="round"
+                                        />
+                                        <circle cx="8.5" cy="8.5" r="1.3" fill="currentColor" />
+                                      </svg>
+                                    )}
+                                  </button>
+                                  {item?.source === "perplexity" && (
+                                    <span
+                                      className="h-1 w-1 rounded-full bg-amber-500"
+                                      title="AI 估算报价"
+                                    />
+                                  )}
+                                </div>
+                                <p className="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground">
+                                  {item?.name ?? (quotesLoading ? "加载中…" : "暂无数据")}
+                                </p>
+                              </div>
+
+                              <Sparkline
+                                data={item?.sparkline ?? []}
+                                positive={up}
+                                className="h-6 w-12 shrink-0"
+                              />
+
+                              <div className="w-[68px] shrink-0 text-right">
+                                <p className="num text-[12.5px] leading-4">
+                                  {item ? formatPrice(item.price, item.currency) : "--"}
+                                </p>
+                                <p
+                                  className={`num mt-0.5 text-[11px] leading-4 ${
+                                    up ? "text-positive-text" : "text-negative-text"
+                                  }`}
+                                >
+                                  {formatPercent(item?.changePercent)}
+                                </p>
+                              </div>
+                            </div>
+
+                            {groupPicker === symbol && (
+                              <GroupPicker
+                                symbol={symbol}
+                                groups={groups}
+                                currentGroupId={groupMap[symbol] ?? null}
+                                onAssign={assignGroup}
+                                onCreateGroup={(name) => createGroupAndAssign(name, symbol)}
+                                onClose={() => setGroupPicker(null)}
+                              />
+                            )}
+
+                            {watchlist.length > 1 && (
+                              <button
+                                type="button"
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onClick={() => removeSymbol(symbol)}
+                                className="absolute -right-1 -top-1 hidden h-4 w-4 items-center justify-center rounded-full border border-border bg-card text-[10px] leading-none text-muted-foreground shadow-sm transition-colors hover:border-negative/40 hover:text-negative-text group-hover:flex"
+                                title={`从自选股移除 ${symbol}`}
+                                aria-label={`移除 ${symbol}`}
+                              >
+                                ×
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
                   </div>
                 );
               })}
