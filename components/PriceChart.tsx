@@ -764,7 +764,7 @@ export default function PriceChart({
     return (
       <div
         ref={wrapRef}
-        className="relative flex w-full items-center justify-center text-[12px] text-muted-foreground [--chart-h:250px] sm:[--chart-h:310px] lg:[--chart-h:370px]"
+        className="relative flex w-full items-center justify-center text-[12px] text-muted-foreground [--chart-h:260px] sm:[--chart-h:340px] lg:[--chart-h:440px] 2xl:[--chart-h:480px]"
         style={{ height: `calc(var(--chart-h) + ${panes.length * (PANE_HEIGHT + PANE_GAP)}px)` }}
       >
         {t("暂无走势数据")}
@@ -862,7 +862,7 @@ export default function PriceChart({
       onPointerUp={handlePointerEnd}
       onPointerCancel={handlePointerEnd}
       title={isZoomed ? t("拖动平移 · 双击复位") : t("滚轮缩放 · 拖动平移 · 双击复位")}
-      className={`relative w-full select-none [--chart-h:250px] sm:[--chart-h:310px] lg:[--chart-h:370px] ${
+      className={`relative w-full select-none [--chart-h:260px] sm:[--chart-h:340px] lg:[--chart-h:440px] 2xl:[--chart-h:480px] ${
         panning ? "cursor-grabbing" : isZoomed ? "cursor-grab" : ""
       }`}
       style={{
