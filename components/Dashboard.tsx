@@ -9,6 +9,7 @@ import PriceChart from "@/components/PriceChart";
 import InsightPanel from "@/components/InsightPanel";
 import ThemeToggle from "@/components/ThemeToggle";
 import LocaleSwitcher from "@/components/LocaleSwitcher";
+import MobileTabBar from "@/components/MobileTabBar";
 import IndicatorControls from "@/components/IndicatorControls";
 import IntervalSelect from "@/components/IntervalSelect";
 import IndexOverview from "@/components/IndexOverview";
@@ -94,6 +95,7 @@ const INDICATORS_KEY = "data-insider:indicators:v1";
 const INTERVALS_KEY = "data-insider:intervals:v1";
 const CHART_MODE_KEY = "data-insider:chart-mode:v1";
 const WATCHLIST_SORT_KEY = "data-insider:watchlist-sort:v1";
+const WATCHLIST_LAYOUT_KEY = "data-insider:watchlist-layout:v1";
 const GROUPS_KEY = "data-insider:watchlist-groups:v1";
 const GROUP_MAP_KEY = "data-insider:watchlist-group-map:v1";
 const GROUP_COLLAPSED_KEY = "data-insider:watchlist-groups-collapsed:v1";
@@ -159,6 +161,10 @@ export default function Dashboard() {
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [groupPicker, setGroupPicker] = useState<string | null>(null);
   const [groupMenu, setGroupMenu] = useState<string | null>(null);
+  /** 专注模式：图表铺满视口 */
+  const [focusMode, setFocusMode] = useState(false);
+  /** 手机端自选股：横向滑动 / 竖向列表 */
+  const [watchlistStacked, setWatchlistStacked] = useState(false);
   const groupMenuRef = useRef<HTMLDivElement>(null);
   const newGroupRef = useRef<HTMLDivElement>(null);
   const addBoxRef = useRef<HTMLDivElement>(null);
@@ -270,6 +276,8 @@ export default function Dashboard() {
       if (savedMode === "line" || savedMode === "candle") setChartMode(savedMode);
       const savedSort = window.localStorage.getItem(WATCHLIST_SORT_KEY);
       if (isWatchlistSort(savedSort)) setSortMode(savedSort);
+      const savedLayout = window.localStorage.getItem(WATCHLIST_LAYOUT_KEY);
+      if (savedLayout === "stack" || savedLayout === "scroll") setWatchlistStacked(savedLayout === "stack");
       const savedGroups = window.localStorage.getItem(GROUPS_KEY);
       const restoredGroups = savedGroups ? sanitizeGroups(JSON.parse(savedGroups)) : [];
       if (restoredGroups.length > 0) setGroups(restoredGroups);
@@ -307,6 +315,7 @@ export default function Dashboard() {
       window.localStorage.setItem(INTERVALS_KEY, JSON.stringify(intervalByRange));
       window.localStorage.setItem(CHART_MODE_KEY, chartMode);
       window.localStorage.setItem(WATCHLIST_SORT_KEY, sortMode);
+      window.localStorage.setItem(WATCHLIST_LAYOUT_KEY, watchlistStacked ? "stack" : "scroll");
       window.localStorage.setItem(GROUPS_KEY, JSON.stringify(groups));
       window.localStorage.setItem(GROUP_MAP_KEY, JSON.stringify(groupMap));
       window.localStorage.setItem(GROUP_COLLAPSED_KEY, JSON.stringify(collapsedGroups));
@@ -322,6 +331,7 @@ export default function Dashboard() {
     intervalByRange,
     chartMode,
     sortMode,
+    watchlistStacked,
     groups,
     groupMap,
     collapsedGroups,
@@ -692,6 +702,23 @@ export default function Dashboard() {
   const dismissToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
+
+  /* ------------------------------ 专注模式 ------------------------------ */
+
+  useEffect(() => {
+    if (!focusMode) return;
+
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setFocusMode(false);
+    }
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKey);
+    return () => {
+      window.removeEventListener("keydown", handleKey);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [focusMode]);
 
   /* -------------------------- 弹层：点外部 / Esc 收起 -------------------------- */
 
@@ -1402,7 +1429,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main id="top" className="mx-auto max-w-[1440px] xl:max-w-[1640px] 2xl:max-w-[2200px] px-4 py-5 lg:px-6">
+      <main id="top" className="mx-auto max-w-[1440px] px-4 pb-24 pt-5 lg:px-6 lg:pb-5 xl:max-w-[1640px] 2xl:max-w-[2200px]">
         <div id="market" className="mb-4 flex scroll-mt-20 flex-wrap items-end justify-between gap-2">
           <div>
             <h1 className="text-[24px] font-medium leading-tight tracking-tight">{t("美股行情")}</h1>
@@ -1504,10 +1531,10 @@ export default function Dashboard() {
           </div>
         )}
 
-        <div className="grid items-start gap-4 lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)_320px] 2xl:grid-cols-[320px_minmax(0,1fr)_340px]">
+        <div className="grid items-start gap-4 md:grid-cols-[250px_minmax(0,1fr)] lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)_320px] 2xl:grid-cols-[320px_minmax(0,1fr)_340px]">
           <aside
             id="watchlist"
-            className="scroll-mt-20 overflow-hidden rounded-xl border border-border bg-card lg:sticky lg:top-[68px] lg:flex lg:max-h-[calc(100vh-88px)] lg:flex-col"
+            className="scroll-mt-20 overflow-hidden rounded-xl border border-border bg-card md:sticky md:top-[68px] md:flex md:max-h-[calc(100vh-88px)] md:flex-col"
           >
             <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
               <div className="flex items-center gap-2">
@@ -1576,6 +1603,21 @@ export default function Dashboard() {
                   <span className="num" aria-hidden="true">
                     {sortMode === "change-desc" ? "↓" : sortMode === "change-asc" ? "↑" : "↕"}
                   </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWatchlistStacked((prev) => !prev)}
+                  aria-label={watchlistStacked ? t("切换为横向滑动") : t("切换为竖向列表")}
+                  title={watchlistStacked ? t("横向滑动") : t("竖向列表")}
+                  className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:hidden"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    {watchlistStacked ? (
+                      <path d="M4 9h16M4 15h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                    ) : (
+                      <path d="M9 4v16M15 4v16M4 9h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                    )}
+                  </svg>
                 </button>
                 <button
                   type="button"
@@ -1759,7 +1801,9 @@ export default function Dashboard() {
 
             <div
               ref={watchlistListRef}
-              className="scroll-thin flex gap-1 overflow-x-auto p-2 lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-y-auto"
+              className={`scroll-thin flex gap-1 p-2 md:min-h-0 md:flex-1 md:flex-col md:overflow-y-auto ${
+                watchlistStacked ? "max-h-[62vh] flex-col overflow-y-auto" : "overflow-x-auto"
+              }`}
               aria-label={t("自选股列表（可拖动排序）")}
             >
               {watchlistSections.map((section) => {
@@ -1767,11 +1811,14 @@ export default function Dashboard() {
                 const isGroupDropTarget = drag?.headerGroupId === section.id;
 
                 return (
-                  <div key={section.id} className="contents lg:flex lg:shrink-0 lg:flex-col lg:gap-1">
+                  <div
+                    key={section.id}
+                    className={`${watchlistStacked ? "flex flex-col gap-1" : "contents"} md:flex md:shrink-0 md:flex-col md:gap-1`}
+                  >
                     {hasGroups && (
                       <div
                         data-watchlist-group={section.id}
-                        className={`hidden items-center gap-1 rounded-md px-1.5 py-1 lg:flex ${
+                        className={`${watchlistStacked ? "flex" : "hidden"} items-center gap-1 rounded-md px-1.5 py-1 md:flex ${
                           isGroupDropTarget ? "bg-accent-soft/50 ring-1 ring-accent/30" : ""
                         }`}
                       >
@@ -1891,7 +1938,7 @@ export default function Dashboard() {
                             onPointerMove={handleItemPointerMove}
                             onPointerUp={(event) => finishDrag(event, true)}
                             onPointerCancel={(event) => finishDrag(event, false)}
-                            className={`group relative w-[236px] shrink-0 select-none rounded-lg border transition-colors lg:w-auto ${
+                            className={`group relative shrink-0 select-none rounded-lg border transition-colors md:w-auto ${watchlistStacked ? "w-auto" : "w-[236px]"} ${
                               isDragging
                                 ? "z-10 cursor-grabbing border-accent/50 bg-card opacity-70 shadow-[var(--shadow-pop)]"
                                 : `cursor-grab ${
@@ -2062,6 +2109,25 @@ export default function Dashboard() {
               </div>
             )}
 
+            <div
+              className={
+                focusMode ? "fixed inset-0 z-[60] overflow-y-auto bg-background p-3 sm:p-4" : ""
+              }
+            >
+              {focusMode && (
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="text-[13px] font-medium">
+                    {selected} · {t(RANGE_CONFIG[range].label)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setFocusMode(false)}
+                    className="inline-flex h-7 items-center gap-1 rounded-lg border border-border bg-card px-2 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    {t("退出专注")}
+                  </button>
+                </div>
+              )}
             <article className="rounded-xl border border-border bg-card">
               <div className="p-4 sm:p-5">
                 <div className="flex flex-wrap items-start justify-between gap-4">
@@ -2218,6 +2284,21 @@ export default function Dashboard() {
                     />
                     <button
                       type="button"
+                      onClick={() => setFocusMode((prev) => !prev)}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      aria-label={focusMode ? t("退出专注") : t("专注模式")}
+                      title={focusMode ? t("退出专注") : t("专注模式（铺满屏幕看图）")}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        {focusMode ? (
+                          <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        ) : (
+                          <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        )}
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
                       onClick={exportCsv}
                       disabled={!chart}
                       className="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
@@ -2300,6 +2381,7 @@ export default function Dashboard() {
                       mode={chartMode}
                       alertLines={chartAlertLines}
                       sessions={chart.sessions}
+                      heightClass={focusMode ? "[--chart-h:calc(100vh_-_300px)]" : undefined}
                     />
                   ) : (
                     <div className="skeleton h-[260px] w-full rounded-lg sm:h-[340px] lg:h-[440px] 2xl:h-[480px]" />
@@ -2327,6 +2409,7 @@ export default function Dashboard() {
                 ))}
               </div>
             </article>
+            </div>
 
             {technicalSummary && (
               <TechnicalSummaryCard summary={technicalSummary} range={range} interval={interval} />
@@ -2360,7 +2443,8 @@ export default function Dashboard() {
           </section>
 
           <aside
-            className="min-w-0 space-y-4 lg:col-span-2 xl:col-span-1"
+            id="panorama"
+            className="min-w-0 scroll-mt-20 space-y-4 md:col-span-2 xl:col-span-1"
             aria-label={t("市场全景")}
           >
             <CrossAssetPanel
@@ -2390,7 +2474,7 @@ export default function Dashboard() {
       </main>
 
       <footer className="border-t border-border">
-        <div className="mx-auto flex max-w-[1440px] xl:max-w-[1640px] 2xl:max-w-[2200px] flex-col gap-2 px-4 py-6 text-[11px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between lg:px-6">
+        <div className="mx-auto flex max-w-[1440px] xl:max-w-[1640px] 2xl:max-w-[2200px] flex-col gap-2 px-4 pb-24 pt-6 text-[11px] text-muted-foreground sm:flex-row lg:pb-6 sm:items-center sm:justify-between lg:px-6">
           <p>
             {t("数据来源 Yahoo Finance / Nasdaq / Perplexity · 行情可能延迟 15 分钟 · 仅供学习研究，不构成投资建议")}
           </p>
@@ -2407,6 +2491,8 @@ export default function Dashboard() {
           </div>
         </div>
       </footer>
+
+      <MobileTabBar />
 
       <AlertToasts items={toasts} onDismiss={dismissToast} />
 

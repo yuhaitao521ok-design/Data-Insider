@@ -250,6 +250,16 @@ const ZH_HANT: Record<string, string> = {
   "切换到": "切換到",
   "已启用": "已啟用",
   "指标": "指標",
+  "专注模式": "專注模式",
+  "专注模式（铺满屏幕看图）": "專注模式（鋪滿螢幕看圖）",
+  "退出专注": "退出專注",
+  "竖向列表": "豎向列表",
+  "横向滑动": "橫向滑動",
+  "切换为竖向列表": "切換為豎向列表",
+  "切换为横向滑动": "切換為橫向滑動",
+  "全景": "全景",
+  "移动端导航": "行動版導覽",
+
 };
 
 /** 英文词典（key 为简体原文） */
@@ -482,6 +492,16 @@ const EN: Record<string, string> = {
   "切换到": "Switch to",
   "已启用": "enabled",
   "指标": "Indicators",
+  "专注模式": "Focus mode",
+  "专注模式（铺满屏幕看图）": "Focus mode (chart fills the screen)",
+  "退出专注": "Exit focus",
+  "竖向列表": "List view",
+  "横向滑动": "Scroll view",
+  "切换为竖向列表": "Switch to list view",
+  "切换为横向滑动": "Switch to scroll view",
+  "全景": "Overview",
+  "移动端导航": "Mobile navigation",
+
 };
 
 const DICTIONARIES: Record<Locale, Record<string, string>> = {
