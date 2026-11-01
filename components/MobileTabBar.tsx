@@ -10,6 +10,13 @@ const TAB_LABEL: Record<(typeof TABS)[number], string> = {
   panorama: "全景",
 };
 
+/** 滚动目标：行情直接定位到图表区 */
+const TAB_TARGET: Record<(typeof TABS)[number], string> = {
+  market: "chart",
+  watchlist: "watchlist",
+  panorama: "panorama",
+};
+
 /** 移动端底部标签栏：三个锚点（行情 / 自选股 / 市场全景） */
 export default function MobileTabBar() {
   const { t } = useI18n();
@@ -17,7 +24,7 @@ export default function MobileTabBar() {
 
   function go(id: (typeof TABS)[number]) {
     setActive(id);
-    document.getElementById(id)?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    document.getElementById(TAB_TARGET[id])?.scrollIntoView?.({ behavior: "smooth", block: "start" });
   }
 
   return (
