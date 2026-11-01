@@ -1298,7 +1298,7 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
-        <div className="mx-auto flex max-w-[1440px] flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 lg:px-6">
+        <div className="mx-auto flex max-w-[1440px] xl:max-w-[1640px] 2xl:max-w-[2200px] flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 lg:px-6">
           <a href="#top" className="flex shrink-0 items-center gap-2">
             <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-card text-foreground">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -1402,7 +1402,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main id="top" className="mx-auto max-w-[1440px] px-4 py-5 lg:px-6">
+      <main id="top" className="mx-auto max-w-[1440px] xl:max-w-[1640px] 2xl:max-w-[2200px] px-4 py-5 lg:px-6">
         <div id="market" className="mb-4 flex scroll-mt-20 flex-wrap items-end justify-between gap-2">
           <div>
             <h1 className="text-[24px] font-medium leading-tight tracking-tight">{t("美股行情")}</h1>
@@ -1504,7 +1504,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        <div className="grid items-start gap-4 lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)_320px]">
+        <div className="grid items-start gap-4 lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)_320px] 2xl:grid-cols-[320px_minmax(0,1fr)_340px]">
           <aside
             id="watchlist"
             className="scroll-mt-20 overflow-hidden rounded-xl border border-border bg-card lg:sticky lg:top-[68px] lg:flex lg:max-h-[calc(100vh-88px)] lg:flex-col"
@@ -2256,7 +2256,7 @@ export default function Dashboard() {
 
                 <div className="mt-3">
                   {chartError ? (
-                    <div className="flex h-[250px] flex-col items-center justify-center gap-2.5 sm:h-[310px] lg:h-[360px]">
+                    <div className="flex h-[260px] flex-col items-center justify-center gap-2.5 sm:h-[340px] lg:h-[440px] 2xl:h-[480px]">
                       <p className="max-w-md px-4 text-center text-[12px] leading-5 text-muted-foreground">
                         {chartError}
                       </p>
@@ -2302,7 +2302,7 @@ export default function Dashboard() {
                       sessions={chart.sessions}
                     />
                   ) : (
-                    <div className="skeleton h-[250px] w-full rounded-lg sm:h-[310px] lg:h-[360px]" />
+                    <div className="skeleton h-[260px] w-full rounded-lg sm:h-[340px] lg:h-[440px] 2xl:h-[480px]" />
                   )}
                 </div>
 
@@ -2390,7 +2390,7 @@ export default function Dashboard() {
       </main>
 
       <footer className="border-t border-border">
-        <div className="mx-auto flex max-w-[1440px] flex-col gap-2 px-4 py-6 text-[11px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between lg:px-6">
+        <div className="mx-auto flex max-w-[1440px] xl:max-w-[1640px] 2xl:max-w-[2200px] flex-col gap-2 px-4 py-6 text-[11px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between lg:px-6">
           <p>
             {t("数据来源 Yahoo Finance / Nasdaq / Perplexity · 行情可能延迟 15 分钟 · 仅供学习研究，不构成投资建议")}
           </p>
