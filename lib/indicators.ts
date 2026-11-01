@@ -7,7 +7,7 @@ import type { ChartPoint } from "@/lib/types";
  * 也不引入第三方指标库，保持与图表组件零依赖。
  */
 
-export const INDICATOR_TYPES = ["MACD", "RSI", "BOLL"] as const;
+export const INDICATOR_TYPES = ["MA", "EMA", "MACD", "RSI", "BOLL"] as const;
 export type IndicatorType = (typeof INDICATOR_TYPES)[number];
 
 export interface IndicatorConfig {
@@ -57,6 +57,30 @@ export const INDICATOR_DEFINITIONS: Record<IndicatorType, IndicatorDefinition> =
       { key: "period", label: "周期", min: 2, max: 100, step: 1, integer: true },
       { key: "overbought", label: "超买阈值", min: 50, max: 95, step: 1, integer: true },
       { key: "oversold", label: "超卖阈值", min: 5, max: 50, step: 1, integer: true },
+    ],
+  },
+  MA: {
+    type: "MA",
+    name: "MA",
+    description: "简单移动平均线（3 条），判断趋势方向与支撑压力",
+    location: "overlay",
+    defaults: { fast: 5, mid: 20, slow: 60 },
+    fields: [
+      { key: "fast", label: "快线周期", min: 2, max: 200, step: 1, integer: true },
+      { key: "mid", label: "中线周期", min: 3, max: 300, step: 1, integer: true },
+      { key: "slow", label: "慢线周期", min: 4, max: 500, step: 1, integer: true },
+    ],
+  },
+  EMA: {
+    type: "EMA",
+    name: "EMA",
+    description: "指数移动平均线（3 条，虚线），对近期价格更敏感",
+    location: "overlay",
+    defaults: { fast: 5, mid: 20, slow: 60 },
+    fields: [
+      { key: "fast", label: "快线周期", min: 2, max: 200, step: 1, integer: true },
+      { key: "mid", label: "中线周期", min: 3, max: 300, step: 1, integer: true },
+      { key: "slow", label: "慢线周期", min: 4, max: 500, step: 1, integer: true },
     ],
   },
   BOLL: {
@@ -246,6 +270,9 @@ export function validateParams(
   if (type === "RSI" && params.overbought <= params.oversold) {
     return "超买阈值必须大于超卖阈值";
   }
+  if ((type === "MA" || type === "EMA") && !(params.fast < params.mid && params.mid < params.slow)) {
+    return "均线周期需满足：快线 < 中线 < 慢线";
+  }
   return null;
 }
 
@@ -274,6 +301,7 @@ export function sanitizeIndicatorConfigs(raw: unknown): IndicatorConfig[] {
 
 /** 指标标签上的参数摘要，例如 12 / 26 / 9、14 · 30/70、20 · 2σ */
 export function paramsSummary(type: IndicatorType, params: Record<string, number>): string {
+  if (type === "MA" || type === "EMA") return `${params.fast} / ${params.mid} / ${params.slow}`;
   if (type === "MACD") return `${params.fast} / ${params.slow} / ${params.signal}`;
   if (type === "RSI") return `${params.period} · ${params.oversold}/${params.overbought}`;
   return `${params.period} · ${params.multiplier}σ`;
@@ -289,6 +317,7 @@ export function requiredIndicatorPoints(config: IndicatorConfig): number {
   const params = normalizeParams(config.type, config.params);
   if (config.type === "MACD") return params.slow + params.signal - 1;
   if (config.type === "RSI") return params.period + 1;
+  if (config.type === "MA" || config.type === "EMA") return params.slow;
   return params.period;
 }
 
@@ -374,6 +403,29 @@ export function buildIndicatorRenderData(
           { value: params.overbought, label: String(params.overbought) },
           { value: params.oversold, label: String(params.oversold) },
         ],
+      });
+      continue;
+    }
+
+    if (config.type === "MA" || config.type === "EMA") {
+      const isEma = config.type === "EMA";
+      const periods: { key: "fast" | "mid" | "slow"; color: string }[] = [
+        { key: "fast", color: "var(--chart-series-1)" },
+        { key: "mid", color: "var(--chart-series-2)" },
+        { key: "slow", color: "var(--chart-series-3)" },
+      ];
+
+      overlays.push({
+        id: config.id,
+        label: `${config.type}(${params.fast},${params.mid},${params.slow})`,
+        series: periods.map(({ key, color }) => ({
+          label: `${config.type}${params[key]}`,
+          values: isEma ? ema(closes, params[key]) : sma(closes, params[key]),
+          color,
+          type: "line" as const,
+          // EMA 用虚线，和同时开启的 MA 区分
+          dashed: isEma,
+        })),
       });
       continue;
     }
