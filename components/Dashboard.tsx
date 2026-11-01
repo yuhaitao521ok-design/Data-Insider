@@ -166,6 +166,8 @@ export default function Dashboard() {
   /** 分组「⋯」菜单的锚点 */
   const [menuAnchor, setMenuAnchor] = useState<{ left: number; right: number; top: number; bottom: number } | null>(null);
   const [groupMenu, setGroupMenu] = useState<string | null>(null);
+  /** 顶部导航下拉（当前只用于「行情」） */
+  const [navMenu, setNavMenu] = useState<"market" | null>(null);
   /** 专注模式：图表铺满视口 */
   const [focusMode, setFocusMode] = useState(false);
   /** 手机端自选股：横向滑动 / 竖向列表 */
@@ -1368,66 +1370,24 @@ export default function Dashboard() {
             <span className="text-[15px] font-medium tracking-tight">Data Insider</span>
           </a>
 
-          <nav className="ml-3 hidden items-stretch gap-1 self-stretch lg:flex" aria-label={t("页面导航")}>
-            {[
-              {
-                label: t("行情"),
-                href: "#chart",
-                icon: (
-                  <path
-                    d="M4 16.5 8.5 10l3.6 4.2L16.5 7.5H20"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                ),
-              },
-              {
-                label: t("自选股"),
-                href: "#watchlist",
-                icon: (
-                  <path
-                    d="M6 4h12v16l-6-3.6L6 20V4Z"
-                    stroke="currentColor"
-                    strokeWidth="1.7"
-                    strokeLinejoin="round"
-                  />
-                ),
-              },
-              {
-                label: t("全景"),
-                href: "#panorama",
-                icon: (
-                  <>
-                    <rect x="4" y="4" width="7" height="7" rx="1.4" stroke="currentColor" strokeWidth="1.6" />
-                    <rect x="13" y="4" width="7" height="7" rx="1.4" stroke="currentColor" strokeWidth="1.6" />
-                    <rect x="4" y="13" width="7" height="7" rx="1.4" stroke="currentColor" strokeWidth="1.6" />
-                    <rect x="13" y="13" width="7" height="7" rx="1.4" stroke="currentColor" strokeWidth="1.6" />
-                  </>
-                ),
-              },
-              ...(aiEnabled
-                ? [
-                    {
-                      label: t("AI 解读"),
-                      href: "#insight",
-                      icon: (
-                        <path
-                          d="M12 4.5 13.8 9l4.5 1.8-4.5 1.8L12 17l-1.8-4.4L5.7 10.8 10.2 9 12 4.5Z"
-                          stroke="currentColor"
-                          strokeWidth="1.6"
-                          strokeLinejoin="round"
-                        />
-                      ),
-                    },
-                  ]
-                : []),
-            ].map((item) => (
-              <a
-                key={item.href}
-                href={item.href}
-                className="group relative flex items-center gap-1.5 rounded-lg px-2.5 text-[14px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          <nav
+            className="ml-3 hidden items-stretch gap-1 self-stretch lg:flex"
+            aria-label={t("页面导航")}
+          >
+            {/* 行情：hover / 点击展开下拉 */}
+            <div
+              className="relative flex items-stretch"
+              onMouseEnter={() => setNavMenu("market")}
+              onMouseLeave={() => setNavMenu((prev) => (prev === "market" ? null : prev))}
+            >
+              <button
+                type="button"
+                onClick={() => setNavMenu((prev) => (prev === "market" ? null : "market"))}
+                aria-expanded={navMenu === "market"}
+                aria-haspopup="menu"
+                className={`group relative flex items-center gap-1.5 rounded-lg px-2.5 text-[14px] font-medium transition-colors hover:bg-muted hover:text-foreground ${
+                  navMenu === "market" ? "bg-muted text-foreground" : "text-muted-foreground"
+                }`}
               >
                 <svg
                   width="15"
@@ -1437,13 +1397,88 @@ export default function Dashboard() {
                   aria-hidden="true"
                   className="text-muted-foreground/80 transition-colors group-hover:text-foreground"
                 >
-                  {item.icon}
+                  <path
+                    d="M4 16.5 8.5 10l3.6 4.2L16.5 7.5H20"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 </svg>
-                {item.label}
-                {/* 参考 OpenRouter：hover 时底部出现强调色下划线 */}
+                {t("行情")}
+                <svg
+                  width="9"
+                  height="9"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  aria-hidden="true"
+                  className={`transition-transform ${navMenu === "market" ? "rotate-180" : ""}`}
+                >
+                  <path
+                    d="m6 9 6 6 6-6"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                <span
+                  className={`pointer-events-none absolute inset-x-2 bottom-0 h-[2px] rounded-full bg-accent transition-transform duration-200 ${
+                    navMenu === "market" ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100"
+                  }`}
+                />
+              </button>
+
+              {navMenu === "market" && (
+                <div
+                  role="menu"
+                  aria-label={t("行情")}
+                  className="absolute left-0 top-full z-50 w-[220px] pt-1"
+                >
+                  <div className="rounded-xl border border-border bg-popover p-1 shadow-[var(--shadow-pop)] rise">
+                    {[
+                      { key: "chart", label: t("个股行情"), href: "#chart", hint: t("走势图与关键指标") },
+                      { key: "indices", label: t("全球指数"), href: "#indices", hint: t("美股 · 亚太") },
+                      { key: "watchlist", label: t("自选股"), href: "#watchlist", hint: t("分组与快速添加") },
+                      { key: "panorama", label: t("市场全景"), href: "#panorama", hint: t("跨资产与板块热力") },
+                    ].map((item) => (
+                      <a
+                        key={item.key}
+                        role="menuitem"
+                        href={item.href}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          scrollToSectionWithRetry(item.href.replace("#", ""));
+                          setNavMenu(null);
+                        }}
+                        className="flex flex-col gap-0.5 rounded-lg px-2.5 py-1.5 transition-colors hover:bg-muted"
+                      >
+                        <span className="text-[13px] font-medium text-foreground">{item.label}</span>
+                        <span className="text-[10.5px] leading-4 text-muted-foreground">{item.hint}</span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {aiEnabled && (
+              <a
+                href="#insight"
+                className="group relative flex items-center gap-1.5 rounded-lg px-2.5 text-[14px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true" className="text-muted-foreground/80 transition-colors group-hover:text-foreground">
+                  <path
+                    d="M12 4.5 13.8 9l4.5 1.8-4.5 1.8L12 17l-1.8-4.4L5.7 10.8 10.2 9 12 4.5Z"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                {t("AI 解读")}
                 <span className="pointer-events-none absolute inset-x-2 bottom-0 h-[2px] scale-x-0 rounded-full bg-accent transition-transform duration-200 group-hover:scale-x-100" />
               </a>
-            ))}
+            )}
           </nav>
 
           <div className="order-4 w-full sm:order-none sm:ml-auto sm:w-[260px]">
@@ -1553,6 +1588,7 @@ export default function Dashboard() {
           </div>
         </div>
 
+        <div id="indices" className="scroll-mt-20">
         <IndexOverview
           quotes={indices}
           loading={indicesLoading}
@@ -1562,6 +1598,7 @@ export default function Dashboard() {
           onSelect={selectFromPanel}
           onRetry={() => void loadIndices()}
         />
+        </div>
 
         {breadth && (
           <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border bg-card px-3 py-2 text-[11px] text-muted-foreground">
