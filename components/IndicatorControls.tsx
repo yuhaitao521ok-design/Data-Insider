@@ -145,7 +145,7 @@ export default function IndicatorControls({ configs, onChange }: IndicatorContro
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
         </svg>
-        指标
+        {t("指标")}
         {configs.length > 0 && (
           <span className="num rounded bg-accent/15 px-1 text-[9px] leading-4">
             {configs.length}
@@ -158,7 +158,7 @@ export default function IndicatorControls({ configs, onChange }: IndicatorContro
           <div className="flex items-center justify-between px-2 pb-1 pt-1.5">
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{t("技术指标")}</p>
             <span className="num text-[10px] text-muted-foreground/70">
-              {configs.length} / {INDICATOR_TYPES.length} 已启用
+              {configs.length} / {INDICATOR_TYPES.length} {t("已启用")}
             </span>
           </div>
 
@@ -245,10 +245,10 @@ export default function IndicatorControls({ configs, onChange }: IndicatorContro
                     </div>
 
                     <p className="mt-0.5 text-[10.5px] leading-4 text-muted-foreground">
-                      {definition.description}
+                      {t(definition.description)}
                     </p>
                     <p className="mt-0.5 text-[10px] text-muted-foreground/80">
-                      {definition.location === "overlay" ? "主图叠加" : "副图"} · 默认{" "}
+                      {t(definition.location === "overlay" ? "主图叠加" : "副图")} · {t("默认")}{" "}
                       {Object.values(definition.defaults).join(" / ")}
                       {config && ` · 当前 ${paramsSummary(type, config.params)}`}
                     </p>
@@ -268,7 +268,7 @@ export default function IndicatorControls({ configs, onChange }: IndicatorContro
                         .filter((field) => field.visibleWhen?.(editing.draft) ?? true)
                         .map((field) => (
                         <label key={field.key} className="flex items-center justify-between gap-2">
-                          <span className="text-[11px] text-muted-foreground">{field.label}</span>
+                          <span className="text-[11px] text-muted-foreground">{t(field.label)}</span>
                           <input
                             type="number"
                             inputMode="decimal"

@@ -126,14 +126,14 @@ export default function FundamentalsCard({
           {hasRange && (
             <div className="border-t border-border px-4 py-2.5">
               <div className="flex items-center justify-between text-[10.5px] text-muted-foreground">
-                <span className="num">52 周低 {formatPrice(low, currency)}</span>
+                <span className="num">{t("52 周低")} {formatPrice(low, currency)}</span>
                 {position !== null && (
                   <span className="num">
-                    现价距高{" "}
+                    {t("现价距高")}{" "}
                     {high ? formatPercent(((high - (price ?? high)) / high) * 100, 2) : "--"}
                   </span>
                 )}
-                <span className="num">52 周高 {formatPrice(high, currency)}</span>
+                <span className="num">{t("52 周高")} {formatPrice(high, currency)}</span>
               </div>
               <div className="relative mt-1.5 h-1.5 rounded-full bg-muted">
                 <div

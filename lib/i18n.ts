@@ -165,7 +165,6 @@ const ZH_HANT: Record<string, string> = {
   "周线": "週線",
   "月线": "月線",
   "季线": "季線",
-
   "从自选股移除": "從自選股移除",
   "加载中": "載入中",
   "暂无数据": "暫無資料",
@@ -181,10 +180,8 @@ const ZH_HANT: Record<string, string> = {
   "亚太": "亞太",
   "SPDR 行业 ETF": "SPDR 行業 ETF",
   "切换语言 / Language": "切換語言 / Language",
-
   "点击看走势": "點擊看走勢",
   "风险偏好速览": "風險偏好速覽",
-
   "切换到 1 个月": "切換到 1 個月",
   "参数": "參數",
   "同一类型指标只保留一个；添加后点「参数」即可在下方调整，无需关闭菜单": "同一類型指標只保留一個；新增後點「參數」即可在下方調整，無需關閉選單",
@@ -208,11 +205,8 @@ const ZH_HANT: Record<string, string> = {
   "MA5/20/60 · RSI14 · BOLL20 · ATR14（固定参数，默认常驻）": "MA5/20/60 · RSI14 · BOLL20 · ATR14（固定參數，預設常駐）",
   "当前周期数据点不足（需要 ≥ 20 根），切换到更长周期即可查看技术面摘要": "目前週期資料點不足（需要 ≥ 20 根），切換到更長週期即可查看技術面摘要",
   "可选间隔随周期变化：1 分钟最多 8 天、2–90 分钟最多 60 天、1 小时最多 2 年；带 Yahoo": "可選間隔隨週期變化：1 分鐘最多 8 天、2–90 分鐘最多 60 天、1 小時最多 2 年；帶 Yahoo",
-
   "，填入密钥后重启即可启用（行情数据不受影响）": "，填入金鑰後重啟即可啟用（行情資料不受影響）",
-
   "可选间隔随周期变化：1 分钟最多 8 天、2–90 分钟最多 60 天、1 小时最多 2 年；带 Yahoo 标记的间隔无 Nasdaq 兜底": "可選間隔隨週期變化：1 分鐘最多 8 天、2–90 分鐘最多 60 天、1 小時最多 2 年；帶 Yahoo 標記的間隔無 Nasdaq 兜底",
-
   "多周期报价与走势": "多週期報價與走勢",
   "今日最高": "今日最高",
   "今日最低": "今日最低",
@@ -232,9 +226,7 @@ const ZH_HANT: Record<string, string> = {
   "1年涨跌": "1年漲跌",
   "5年涨跌": "5年漲跌",
   "全部涨跌": "全部漲跌",
-
   "点击查看走势": "點擊查看走勢",
-
   "折线": "折線",
   "K线": "K線",
   "折线图": "折線圖",
@@ -250,9 +242,14 @@ const ZH_HANT: Record<string, string> = {
   "拖动平移 · 双击复位": "拖動平移 · 雙擊重置",
   "滚轮缩放 · 拖动平移 · 双击复位": "滾輪縮放 · 拖動平移 · 雙擊重置",
   "Perplexity 估算": "Perplexity 估算",
-
   "已在自选股": "已在自選股",
-
+  "现价距高": "現價距高",
+  "默认": "預設",
+  "52 周低": "52 週低",
+  "52 周高": "52 週高",
+  "切换到": "切換到",
+  "已启用": "已啟用",
+  "指标": "指標",
 };
 
 /** 英文词典（key 为简体原文） */
@@ -323,7 +320,7 @@ const EN: Record<string, string> = {
   "低": "L",
   "量": "Vol",
   "昨收": "Prev close",
-  "提醒": "Alert",
+  "提醒": "Alerts",
   "暂无走势数据": "No chart data",
   "盘前": "Pre",
   "盘后": "Post",
@@ -400,7 +397,6 @@ const EN: Record<string, string> = {
   "周线": "Weekly",
   "月线": "Monthly",
   "季线": "Quarterly",
-
   "从自选股移除": "Remove from watchlist",
   "加载中": "Loading",
   "暂无数据": "No data",
@@ -416,10 +412,8 @@ const EN: Record<string, string> = {
   "亚太": "Asia-Pacific",
   "SPDR 行业 ETF": "SPDR sector ETFs",
   "切换语言 / Language": "Language",
-
   "点击看走势": "Click for chart",
   "风险偏好速览": "Risk appetite",
-
   "切换到 1 个月": "Switch to 1M",
   "参数": "Params",
   "同一类型指标只保留一个；添加后点「参数」即可在下方调整，无需关闭菜单": "One indicator per type; after adding, use Params to tune it without closing the menu",
@@ -443,11 +437,8 @@ const EN: Record<string, string> = {
   "MA5/20/60 · RSI14 · BOLL20 · ATR14（固定参数，默认常驻）": "MA5/20/60 · RSI14 · BOLL20 · ATR14 (fixed defaults)",
   "当前周期数据点不足（需要 ≥ 20 根），切换到更长周期即可查看技术面摘要": "Not enough data points (need ≥ 20); switch to a longer range",
   "可选间隔随周期变化：1 分钟最多 8 天、2–90 分钟最多 60 天、1 小时最多 2 年；带 Yahoo": "Available intervals depend on the range (Yahoo limits)",
-
   "，填入密钥后重启即可启用（行情数据不受影响）": ", add the key and restart to enable it (quotes are unaffected)",
-
   "可选间隔随周期变化：1 分钟最多 8 天、2–90 分钟最多 60 天、1 小时最多 2 年；带 Yahoo 标记的间隔无 Nasdaq 兜底": "Available intervals depend on the range; intervals marked Yahoo have no Nasdaq fallback",
-
   "多周期报价与走势": "Multi-timeframe quotes and charts",
   "今日最高": "Day high",
   "今日最低": "Day low",
@@ -467,9 +458,7 @@ const EN: Record<string, string> = {
   "1年涨跌": "1Y change",
   "5年涨跌": "5Y change",
   "全部涨跌": "MAX change",
-
   "点击查看走势": "Click to view chart",
-
   "折线": "Line",
   "K线": "Candles",
   "折线图": "Line chart",
@@ -485,9 +474,14 @@ const EN: Record<string, string> = {
   "拖动平移 · 双击复位": "Drag to pan · double-click to reset",
   "滚轮缩放 · 拖动平移 · 双击复位": "Wheel to zoom · drag to pan · double-click to reset",
   "Perplexity 估算": "Perplexity estimate",
-
   "已在自选股": "Already in watchlist",
-
+  "现价距高": "From 52W high",
+  "默认": "defaults",
+  "52 周低": "52W low",
+  "52 周高": "52W high",
+  "切换到": "Switch to",
+  "已启用": "enabled",
+  "指标": "Indicators",
 };
 
 const DICTIONARIES: Record<Locale, Record<string, string>> = {
@@ -496,12 +490,111 @@ const DICTIONARIES: Record<Locale, Record<string, string>> = {
   en: EN,
 };
 
-/** 翻译：未命中时原样返回中文 */
+/**
+ * 短语级替换：用于「62.1 偏强」「78% 上轨附近」这种带数字的拼接文案。
+ * 精确 key 未命中时，依次替换这些片段。
+ */
+const PHRASES: { zh: string; hant: string; en: string }[] = [
+  { zh: "多头排列", hant: "多頭排列", en: "bullish alignment" },
+  { zh: "空头排列", hant: "空頭排列", en: "bearish alignment" },
+  { zh: "价格在 MA20 上方", hant: "價格在 MA20 上方", en: "price above MA20" },
+  { zh: "价格在 MA20 下方", hant: "價格在 MA20 下方", en: "price below MA20" },
+  { zh: "超买", hant: "超買", en: "overbought" },
+  { zh: "超卖", hant: "超賣", en: "oversold" },
+  { zh: "偏强", hant: "偏強", en: "strong" },
+  { zh: "偏弱", hant: "偏弱", en: "weak" },
+  { zh: "中性", hant: "中性", en: "neutral" },
+  { zh: "上轨附近", hant: "上軌附近", en: "near upper band" },
+  { zh: "中轨上方", hant: "中軌上方", en: "above midline" },
+  { zh: "中轨下方", hant: "中軌下方", en: "below midline" },
+  { zh: "下轨附近", hant: "下軌附近", en: "near lower band" },
+  { zh: "放量", hant: "放量", en: "high volume" },
+  { zh: "缩量", hant: "縮量", en: "low volume" },
+  { zh: "量能平稳", hant: "量能平穩", en: "steady volume" },
+  { zh: "连涨", hant: "連漲", en: "up streak" },
+  { zh: "连跌", hant: "連跌", en: "down streak" },
+  { zh: "日均量", hant: "日均量", en: "avg volume" },
+  { zh: "带宽", hant: "帶寬", en: "bandwidth" },
+  { zh: "距高", hant: "距高", en: "from high" },
+  { zh: "距低", hant: "距低", en: "from low" },
+  { zh: "近 14 根平均真实波幅（占价格）", hant: "近 14 根平均真實波幅（佔價格）", en: "average true range over 14 bars (% of price)" },
+  { zh: "≥70，注意回调风险", hant: "≥70，注意回調風險", en: "≥70, watch for a pullback" },
+  { zh: "≤30，关注反弹", hant: "≤30，關注反彈", en: "≤30, watch for a rebound" },
+  { zh: "40–70 为常态区间", hant: "40–70 為常態區間", en: "40–70 is the normal zone" },
+  { zh: "短期动能偏强", hant: "短期動能偏強", en: "short-term momentum strong" },
+  { zh: "短期动能偏弱", hant: "短期動能偏弱", en: "short-term momentum weak" },
+  { zh: "（MA60 需要更多数据点）", hant: "（MA60 需要更多資料點）", en: "(MA60 needs more data)" },
+  { zh: "（越宽波动越大）", hant: "（越寬波動越大）", en: "(wider = more volatile)" },
+  { zh: "主图叠加", hant: "主圖疊加", en: "overlay" },
+  { zh: "副图", hant: "副圖", en: "subchart" },
+  { zh: "当前周期仅", hant: "目前週期僅", en: "Only" },
+  { zh: "个数据点，", hant: "個資料點，", en: "data points in this range; " },
+  { zh: "数据点才能完整计算。", hant: "資料點才能完整計算。", en: "data points to compute." },
+  { zh: "52 周低", hant: "52 週低", en: "52W low" },
+  { zh: "52 周高", hant: "52 週高", en: "52W high" },
+  { zh: "现价距高", hant: "現價距高", en: "From 52W high" },
+  { zh: "切换到", hant: "切換到", en: "Switch to" },
+  { zh: "已启用", hant: "已啟用", en: "enabled" },
+  { zh: "默认", hant: "預設", en: "defaults" },
+  { zh: "第", hant: "第", en: "Period" },
+  { zh: "条周期", hant: "條週期", en: "" },
+  { zh: "快线周期", hant: "快線週期", en: "Fast period" },
+  { zh: "中线周期", hant: "中線週期", en: "Mid period" },
+  { zh: "慢线周期", hant: "慢線週期", en: "Slow period" },
+  { zh: "周期", hant: "週期", en: "Period" },
+  { zh: "信号周期", hant: "信號週期", en: "Signal period" },
+  { zh: "标准差倍数", hant: "標準差倍數", en: "Std-dev multiplier" },
+  { zh: "超买阈值", hant: "超買閾值", en: "Overbought" },
+  { zh: "超卖阈值", hant: "超賣閾值", en: "Oversold" },
+  { zh: " 需 ", hant: " 需 ", en: " needs " },
+  { zh: "、", hant: "、", en: ", " },
+  { zh: " 个", hant: " 個", en: " " },
+];
+
+/** 简单移动平均线（3 条），判断趋势方向与支撑压力 等描述也走短语表 */
+const DESCRIPTIONS: { zh: string; hant: string; en: string }[] = [
+  {
+    zh: "简单移动平均线，可自定义 1–6 条（自动按周期排序）",
+    hant: "簡單移動平均線，可自訂 1–6 條（自動按週期排序）",
+    en: "Simple moving averages, 1–6 lines (auto sorted)",
+  },
+  {
+    zh: "指数移动平均线，可自定义 1–6 条（虚线，对近期更敏感）",
+    hant: "指數移動平均線，可自訂 1–6 條（虛線，對近期更敏感）",
+    en: "Exponential moving averages, 1–6 dashed lines",
+  },
+  {
+    zh: "指数平滑异同平均线，判断趋势与动量",
+    hant: "指數平滑異同平均線，判斷趨勢與動量",
+    en: "MACD: trend and momentum",
+  },
+  {
+    zh: "相对强弱指标，衡量超买超卖（0–100）",
+    hant: "相對強弱指標，衡量超買超賣（0–100）",
+    en: "RSI: overbought / oversold (0–100)",
+  },
+  {
+    zh: "布林带，用均线与标准差描述波动区间",
+    hant: "布林帶，用均線與標準差描述波動區間",
+    en: "Bollinger Bands: volatility around a moving average",
+  },
+];
+
 export function translate(text: string, locale: Locale): string {
   if (!text) return text;
   if (locale === "zh-Hans") return text;
-  return DICTIONARIES[locale]?.[text] ?? text;
+
+  const exact = DICTIONARIES[locale]?.[text];
+  if (exact) return exact;
+
+  let output = text;
+  for (const item of [...PHRASES, ...DESCRIPTIONS]) {
+    const target = locale === "zh-Hant" ? item.hant : item.en;
+    if (output.includes(item.zh)) output = output.split(item.zh).join(target);
+  }
+  return output;
 }
+
 
 export interface I18nContextValue {
   locale: Locale;

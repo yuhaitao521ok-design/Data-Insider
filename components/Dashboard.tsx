@@ -2240,7 +2240,7 @@ export default function Dashboard() {
                 {indicatorWarning && (
                   <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-amber-500/25 bg-amber-500/[0.07] px-2.5 py-1.5 text-[10.5px] leading-4 text-amber-700 dark:text-amber-300">
                     <span className="flex-1">
-                      当前周期仅 {indicatorWarning.available} 个数据点，{indicatorWarning.label}数据点才能完整计算。
+                      {t(`当前周期仅 ${indicatorWarning.available} 个数据点，${indicatorWarning.label}数据点才能完整计算。`)}
                     </span>
                     {indicatorWarning.suggest && (
                       <button
@@ -2248,7 +2248,7 @@ export default function Dashboard() {
                         onClick={() => setRange(indicatorWarning.suggest as RangeKey)}
                         className="rounded border border-amber-500/30 px-1.5 py-0.5 text-[10px] transition-colors hover:bg-amber-500/10"
                       >
-                        切换到 {RANGE_CONFIG[indicatorWarning.suggest].label}
+                        {t("切换到")} {t(RANGE_CONFIG[indicatorWarning.suggest].label)}
                       </button>
                     )}
                   </div>

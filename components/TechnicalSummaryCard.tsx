@@ -84,12 +84,12 @@ export default function TechnicalSummaryCard({
                           : "text-foreground/85"
                     }`}
                   >
-                    {item.value}
+                    {t(item.value)}
                   </span>
                 </div>
                 {item.hint && (
                   <p className="truncate text-[9.5px] leading-4 text-muted-foreground/80">
-                    {item.hint}
+                    {t(item.hint)}
                   </p>
                 )}
               </div>
