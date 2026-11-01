@@ -54,6 +54,8 @@ interface PriceChartProps {
   alertLines?: ChartAlertLine[];
   /** 分时图的盘前 / 常规 / 盘后时间范围（用于时段阴影） */
   sessions?: ChartSessions;
+  /** 覆盖默认高度（专注模式用，例如 [--chart-h:calc(100vh_-_240px)]） */
+  heightClass?: string;
 }
 
 const PAD_TOP = 18;
@@ -179,6 +181,7 @@ export default function PriceChart({
   mode = "line",
   alertLines = [],
   sessions,
+  heightClass,
 }: PriceChartProps) {
   const { t } = useI18n();
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -764,7 +767,7 @@ export default function PriceChart({
     return (
       <div
         ref={wrapRef}
-        className="relative flex w-full items-center justify-center text-[12px] text-muted-foreground [--chart-h:260px] sm:[--chart-h:340px] lg:[--chart-h:440px] 2xl:[--chart-h:480px]"
+        className={`relative flex w-full items-center justify-center text-[12px] text-muted-foreground ${heightClass ?? "[--chart-h:260px] sm:[--chart-h:340px] lg:[--chart-h:440px] 2xl:[--chart-h:480px]"}`}
         style={{ height: `calc(var(--chart-h) + ${panes.length * (PANE_HEIGHT + PANE_GAP)}px)` }}
       >
         {t("暂无走势数据")}
@@ -862,7 +865,7 @@ export default function PriceChart({
       onPointerUp={handlePointerEnd}
       onPointerCancel={handlePointerEnd}
       title={isZoomed ? t("拖动平移 · 双击复位") : t("滚轮缩放 · 拖动平移 · 双击复位")}
-      className={`relative w-full select-none [--chart-h:260px] sm:[--chart-h:340px] lg:[--chart-h:440px] 2xl:[--chart-h:480px] ${
+      className={`relative w-full select-none ${heightClass ?? "[--chart-h:260px] sm:[--chart-h:340px] lg:[--chart-h:440px] 2xl:[--chart-h:480px]"} ${
         panning ? "cursor-grabbing" : isZoomed ? "cursor-grab" : ""
       }`}
       style={{
