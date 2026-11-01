@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useI18n } from "@/lib/i18n";
+import { scrollToSection } from "@/lib/scroll";
 
 const TABS = ["market", "watchlist", "panorama"] as const;
 const TAB_LABEL: Record<(typeof TABS)[number], string> = {
@@ -24,7 +25,7 @@ export default function MobileTabBar() {
 
   function go(id: (typeof TABS)[number]) {
     setActive(id);
-    document.getElementById(TAB_TARGET[id])?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    scrollToSection(TAB_TARGET[id]);
   }
 
   return (

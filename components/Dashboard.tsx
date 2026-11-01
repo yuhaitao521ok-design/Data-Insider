@@ -25,6 +25,7 @@ import GroupSummary from "@/components/GroupSummary";
 import { chartToCsv } from "@/lib/csv";
 import { isExtendedSession } from "@/lib/session";
 import { buildTechnicalSummary } from "@/lib/technical";
+import { scrollToSection } from "@/lib/scroll";
 import { matchLocalSuggestions, mergeSuggestions } from "@/lib/local-suggest";
 import { CROSS_ASSET_DEFINITIONS } from "@/lib/market-panels";
 import {
@@ -1200,7 +1201,7 @@ export default function Dashboard() {
     if (typeof window === "undefined") return;
     if (!window.matchMedia?.("(max-width: 767px)")?.matches) return;
     window.requestAnimationFrame(() => {
-      document.getElementById("chart")?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+      scrollToSection("chart");
     });
   }
 
