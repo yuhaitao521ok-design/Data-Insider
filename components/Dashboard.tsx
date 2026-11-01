@@ -1204,6 +1204,12 @@ export default function Dashboard() {
     });
   }
 
+  /** 从指数条 / 板块热力 / 跨资产点击：选中并在手机端跳到图表 */
+  function selectFromPanel(symbol: string) {
+    setSelected(symbol);
+    scrollToChartOnMobile();
+  }
+
   /* -------------------------------- 派生数据 ------------------------------- */
 
   // 顶部大价格与涨跌幅统一走批量报价（每 30 秒刷新），图表 quote 只作为兜底，
@@ -1481,7 +1487,7 @@ export default function Dashboard() {
           error={indicesError}
           updatedAt={indicesUpdatedAt}
           selected={selected}
-          onSelect={setSelected}
+          onSelect={selectFromPanel}
           onRetry={() => void loadIndices()}
         />
 
@@ -2463,13 +2469,13 @@ export default function Dashboard() {
               quotes={crossQuotes}
               loading={marketsLoading}
               selected={selected}
-              onSelect={setSelected}
+              onSelect={selectFromPanel}
             />
             <SectorHeatmap
               quotes={sectorQuotes}
               loading={marketsLoading}
               selected={selected}
-              onSelect={setSelected}
+              onSelect={selectFromPanel}
             />
             {marketsError && (
               <button
