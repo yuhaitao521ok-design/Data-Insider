@@ -1195,6 +1195,15 @@ export default function Dashboard() {
     notify(exists ? "已在自选股" : "已加入自选股", `${symbol} → ${groupName ?? "未分组"}`);
   }
 
+  /** 手机端：选中标的后自动滚到图表区（桌面端两/三栏同屏，无需跳转） */
+  function scrollToChartOnMobile() {
+    if (typeof window === "undefined") return;
+    if (!window.matchMedia?.("(max-width: 767px)")?.matches) return;
+    window.requestAnimationFrame(() => {
+      document.getElementById("chart")?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    });
+  }
+
   /* -------------------------------- 派生数据 ------------------------------- */
 
   // 顶部大价格与涨跌幅统一走批量报价（每 30 秒刷新），图表 quote 只作为兜底，
@@ -1972,11 +1981,13 @@ export default function Dashboard() {
                                   return;
                                 }
                                 setSelected(symbol);
+                                scrollToChartOnMobile();
                               }}
                               onKeyDown={(event) => {
                                 if (event.key === "Enter" || event.key === " ") {
                                   event.preventDefault();
                                   setSelected(symbol);
+                                  scrollToChartOnMobile();
                                 }
                               }}
                               className="flex w-full cursor-pointer items-center gap-2 py-2 pl-4 pr-2.5 text-left"
@@ -2110,9 +2121,10 @@ export default function Dashboard() {
             )}
 
             <div
-              className={
+              id="chart"
+              className={`scroll-mt-16 ${
                 focusMode ? "fixed inset-0 z-[60] overflow-y-auto bg-background p-3 sm:p-4" : ""
-              }
+              }`}
             >
               {focusMode && (
                 <div className="mb-2 flex items-center justify-between gap-2">
