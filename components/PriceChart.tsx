@@ -56,6 +56,13 @@ interface PriceChartProps {
   sessions?: ChartSessions;
   /** 覆盖默认高度（专注模式用，例如 [--chart-h:calc(100vh_-_240px)]） */
   heightClass?: string;
+  /** 把缩放能力暴露给外部（工具栏按钮用，避免压在价格刻度上） */
+  zoomApiRef?: React.MutableRefObject<{
+    zoomIn: () => void;
+    zoomOut: () => void;
+    reset: () => void;
+    canZoom: boolean;
+  } | null>;
 }
 
 const PAD_TOP = 18;
@@ -182,6 +189,7 @@ export default function PriceChart({
   alertLines = [],
   sessions,
   heightClass,
+  zoomApiRef,
 }: PriceChartProps) {
   const { t } = useI18n();
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -197,7 +205,11 @@ export default function PriceChart({
   /** 当前按下的指针（双指 = 捏合） */
   const pointersRef = useRef<Map<number, { x: number; y: number; type: string }>>(new Map());
   const panRef = useRef<{ pointerId: number; startX: number; startY: number; startView: ZoomWindow; moved: boolean; touch: boolean } | null>(null);
-  const pinchRef = useRef<{ distance: number; ratio: number } | null>(null);
+  const pinchRef = useRef<{ distance: number; ratio: number; midX: number } | null>(null);
+  /** 长按计时器（单指长按后进入「看单根」模式） */
+  const longPressRef = useRef<number | null>(null);
+  /** 正在「看单根」：十字线跟随手指，不平移 */
+  const inspectRef = useRef<number | null>(null);
   /** 本次手势里发生过捏合 → 手指全部抬起前不再接管平移（避免松一指后瞬间跳动） */
   const pinchLockRef = useRef(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -358,10 +370,20 @@ export default function PriceChart({
     if (touchPointers.length >= 2) {
       pinchLockRef.current = true;
       setMultiTouch(true);
+      // 双指：只做缩放 + 平移，不显示单根 K 线信息
+      if (longPressRef.current !== null) {
+        window.clearTimeout(longPressRef.current);
+        longPressRef.current = null;
+      }
+      inspectRef.current = null;
+      setHover(null);
+      setPointer(null);
+
       const [a, b] = touchPointers.map(([, pointer]) => pointer);
       pinchRef.current = {
         distance: Math.hypot(a.x - b.x, a.y - b.y),
         ratio: ratioFromClientX((a.x + b.x) / 2),
+        midX: (a.x + b.x) / 2,
       };
       panRef.current = null;
       setPanning(false);
@@ -370,6 +392,24 @@ export default function PriceChart({
 
     // 鼠标按下时阻止文本选择 / 原生拖拽，否则第二次拖拽会变成「拖动选中的文字」
     if (event.pointerType !== "touch") event.preventDefault();
+
+    if (event.pointerType === "touch") {
+      // 单指长按 260ms 后进入「看单根」模式（十字线跟随，不平移）
+      if (longPressRef.current !== null) window.clearTimeout(longPressRef.current);
+      const pointerId = event.pointerId;
+      const clientX = event.clientX;
+      longPressRef.current = window.setTimeout(() => {
+        longPressRef.current = null;
+        inspectRef.current = pointerId;
+        const rect = wrapRef.current?.getBoundingClientRect();
+        if (!rect || points.length === 0) return;
+        const innerWidth = Math.max(rect.width - PAD_LEFT - PAD_RIGHT, 1);
+        const x = Math.min(Math.max(clientX - rect.left - PAD_LEFT, 0), innerWidth);
+        const index = Math.round((x / innerWidth) * (points.length - 1));
+        setHover(index);
+        setPointer({ x: PAD_LEFT + x, y: 0 });
+      }, 260);
+    }
 
     if (allPoints.length > 1 && !pinchLockRef.current) {
       panRef.current = {
@@ -400,20 +440,51 @@ export default function PriceChart({
     if (pinch && touchPointers.length >= 2) {
       const [a, b] = touchPointers;
       const distance = Math.hypot(a.x - b.x, a.y - b.y);
+      const midX = (a.x + b.x) / 2;
+
       if (distance > 0 && pinch.distance > 0) {
         const scale = distance / pinch.distance;
-        pinchRef.current = { distance, ratio: pinch.ratio };
-        if (Math.abs(scale - 1) > 0.01) {
+        const rect = wrapRef.current?.getBoundingClientRect();
+        const innerWidth = Math.max((rect?.width ?? 320) - PAD_LEFT - PAD_RIGHT, 1);
+        // 双指中点的水平位移 → 平移（等于「双指左右滑」）
+        const panRatio = (midX - pinch.midX) / innerWidth;
+        pinchRef.current = { distance, ratio: pinch.ratio, midX };
+
+        if (Math.abs(scale - 1) > 0.01 || Math.abs(panRatio) > 0.002) {
           setViewport((previous) => {
             const current = previous
               ? clampViewport(previous, allPoints.length)
               : fullWindow(allPoints.length);
-            const next = zoomByScale(current, allPoints.length, pinch.ratio, scale);
+            const zoomed = zoomByScale(current, allPoints.length, pinch.ratio, scale);
+            const next = panViewport(zoomed, allPoints.length, -panRatio);
             return next.end - next.start >= allPoints.length - 1 ? null : next;
           });
         }
       }
       return;
+    }
+
+    // 长按进入「看单根」后：只移动十字线，不改变视窗
+    if (inspectRef.current === event.pointerId) {
+      const rect = wrapRef.current?.getBoundingClientRect();
+      if (!rect || points.length === 0) return;
+      const innerWidth = Math.max(rect.width - PAD_LEFT - PAD_RIGHT, 1);
+      const x = Math.min(Math.max(event.clientX - rect.left - PAD_LEFT, 0), innerWidth);
+      const index = Math.round((x / innerWidth) * (points.length - 1));
+      setHover(index);
+      setPointer({ x: PAD_LEFT + x, y: 0 });
+      event.preventDefault();
+      return;
+    }
+
+    // 移动超过阈值 → 取消长按，转为平移
+    if (longPressRef.current !== null) {
+      const dx0 = event.clientX - (panRef.current?.startX ?? event.clientX);
+      const dy0 = event.clientY - (panRef.current?.startY ?? event.clientY);
+      if (Math.abs(dx0) > 8 || Math.abs(dy0) > 8) {
+        window.clearTimeout(longPressRef.current);
+        longPressRef.current = null;
+      }
     }
 
     const pan = panRef.current;
@@ -452,6 +523,16 @@ export default function PriceChart({
   }
 
   function handlePointerEnd(event: React.PointerEvent<HTMLDivElement>) {
+    if (longPressRef.current !== null) {
+      window.clearTimeout(longPressRef.current);
+      longPressRef.current = null;
+    }
+    if (inspectRef.current === event.pointerId) {
+      inspectRef.current = null;
+      setHover(null);
+      setPointer(null);
+    }
+
     pointersRef.current.delete(event.pointerId);
     if (pointersRef.current.size === 0) {
       pinchLockRef.current = false;
@@ -468,6 +549,17 @@ export default function PriceChart({
       event.currentTarget.releasePointerCapture?.(event.pointerId);
     }
   }
+
+  /** 把缩放能力暴露给外部按钮（避免浮层遮挡价格刻度） */
+  useEffect(() => {
+    if (!zoomApiRef) return;
+    zoomApiRef.current = {
+      zoomIn: () => zoomStep(1.3),
+      zoomOut: () => zoomStep(0.77),
+      reset: () => setViewport(null),
+      canZoom: allPoints.length >= 24,
+    };
+  }, [zoomApiRef, allPoints.length]);
 
   const geometry = useMemo<Geometry | null>(() => {
     const width = size.width;
@@ -1268,6 +1360,10 @@ export default function PriceChart({
           fill="transparent"
           onPointerMove={(event) => {
             if (panning) return;
+            // 双指缩放/平移时不显示单根 K 线信息
+            if (multiTouch || pointersRef.current.size >= 2) return;
+            // 单指「看单根」模式由容器统一处理
+            if (inspectRef.current !== null) return;
             const rect = event.currentTarget.getBoundingClientRect();
             const offsetX = event.clientX - rect.left;
             const offsetY = event.clientY - rect.top;
@@ -1283,29 +1379,8 @@ export default function PriceChart({
         />
       </svg>
 
-      <div className="absolute right-2 top-2 z-10 flex items-center gap-1">
-        <button
-          type="button"
-          onClick={() => zoomStep(0.8)}
-          className="flex h-6 w-6 items-center justify-center rounded-md border border-border bg-card/90 text-[13px] leading-none text-muted-foreground shadow-sm backdrop-blur transition-colors hover:text-foreground"
-          aria-label={t("缩小")}
-          title={t("缩小")}
-        >
-          −
-        </button>
-        <button
-          type="button"
-          onClick={() => zoomStep(1.25)}
-          className="flex h-6 w-6 items-center justify-center rounded-md border border-border bg-card/90 text-[13px] leading-none text-muted-foreground shadow-sm backdrop-blur transition-colors hover:text-foreground"
-          aria-label={t("放大")}
-          title={t("放大")}
-        >
-          +
-        </button>
-      </div>
-
       {isZoomed && (
-        <div className="absolute left-2 top-2 z-10 hidden items-center gap-1.5 sm:flex rounded-md border border-border bg-card/90 px-1.5 py-0.5 text-[10px] text-muted-foreground shadow-sm backdrop-blur">
+        <div className="absolute bottom-[26px] left-2 z-10 hidden items-center gap-1.5 sm:flex rounded-md border border-border bg-card/90 px-1.5 py-0.5 text-[10px] text-muted-foreground shadow-sm backdrop-blur">
           <span className="num text-foreground/80">{zoomRangeLabel}</span>
           <span className="num opacity-60">
             {points.length}/{totalPoints}
