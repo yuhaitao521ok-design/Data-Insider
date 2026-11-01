@@ -232,6 +232,13 @@ export default function Dashboard() {
   const indicesRequestRef = useRef(0);
   const marketsRequestRef = useRef(0);
   const chartRequestRef = useRef(0);
+  /** 图表的缩放能力（工具栏按钮用） */
+  const chartZoomRef = useRef<{
+    zoomIn: () => void;
+    zoomOut: () => void;
+    reset: () => void;
+    canZoom: boolean;
+  } | null>(null);
   /** 每条提醒上一次观察到的满足状态（识别价格穿越，避免误报） */
   const alertSeenRef = useRef<Record<string, boolean>>({});
 
@@ -2341,6 +2348,28 @@ export default function Dashboard() {
                       onReenable={reenableAlert}
                       onRequestPermission={requestNotificationPermission}
                     />
+                    <div className="inline-flex items-center gap-0.5 rounded-lg bg-muted p-0.5">
+                      <button
+                        type="button"
+                        onClick={() => chartZoomRef.current?.zoomOut()}
+                        className="flex h-6 w-6 items-center justify-center rounded-md text-[13px] leading-none text-muted-foreground transition-colors hover:bg-card hover:text-foreground disabled:opacity-40"
+                        aria-label={t("缩小")}
+                        title={t("缩小")}
+                        disabled={!chart}
+                      >
+                        −
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => chartZoomRef.current?.zoomIn()}
+                        className="flex h-6 w-6 items-center justify-center rounded-md text-[13px] leading-none text-muted-foreground transition-colors hover:bg-card hover:text-foreground disabled:opacity-40"
+                        aria-label={t("放大")}
+                        title={t("放大")}
+                        disabled={!chart}
+                      >
+                        +
+                      </button>
+                    </div>
                     <button
                       type="button"
                       onClick={() => setFocusMode((prev) => !prev)}
@@ -2395,7 +2424,7 @@ export default function Dashboard() {
                 )}
 
                 <p className="mt-2 text-[10px] leading-4 text-muted-foreground md:hidden">
-                  {t("手势：单指左右拖动平移 · 双指捏合缩放 · 双击复位")}
+                  {t("手势：双指捏合缩放/左右平移 · 单指长按后左右滑查看单根 K 线 · 双击复位")}
                 </p>
 
                 <div className="mt-3">
@@ -2445,6 +2474,7 @@ export default function Dashboard() {
                       alertLines={chartAlertLines}
                       sessions={chart.sessions}
                       heightClass={focusMode ? "[--chart-h:calc(100vh_-_300px)]" : undefined}
+                      zoomApiRef={chartZoomRef}
                     />
                   ) : (
                     <div className="skeleton h-[260px] w-full rounded-lg sm:h-[340px] lg:h-[440px] 2xl:h-[480px]" />

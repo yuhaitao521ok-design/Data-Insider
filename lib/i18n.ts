@@ -264,6 +264,7 @@ const ZH_HANT: Record<string, string> = {
   "放大": "放大",
   "手势：单指左右拖动平移 · 双指捏合缩放 · 双击复位": "手勢：單指左右拖動平移 · 雙指捏合縮放 · 雙擊重置",
 
+  "手势：双指捏合缩放/左右平移 · 单指长按后左右滑查看单根 K 线 · 双击复位": "手勢：雙指捏合縮放/左右平移 · 單指長按後左右滑查看單根 K 線 · 雙擊重置",
 };
 
 /** 英文词典（key 为简体原文） */
@@ -510,6 +511,7 @@ const EN: Record<string, string> = {
   "放大": "Zoom in",
   "手势：单指左右拖动平移 · 双指捏合缩放 · 双击复位": "Gestures: drag sideways to pan · pinch to zoom · double-tap to reset",
 
+  "手势：双指捏合缩放/左右平移 · 单指长按后左右滑查看单根 K 线 · 双击复位": "Gestures: pinch to zoom / two-finger drag to pan · long-press then drag to inspect a candle · double-tap to reset",
 };
 
 const DICTIONARIES: Record<Locale, Record<string, string>> = {
