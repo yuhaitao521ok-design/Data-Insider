@@ -98,7 +98,7 @@ export default function PriceAlerts({
           />
           <path d="M10 19a2 2 0 0 0 4 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
         </svg>
-        提醒
+        {t("提醒")}
         {activeCount > 0 && (
           <span className="num rounded-full bg-accent-soft px-1 text-[10px] leading-4 text-accent">
             {activeCount}
@@ -113,7 +113,7 @@ export default function PriceAlerts({
           className="absolute right-0 top-full z-50 mt-1.5 w-[290px] rounded-lg border border-border bg-popover p-2.5 shadow-[var(--shadow-pop)] rise"
         >
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-[11px] font-medium">{symbol} 价格提醒</span>
+            <span className="text-[11px] font-medium">{symbol} {t("价格提醒")}</span>
             <span className="text-[10px] text-muted-foreground">{t("仅本地保存")}</span>
           </div>
 
