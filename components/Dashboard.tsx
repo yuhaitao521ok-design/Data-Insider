@@ -25,7 +25,7 @@ import GroupSummary from "@/components/GroupSummary";
 import { chartToCsv } from "@/lib/csv";
 import { isExtendedSession } from "@/lib/session";
 import { buildTechnicalSummary } from "@/lib/technical";
-import { scrollToSection } from "@/lib/scroll";
+import { scrollToSectionWithRetry } from "@/lib/scroll";
 import { matchLocalSuggestions, mergeSuggestions } from "@/lib/local-suggest";
 import { CROSS_ASSET_DEFINITIONS } from "@/lib/market-panels";
 import {
@@ -1200,9 +1200,8 @@ export default function Dashboard() {
   function scrollToChartOnMobile() {
     if (typeof window === "undefined") return;
     if (!window.matchMedia?.("(max-width: 767px)")?.matches) return;
-    window.requestAnimationFrame(() => {
-      scrollToSection("chart");
-    });
+    // 立即滚动 + 图表加载完再校正一次，避免骨架屏换成真实图表后位置漂移
+    scrollToSectionWithRetry("chart");
   }
 
   /** 从指数条 / 板块热力 / 跨资产点击：选中并在手机端跳到图表 */

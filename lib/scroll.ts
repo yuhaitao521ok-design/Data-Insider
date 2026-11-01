@@ -17,3 +17,34 @@ export function scrollToSection(id: string, extraGap = 12): boolean {
   window.scrollTo({ top: Math.max(top, 0), behavior: "smooth" });
   return true;
 }
+
+/**
+ * 立即滚一次，随后在图表数据加载完成 / 骨架屏换成真实内容导致布局变化时再校正。
+ *
+ * 场景：点板块热力 → 选中后图表开始 loading（骨架屏高度和真实图表不同），
+ * 如果只滚一次，加载完成后位置会漂；这里在 300ms / 700ms 各校正一次。
+ */
+export function scrollToSectionWithRetry(id: string, extraGap = 12): void {
+  if (typeof window === "undefined") return;
+
+  // 先立刻滚，不等数据（避免用户觉得"点了没反应"）
+  scrollToSection(id, extraGap);
+
+  for (const delay of [300, 700]) {
+    window.setTimeout(() => {
+      const element = document.getElementById(id);
+      if (!element) return;
+
+      const header = document.querySelector("header");
+      const headerHeight = header ? header.getBoundingClientRect().height : 0;
+      const target = Math.max(
+        element.getBoundingClientRect().top + window.scrollY - headerHeight - extraGap,
+        0,
+      );
+
+      // 已经对准（±24px）就不再打扰用户
+      if (Math.abs(window.scrollY - target) < 24) return;
+      window.scrollTo({ top: target, behavior: "smooth" });
+    }, delay);
+  }
+}
