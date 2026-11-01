@@ -120,8 +120,8 @@ export default function PriceAlerts({
           <div className="flex items-center gap-1">
             <div className="inline-flex items-center gap-0.5 rounded-lg bg-muted p-0.5">
               {([
-                { key: "above", label: "涨到" },
-                { key: "below", label: "跌破" },
+                { key: "above", label: t("涨到") },
+                { key: "below", label: t("跌破") },
               ] as const).map((item) => (
                 <button
                   key={item.key}
@@ -206,7 +206,7 @@ export default function PriceAlerts({
                               "Asia/Shanghai",
                               { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" },
                             )}`
-                          : "生效中"}
+                          : t("生效中")}
                       </p>
                     </div>
                     {triggered && (

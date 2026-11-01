@@ -1342,7 +1342,7 @@ export default function Dashboard() {
               className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[11px] transition-colors hover:bg-muted ${
                 autoRefresh ? "text-foreground" : "text-muted-foreground"
               }`}
-              title={autoRefresh ? "点击暂停自动刷新" : "点击开启自动刷新"}
+              title={autoRefresh ? t("点击暂停自动刷新") : t("点击开启自动刷新")}
             >
               <span
                 className={`h-1.5 w-1.5 rounded-full ${
@@ -1704,7 +1704,7 @@ export default function Dashboard() {
                                   ? "border-positive/40 bg-positive-soft text-positive-text"
                                   : "border-border text-muted-foreground"
                               }`}
-                              title={inList ? `已在自选股（${memberGroup}）` : "点击加入自选股"}
+                              title={inList ? `${t("已在自选股")}（${memberGroup}）` : t("点击加入自选股")}
                             >
                               {inList ? `已在 · ${memberGroup}` : "加入"}
                             </span>
@@ -2042,7 +2042,7 @@ export default function Dashboard() {
 
             <div className="mt-auto hidden items-center justify-between border-t border-border px-4 py-2 text-[10.5px] text-muted-foreground lg:flex">
               <span className="truncate">
-                {sortMode === "manual" ? "Yahoo / Nasdaq" : `按${sortWatchlistLabel(sortMode)}`}
+                {sortMode === "manual" ? "Yahoo / Nasdaq" : t(`按${sortWatchlistLabel(sortMode)}`)}
               </span>
               <span className="num">{lastUpdateLabel ?? "--"}</span>
             </div>
@@ -2192,7 +2192,7 @@ export default function Dashboard() {
                           type="button"
                           onClick={() => setChartMode(option.key)}
                           aria-pressed={chartMode === option.key}
-                          title={option.title}
+                          title={t(option.title)}
                           className={`h-6 rounded-md px-1.5 text-[11px] transition-colors ${
                             chartMode === option.key
                               ? "bg-card font-medium text-foreground shadow-sm dark:bg-overlay dark:shadow-none"
@@ -2311,7 +2311,7 @@ export default function Dashboard() {
               <div className="grid grid-cols-2 gap-px overflow-hidden rounded-b-xl border-t border-border bg-border sm:grid-cols-4">
                 {stats.map((stat) => (
                   <div key={stat.label} className="bg-card px-4 py-3">
-                    <p className="text-[10.5px] text-muted-foreground">{stat.label}</p>
+                    <p className="text-[10.5px] text-muted-foreground">{t(stat.label)}</p>
                     <p
                       className={`num mt-1 truncate text-[12.5px] ${
                         stat.tone === "up"

@@ -214,6 +214,45 @@ const ZH_HANT: Record<string, string> = {
   "可选间隔随周期变化：1 分钟最多 8 天、2–90 分钟最多 60 天、1 小时最多 2 年；带 Yahoo 标记的间隔无 Nasdaq 兜底": "可選間隔隨週期變化：1 分鐘最多 8 天、2–90 分鐘最多 60 天、1 小時最多 2 年；帶 Yahoo 標記的間隔無 Nasdaq 兜底",
 
   "多周期报价与走势": "多週期報價與走勢",
+  "今日最高": "今日最高",
+  "今日最低": "今日最低",
+  "区间最高": "區間最高",
+  "区间最低": "區間最低",
+  "52 周区间": "52 週區間",
+  "只": "只",
+  "更新中…": "更新中…",
+  "更新": "更新",
+  "按涨跌幅降序": "依漲跌幅降序",
+  "按涨跌幅升序": "依漲跌幅升序",
+  "1天涨跌": "1天漲跌",
+  "5天涨跌": "5天漲跌",
+  "1月涨跌": "1月漲跌",
+  "3月涨跌": "3月漲跌",
+  "6月涨跌": "6月漲跌",
+  "1年涨跌": "1年漲跌",
+  "5年涨跌": "5年漲跌",
+  "全部涨跌": "全部漲跌",
+
+  "点击查看走势": "點擊查看走勢",
+
+  "折线": "折線",
+  "K线": "K線",
+  "折线图": "折線圖",
+  "蜡烛图（K 线）": "蠟燭圖（K 線）",
+  "点击暂停自动刷新": "點擊暫停自動重新整理",
+  "点击开启自动刷新": "點擊開啟自動重新整理",
+  "点击加入自选股": "點擊加入自選股",
+  "涨到": "漲到",
+  "跌破": "跌破",
+  "生效中": "生效中",
+  "切换到亮色主题": "切換到亮色主題",
+  "切换到暗色主题": "切換到暗色主題",
+  "拖动平移 · 双击复位": "拖動平移 · 雙擊重置",
+  "滚轮缩放 · 拖动平移 · 双击复位": "滾輪縮放 · 拖動平移 · 雙擊重置",
+  "Perplexity 估算": "Perplexity 估算",
+
+  "已在自选股": "已在自選股",
+
 };
 
 /** 英文词典（key 为简体原文） */
@@ -410,6 +449,45 @@ const EN: Record<string, string> = {
   "可选间隔随周期变化：1 分钟最多 8 天、2–90 分钟最多 60 天、1 小时最多 2 年；带 Yahoo 标记的间隔无 Nasdaq 兜底": "Available intervals depend on the range; intervals marked Yahoo have no Nasdaq fallback",
 
   "多周期报价与走势": "Multi-timeframe quotes and charts",
+  "今日最高": "Day high",
+  "今日最低": "Day low",
+  "区间最高": "Period high",
+  "区间最低": "Period low",
+  "52 周区间": "52-week range",
+  "只": "items",
+  "更新中…": "Updating…",
+  "更新": "Updated",
+  "按涨跌幅降序": "sorted by change ↓",
+  "按涨跌幅升序": "sorted by change ↑",
+  "1天涨跌": "1D change",
+  "5天涨跌": "5D change",
+  "1月涨跌": "1M change",
+  "3月涨跌": "3M change",
+  "6月涨跌": "6M change",
+  "1年涨跌": "1Y change",
+  "5年涨跌": "5Y change",
+  "全部涨跌": "MAX change",
+
+  "点击查看走势": "Click to view chart",
+
+  "折线": "Line",
+  "K线": "Candles",
+  "折线图": "Line chart",
+  "蜡烛图（K 线）": "Candlestick chart",
+  "点击暂停自动刷新": "Pause auto refresh",
+  "点击开启自动刷新": "Resume auto refresh",
+  "点击加入自选股": "Click to add to watchlist",
+  "涨到": "Rises to",
+  "跌破": "Falls below",
+  "生效中": "Active",
+  "切换到亮色主题": "Switch to light theme",
+  "切换到暗色主题": "Switch to dark theme",
+  "拖动平移 · 双击复位": "Drag to pan · double-click to reset",
+  "滚轮缩放 · 拖动平移 · 双击复位": "Wheel to zoom · drag to pan · double-click to reset",
+  "Perplexity 估算": "Perplexity estimate",
+
+  "已在自选股": "Already in watchlist",
+
 };
 
 const DICTIONARIES: Record<Locale, Record<string, string>> = {

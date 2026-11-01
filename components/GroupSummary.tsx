@@ -41,9 +41,9 @@ export default function GroupSummary({ sections, quotes }: GroupSummaryProps) {
           const width = Math.min(100, Math.abs(row.average) * 22);
           return (
             <div key={row.id} className="flex items-center gap-1.5 text-[10px]">
-              <span className="w-[72px] shrink-0 truncate text-foreground/80">{row.name}</span>
+              <span className="w-[72px] shrink-0 truncate text-foreground/80">{t(row.name)}</span>
               <span className="num w-[34px] shrink-0 text-right text-muted-foreground">
-                {row.total} 只
+                {row.total} {t("只")}
               </span>
               <span className="relative h-1 flex-1 overflow-hidden rounded-full bg-muted">
                 <span

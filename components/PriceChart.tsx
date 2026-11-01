@@ -861,7 +861,7 @@ export default function PriceChart({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerEnd}
       onPointerCancel={handlePointerEnd}
-      title={isZoomed ? "拖动平移 · 双击复位" : "滚轮缩放 · 拖动平移 · 双击复位"}
+      title={isZoomed ? t("拖动平移 · 双击复位") : t("滚轮缩放 · 拖动平移 · 双击复位")}
       className={`relative w-full select-none [--chart-h:250px] sm:[--chart-h:310px] lg:[--chart-h:370px] ${
         panning ? "cursor-grabbing" : isZoomed ? "cursor-grab" : ""
       }`}
