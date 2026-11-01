@@ -420,7 +420,17 @@ open-next.config.ts     OpenNext 适配器配置
 - 首帧前就用内联脚本设置 `<html lang>` 与 `data-locale`，避免语言闪烁
 - 实现：`lib/i18n.ts` 用**中文原文作为 key**（组件里 `t("自选股")`），缺翻译时自动回退中文，不会出现空白或 key 泄漏；`components/LocaleProvider.tsx` 提供上下文，`components/LocaleSwitcher.tsx` 是切换按钮
 - 当前已覆盖：导航 / 页面标题、自选股面板（含分组、添加框、搜索建议）、图表工具栏与坐标悬浮、全球指数、板块热力、跨资产、技术面、基本面、价格提醒、搜索框、页脚等主要文案
-- 未覆盖的深层文案（部分服务端错误、AI 面板细节）会回退中文；追加翻译只需在 `lib/i18n.ts` 的两本词典里补 key
+- 前端界面文案已 100% 接入（`npm run check:i18n` 可验证）；服务端返回的错误文本目前仍是中文，前端按错误码展示时会保留原文
+
+### 约定（新增功能必须遵守）
+
+**任何新功能、新面板、新提示都必须同时提供 简体 / 繁體 / English 三套文案**：
+
+- 界面文案一律走 `t()`（`const { t } = useI18n()`），不要硬编码中文，包括 `aria-label` / `title` / `placeholder`
+- 同一个改动里把中文原文作为 key 补进 `lib/i18n.ts` 的 `ZH_HANT` 与 `EN` 两本词典（缺词条会静默回退中文，视为 bug）
+- 来自配置/数据的标签（周期、间隔、指标名、板块与指数名、交易时段）在渲染处包一层 `t()`
+- 提交前运行 `npm run check:i18n`，要求 **0 缺失 + 覆盖率 100%**；CI 可用 `npm run check:i18n -- --strict`（有缺失直接失败）
+- 这条约定同时写在 `.github/copilot-instructions.md` 里，后续开发（包括 AI 助手）会默认遵守
 
 ## 界面与主题
 

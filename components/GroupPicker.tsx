@@ -126,7 +126,7 @@ export default function GroupPicker({
               onClick={submit}
               className="h-6 rounded-md bg-foreground px-1.5 text-[10.5px] text-background"
             >
-              建
+              {t("建")}
             </button>
           </div>
         ) : (
@@ -136,7 +136,7 @@ export default function GroupPicker({
             onClick={() => setCreating(true)}
             className="flex w-full items-center gap-1 rounded-md px-1.5 py-1 text-left text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
           >
-            ＋ 新建分组
+            {t("＋ 新建分组")}
           </button>
         )}
         {error && <p className="mt-1 px-1 text-[10px] text-negative-text">{error}</p>}

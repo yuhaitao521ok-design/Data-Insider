@@ -62,7 +62,7 @@ export default function IntervalSelect({
           <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.8" />
           <path d="M12 7.5V12l3 2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
         </svg>
-        间隔
+        {t("间隔")}
         <span className="font-medium text-foreground">{t(INTERVAL_CONFIG[value].label)}</span>
         <svg
           width="9"
@@ -134,8 +134,7 @@ export default function IntervalSelect({
           })}
 
           <p className="border-t border-border px-2 py-1.5 text-[10px] leading-4 text-muted-foreground/70">
-            可选间隔随周期变化：1 分钟最多 8 天、2–90 分钟最多 60 天、1 小时最多 2 年；带 Yahoo
-            标记的间隔无 Nasdaq 兜底。
+            {t("可选间隔随周期变化：1 分钟最多 8 天、2–90 分钟最多 60 天、1 小时最多 2 年；带 Yahoo 标记的间隔无 Nasdaq 兜底")}
           </p>
         </div>
       )}

@@ -156,7 +156,7 @@ export default function PriceAlerts({
               onClick={submit}
               className="h-7 rounded-md bg-foreground px-2 text-[11px] font-medium text-background transition-opacity hover:opacity-90"
             >
-              添加
+              {t("添加")}
             </button>
           </div>
 
@@ -168,19 +168,19 @@ export default function PriceAlerts({
               onClick={onRequestPermission}
               className="mt-2 w-full rounded-md border border-border px-2 py-1 text-[10.5px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
-              开启浏览器通知（页面在后台时也能收到）
+              {t("开启浏览器通知（页面在后台时也能收到）")}
             </button>
           )}
           {notificationState === "denied" && (
             <p className="mt-2 text-[10.5px] text-muted-foreground">
-              浏览器通知已被拒绝，触发时仍会显示页面提示。
+              {t("浏览器通知已被拒绝，触发时仍会显示页面提示")}
             </p>
           )}
 
           <div className="scroll-thin mt-2 max-h-[190px] space-y-1 overflow-y-auto">
             {symbolAlerts.length === 0 ? (
               <p className="rounded-md bg-muted px-2 py-2 text-[10.5px] leading-4 text-muted-foreground">
-                还没有提醒。设定目标价后，价格穿越时会弹出提示（可配合浏览器通知）。
+                {t("还没有提醒。设定目标价后，价格穿越时会弹出提示（可配合浏览器通知）")}
               </p>
             ) : (
               symbolAlerts.map((alert) => {
@@ -216,7 +216,7 @@ export default function PriceAlerts({
                         className="shrink-0 rounded border border-border px-1 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                         title={t("重新启用")}
                       >
-                        重开
+                        {t("重开")}
                       </button>
                     )}
                     <button

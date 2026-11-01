@@ -1259,7 +1259,7 @@ export default function PriceChart({
             aria-label={t("重置缩放")}
             title={t("重置缩放（也可以双击图表）")}
           >
-            重置
+            {t("重置")}
           </button>
         </div>
       )}

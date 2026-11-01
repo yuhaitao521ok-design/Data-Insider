@@ -775,7 +775,7 @@ export default function Dashboard() {
       setAddSearchLoading(true);
       setAddSearchError(null);
 
-      // 8 秒没响应就中断，避免一直卡在「搜索中…」
+      // 8 秒没响应就中断，避免一直卡在「{t("搜索中")}…」
       const timeoutId = window.setTimeout(() => controller.abort(), 8_000);
 
       try {
@@ -1388,8 +1388,8 @@ export default function Dashboard() {
               target="_blank"
               rel="noreferrer noopener"
               className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              aria-label="GitHub 仓库"
-              title="GitHub 仓库"
+              aria-label={t("GitHub 仓库")}
+              title={t("GitHub 仓库")}
             >
               <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
                 <path
@@ -1407,7 +1407,7 @@ export default function Dashboard() {
           <div>
             <h1 className="text-[24px] font-medium leading-tight tracking-tight">{t("美股行情")}</h1>
             <p className="mt-1 text-[12px] text-muted-foreground">
-              多周期报价与走势 · Yahoo Finance / Nasdaq
+              {t("多周期报价与走势")} · Yahoo Finance / Nasdaq
               {aiEnabled ? " · Perplexity AI" : ""}
             </p>
           </div>
@@ -1432,9 +1432,9 @@ export default function Dashboard() {
                   autoRefresh ? "bg-positive live-dot" : "bg-muted-foreground/40"
                 }`}
               />
-              最后更新
+              {t("最后更新")}
               <span className="num text-foreground/80">{lastUpdateLabel ?? "--"}</span>
-              <span>（北京时间）</span>
+              <span>{t("北京时间")}</span>
             </span>
           </div>
         </div>
@@ -1454,15 +1454,15 @@ export default function Dashboard() {
             <span className="font-medium text-foreground">{t("自选股概览")}</span>
             <span className="inline-flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-positive" />
-              <span className="num text-foreground/80">{breadth.up}</span> 涨
+              <span className="num text-foreground/80">{breadth.up}</span> {t("涨")}
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-negative" />
-              <span className="num text-foreground/80">{breadth.down}</span> 跌
+              <span className="num text-foreground/80">{breadth.down}</span> {t("跌")}
             </span>
             {breadth.flat > 0 && (
               <span>
-                <span className="num text-foreground/80">{breadth.flat}</span> 平
+                <span className="num text-foreground/80">{breadth.flat}</span> {t("平")}
               </span>
             )}
             <span className="hidden h-3 w-px bg-border sm:block" />
@@ -1478,7 +1478,7 @@ export default function Dashboard() {
             </span>
             <span className="hidden h-3 w-px bg-border sm:block" />
             <span>
-              最强 <span className="font-medium text-foreground">{breadth.best.symbol}</span>{" "}
+              {t("最强")} <span className="font-medium text-foreground">{breadth.best.symbol}</span>{" "}
               <span
                 className={`num ${
                   (breadth.best.changePercent ?? 0) >= 0
@@ -1490,7 +1490,7 @@ export default function Dashboard() {
               </span>
             </span>
             <span>
-              最弱 <span className="font-medium text-foreground">{breadth.worst.symbol}</span>{" "}
+              {t("最弱")} <span className="font-medium text-foreground">{breadth.worst.symbol}</span>{" "}
               <span
                 className={`num ${
                   (breadth.worst.changePercent ?? 0) >= 0
@@ -1657,7 +1657,7 @@ export default function Dashboard() {
                   onClick={() => submitAdd()}
                   className="h-7 shrink-0 rounded-md bg-foreground px-2 text-[11px] font-medium text-background transition-opacity hover:opacity-90"
                 >
-                  添加
+                  {t("添加")}
                 </button>
                 </div>
 
@@ -1712,7 +1712,7 @@ export default function Dashboard() {
                         );
                       })
                     ) : addSearchLoading ? (
-                      <p className="px-2 py-1.5 text-[10.5px] text-muted-foreground">搜索中…</p>
+                      <p className="px-2 py-1.5 text-[10.5px] text-muted-foreground">{t("搜索中")}…</p>
                     ) : (
                       <p className="px-2 py-1.5 text-[10.5px] leading-4 text-muted-foreground">
                         {addSearchError ?? "没有搜到匹配的公司，可检查代码拼写后按回车直接添加"}
@@ -1978,7 +1978,7 @@ export default function Dashboard() {
                                   {item?.source === "perplexity" && (
                                     <span
                                       className="h-1 w-1 rounded-full bg-amber-500"
-                                      title="AI 估算报价"
+                                      title={t("AI 估算报价")}
                                     />
                                   )}
                                 </div>
@@ -2085,7 +2085,7 @@ export default function Dashboard() {
                       {quote?.source === "perplexity" && (
                         <span
                           className="rounded-md border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] leading-4 text-amber-600 dark:text-amber-400"
-                          title="Yahoo / Nasdaq 暂不可用，此报价由 Perplexity 联网检索估算，仅供参考"
+                          title={t("Yahoo / Nasdaq 暂不可用，此报价由 Perplexity 联网检索估算，仅供参考")}
                         >
                           {t("AI 估算")}
                         </span>
@@ -2262,7 +2262,7 @@ export default function Dashboard() {
                       </p>
                       {selectedIsCrossAsset && (
                         <p className="max-w-md px-4 text-center text-[10.5px] leading-4 text-muted-foreground/80">
-                          跨资产（指数 / 期货 / 加密）的走势仅 Yahoo Finance 提供，遇到限流稍后重试即可。
+                          {t("跨资产（指数 / 期货 / 加密）的走势仅 Yahoo Finance 提供，遇到限流稍后重试即可")}
                         </p>
                       )}
                       <div className="flex items-center gap-2">
@@ -2279,7 +2279,7 @@ export default function Dashboard() {
                             onClick={() => setRange("1M")}
                             className="h-8 rounded-lg border border-border px-3 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                           >
-                            切换到 1 个月
+                            {t("切换到 1 个月")}
                           </button>
                         )}
                       </div>

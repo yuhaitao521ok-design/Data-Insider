@@ -53,7 +53,7 @@ export default function InsightPanel({
             </svg>
           </span>
           <div>
-            <h2 className="text-[13px] font-medium">AI 解读</h2>
+            <h2 className="text-[13px] font-medium">{t("AI 解读")}</h2>
             <p className="text-[11px] text-muted-foreground">
               {symbol} · 由 Perplexity 联网检索生成，仅供参考
             </p>
@@ -100,9 +100,9 @@ export default function InsightPanel({
           <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground/80">
             PERPLEXITY_API_KEY
           </code>
-          ，AI 解读已关闭。在项目根目录创建{" "}
+          ，{t("AI 解读")}已关闭。在项目根目录创建{" "}
           <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground/80">.env.local</code>
-          ，填入密钥后重启即可启用（行情数据不受影响）。
+          {t("，填入密钥后重启即可启用（行情数据不受影响）")}。
         </p>
       )}
 
