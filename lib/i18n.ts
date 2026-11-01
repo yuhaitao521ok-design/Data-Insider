@@ -265,6 +265,12 @@ const ZH_HANT: Record<string, string> = {
   "手势：单指左右拖动平移 · 双指捏合缩放 · 双击复位": "手勢：單指左右拖動平移 · 雙指捏合縮放 · 雙擊重置",
 
   "手势：双指捏合缩放/左右平移 · 单指长按后左右滑查看单根 K 线 · 双击复位": "手勢：雙指捏合縮放/左右平移 · 單指長按後左右滑查看單根 K 線 · 雙擊重置",
+  "个股行情": "個股行情",
+  "走势图与关键指标": "走勢圖與關鍵指標",
+  "分组与快速添加": "分組與快速新增",
+  "跨资产与板块热力": "跨資產與板塊熱力",
+  "美股 · 亚太": "美股 · 亞太",
+
 };
 
 /** 英文词典（key 为简体原文） */
@@ -512,6 +518,12 @@ const EN: Record<string, string> = {
   "手势：单指左右拖动平移 · 双指捏合缩放 · 双击复位": "Gestures: drag sideways to pan · pinch to zoom · double-tap to reset",
 
   "手势：双指捏合缩放/左右平移 · 单指长按后左右滑查看单根 K 线 · 双击复位": "Gestures: pinch to zoom / two-finger drag to pan · long-press then drag to inspect a candle · double-tap to reset",
+  "个股行情": "Symbol chart",
+  "走势图与关键指标": "Chart and key stats",
+  "分组与快速添加": "Groups and quick add",
+  "跨资产与板块热力": "Cross-asset and sectors",
+  "美股 · 亚太": "US · Asia-Pacific",
+
 };
 
 const DICTIONARIES: Record<Locale, Record<string, string>> = {
