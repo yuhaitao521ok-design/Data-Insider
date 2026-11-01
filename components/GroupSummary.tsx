@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n";
+
 import { formatPercent } from "@/lib/format";
 import type { Quote } from "@/lib/types";
 import type { WatchlistSection } from "@/lib/watchlist";
@@ -11,6 +13,7 @@ interface GroupSummaryProps {
 
 /** 左栏底部：每个分组的表现（只统计有报价的标的） */
 export default function GroupSummary({ sections, quotes }: GroupSummaryProps) {
+  const { t } = useI18n();
   const rows = sections
     .map((section) => {
       const items = section.symbols
@@ -31,7 +34,7 @@ export default function GroupSummary({ sections, quotes }: GroupSummaryProps) {
 
   return (
     <div className="border-t border-border px-3 py-2">
-      <p className="mb-1 text-[10px] font-medium text-muted-foreground">分组表现</p>
+      <p className="mb-1 text-[10px] font-medium text-muted-foreground">{t("分组表现")}</p>
       <div className="space-y-1">
         {rows.map((row) => {
           const up = row.average >= 0;

@@ -26,7 +26,21 @@ The data-source strategy is the main product behavior:
 3. Use Perplexity only as a last-resort quote or insight provider when the API key is configured.
 4. Preserve the current provider label in API responses (`X-Data-Source` and `provider` fields) so the UI can accurately show data provenance.
 
-## Build, test, and validation commands
+## Internationalization (mandatory for every feature)
+
+Every user-facing string must work in **简体中文 / 繁體中文 / English**. This applies to any new feature, panel, tooltip, toast, empty state or error message.
+
+- Render text through `t()` from `lib/i18n.ts` (`const { t } = useI18n();`). Never hard-code Chinese in JSX text, `aria-label`, `title`, or `placeholder`.
+- Add the Chinese source string as a key to **both** dictionaries (`ZH_HANT` and `EN`) inside `lib/i18n.ts` in the same change. Untranslated keys silently fall back to Chinese, which counts as a bug.
+- Labels that come from data/config modules (range labels, indicator names, sector/index names, session labels) must be wrapped at render time, e.g. `{t(RANGE_CONFIG[key].label)}`.
+- Run `npm run check:i18n` before finishing. It must report `0 missing` and `覆盖率约 100%`; use `npm run check:i18n -- --strict` to fail on gaps (suitable for CI).
+- When adding a panel, sanity-check it in all three locales: `zh-Hans`, `zh-Hant` and `en` (the switcher lives in `components/LocaleSwitcher.tsx`).
+
+### 中文说明（同上）
+
+新增任何功能都必须同时提供 **简体 / 繁体 / 英文** 三套文案：界面文案一律走 `t()`，并在 `lib/i18n.ts` 的两本词典里同时补 key；提交前运行 `npm run check:i18n`，要求 0 缺失、覆盖率 100%。
+
+
 
 This repo has a minimal script setup; there is no dedicated lint or test runner configured in `package.json` today.
 

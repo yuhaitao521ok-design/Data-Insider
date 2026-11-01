@@ -50,7 +50,7 @@ export default function IndexOverview({
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3.5 py-2">
         <div className="flex items-center gap-2">
           <h2 className="text-[12.5px] font-medium">{t("全球指数")}</h2>
-          <span className="text-[10px] text-muted-foreground">美股 · 亚太</span>
+          <span className="text-[10px] text-muted-foreground">{t("美股")} · {t("亚太")}</span>
         </div>
         <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
           {error ? (
@@ -59,7 +59,7 @@ export default function IndexOverview({
               onClick={onRetry}
               className="rounded border border-border px-1.5 py-0.5 transition-colors hover:bg-muted hover:text-foreground"
             >
-              重试
+              {t("重试")}
             </button>
           ) : (
             <span>{loading ? "更新中…" : "点击查看走势"}</span>

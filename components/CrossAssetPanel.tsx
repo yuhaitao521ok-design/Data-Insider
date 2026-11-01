@@ -29,7 +29,7 @@ export default function CrossAssetPanel({
     >
       <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
         <h2 className="text-[12px] font-medium">{t("跨资产")}</h2>
-        <span className="text-[9.5px] text-muted-foreground">风险偏好速览 · 点击看走势</span>
+        <span className="text-[9.5px] text-muted-foreground">{t("风险偏好速览")} · {t("点击看走势")}</span>
       </div>
 
       <div className="divide-y divide-border">

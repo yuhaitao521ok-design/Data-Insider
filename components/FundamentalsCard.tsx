@@ -87,7 +87,7 @@ export default function FundamentalsCard({
               {SOURCE_LABEL[data.source]}
             </span>
           )}
-          {loading && <span className="text-[10.5px] text-muted-foreground">加载中…</span>}
+          {loading && <span className="text-[10.5px] text-muted-foreground">{t("加载中")}…</span>}
         </div>
         <div className="flex items-center gap-2 text-[10.5px] text-muted-foreground">
           {data?.sector && (
@@ -102,7 +102,7 @@ export default function FundamentalsCard({
               onClick={onRetry}
               className="rounded border border-border px-1.5 py-0.5 transition-colors hover:bg-muted hover:text-foreground"
             >
-              重试
+              {t("重试")}
             </button>
           )}
         </div>

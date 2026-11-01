@@ -220,7 +220,7 @@ export default function IndicatorControls({ configs, onChange }: IndicatorContro
                                   strokeLinecap="round"
                                 />
                               </svg>
-                              参数
+                              {t("参数")}
                             </button>
                             <button
                               type="button"
@@ -228,7 +228,7 @@ export default function IndicatorControls({ configs, onChange }: IndicatorContro
                               aria-label={`移除 ${definition.name}`}
                               className="inline-flex h-6 items-center rounded-md border border-border px-1.5 text-[10px] text-muted-foreground transition-colors hover:border-negative/40 hover:bg-negative-soft hover:text-negative-text"
                             >
-                              移除
+                              {t("移除")}
                             </button>
                           </>
                         ) : (
@@ -238,7 +238,7 @@ export default function IndicatorControls({ configs, onChange }: IndicatorContro
                             aria-label={`添加 ${definition.name}`}
                             className="inline-flex h-6 items-center rounded-md border border-accent/30 bg-accent-soft px-2 text-[10px] font-medium text-accent transition-colors hover:border-accent/50"
                           >
-                            添加
+                            {t("添加")}
                           </button>
                         )}
                       </span>
@@ -302,13 +302,13 @@ export default function IndicatorControls({ configs, onChange }: IndicatorContro
                         }}
                         className="h-7 rounded-md border border-border px-2 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                       >
-                        重置默认
+                        {t("重置默认")}
                       </button>
                       <button
                         type="submit"
                         className="h-7 rounded-md bg-accent px-2.5 text-[11px] font-medium text-accent-foreground transition-colors hover:bg-accent-hover"
                       >
-                        应用
+                        {t("应用")}
                       </button>
                     </div>
                   </form>
@@ -319,7 +319,7 @@ export default function IndicatorControls({ configs, onChange }: IndicatorContro
           })}
 
           <p className="border-t border-border px-2 py-1.5 text-[10px] leading-4 text-muted-foreground/70">
-            同一类型指标只保留一个；添加后点「参数」即可在下方调整，无需关闭菜单。
+            {t("同一类型指标只保留一个；添加后点「参数」即可在下方调整，无需关闭菜单")}
           </p>
         </div>
       )}

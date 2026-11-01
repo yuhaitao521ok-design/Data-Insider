@@ -5,7 +5,7 @@ import { LOCALES, LOCALE_META, useI18n } from "@/lib/i18n";
 
 /** 语言切换：简体中文 / 繁體中文 / English */
 export default function LocaleSwitcher() {
-  const { locale, setLocale } = useI18n();
+  const { locale, setLocale, t } = useI18n();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -32,10 +32,11 @@ export default function LocaleSwitcher() {
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        aria-label="切换语言 / Language"
+        data-locale-switcher
+        aria-label={t("切换语言 / Language")}
         aria-expanded={open}
         aria-haspopup="listbox"
-        title="切换语言 / Language"
+        title={t("切换语言 / Language")}
         className={`flex h-8 items-center gap-1 rounded-lg px-2 transition-colors hover:bg-muted ${
           open ? "text-foreground" : "text-muted-foreground"
         }`}

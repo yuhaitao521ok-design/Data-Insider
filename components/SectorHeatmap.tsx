@@ -28,7 +28,7 @@ export default function SectorHeatmap({
     >
       <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
         <h2 className="text-[12px] font-medium">{t("板块热力")}</h2>
-        <span className="text-[9.5px] text-muted-foreground">SPDR 行业 ETF · 点击看走势</span>
+        <span className="text-[9.5px] text-muted-foreground">{t("SPDR 行业 ETF")} · {t("点击看走势")}</span>
       </div>
 
       <div className="grid grid-cols-2 gap-1 p-2 sm:grid-cols-3 xl:grid-cols-2">

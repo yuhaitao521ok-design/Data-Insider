@@ -52,13 +52,13 @@ export default function TechnicalSummaryCard({
           )}
         </div>
         <span className="text-[9.5px] text-muted-foreground">
-          MA5/20/60 · RSI14 · BOLL20 · ATR14（固定参数，默认常驻）
+          {t("MA5/20/60 · RSI14 · BOLL20 · ATR14（固定参数，默认常驻）")}
         </span>
       </div>
 
       {!summary.enough ? (
         <p className="px-4 py-3 text-[11px] leading-5 text-muted-foreground">
-          当前周期数据点不足（需要 ≥ 20 根），切换到更长周期即可查看技术面摘要。
+          {t("当前周期数据点不足（需要 ≥ 20 根），切换到更长周期即可查看技术面摘要")}
         </p>
       ) : (
         <div className="px-4 py-3">
