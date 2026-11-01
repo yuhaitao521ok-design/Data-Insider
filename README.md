@@ -461,6 +461,8 @@ open-next.config.ts     OpenNext 适配器配置
 
 ## 界面与主题
 
+顶部导航（桌面端）按 OpenRouter 风格重做：**14px 中等字重 + 图标**，hover 时浅底圆角 + 底部强调色下划线（`scale-x-0 → 100` 过渡），点击「行情 / 自选股 / 全景」分别跳到图表、自选股、市场全景；页面顶部的「美股行情」大标题已移除（避免比导航字号还大）。
+
 界面参考 [OpenRouter](https://openrouter.ai) 的设计语言：
 
 - **字体**：Roboto（UI）+ Roboto Mono（价格、涨跌幅、指标），自托管于 `public/fonts`，不依赖外部字体 CDN
