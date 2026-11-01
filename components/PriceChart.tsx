@@ -192,9 +192,11 @@ export default function PriceChart({
   /** 缩放视窗（null = 展示全部数据） */
   const [viewport, setViewport] = useState<ZoomWindow | null>(null);
   const [panning, setPanning] = useState(false);
+  /** 双指手势中：临时禁用浏览器手势，保证捏合缩放稳定 */
+  const [multiTouch, setMultiTouch] = useState(false);
   /** 当前按下的指针（双指 = 捏合） */
   const pointersRef = useRef<Map<number, { x: number; y: number; type: string }>>(new Map());
-  const panRef = useRef<{ pointerId: number; startX: number; startView: ZoomWindow; moved: boolean } | null>(null);
+  const panRef = useRef<{ pointerId: number; startX: number; startY: number; startView: ZoomWindow; moved: boolean; touch: boolean } | null>(null);
   const pinchRef = useRef<{ distance: number; ratio: number } | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const gradientId = useId().replace(/[:]/g, "");
@@ -352,6 +354,7 @@ export default function PriceChart({
     );
 
     if (touchPointers.length >= 2) {
+      setMultiTouch(true);
       const [a, b] = touchPointers.map(([, pointer]) => pointer);
       pinchRef.current = {
         distance: Math.hypot(a.x - b.x, a.y - b.y),
@@ -365,12 +368,14 @@ export default function PriceChart({
     // 鼠标按下时阻止文本选择 / 原生拖拽，否则第二次拖拽会变成「拖动选中的文字」
     if (event.pointerType !== "touch") event.preventDefault();
 
-    if (touchPointers.length === 0 && allPoints.length > 1) {
+    if (allPoints.length > 1) {
       panRef.current = {
         pointerId: event.pointerId,
         startX: event.clientX,
+        startY: event.clientY,
         startView: view,
         moved: false,
+        touch: event.pointerType === "touch",
       };
     }
   }
@@ -412,12 +417,22 @@ export default function PriceChart({
     if (!pan || pan.pointerId !== event.pointerId) return;
 
     const dx = event.clientX - pan.startX;
+    const dy = event.clientY - pan.startY;
+
     if (!pan.moved) {
-      if (Math.abs(dx) < 4) return;
+      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+      // 触摸：纵向手势优先交给页面滚动（touch-action: pan-y），只有横向为主才平移图表
+      if (pan.touch && Math.abs(dy) > Math.abs(dx) * 1.2) {
+        panRef.current = null;
+        return;
+      }
       pan.moved = true;
       setPanning(true);
       event.currentTarget.setPointerCapture?.(event.pointerId);
     }
+
+    // 触摸平移时阻止页面跟随滚动
+    if (pan.touch) event.preventDefault();
 
     const rect = wrapRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -435,7 +450,10 @@ export default function PriceChart({
 
   function handlePointerEnd(event: React.PointerEvent<HTMLDivElement>) {
     pointersRef.current.delete(event.pointerId);
-    if (pointersRef.current.size < 2) pinchRef.current = null;
+    if (pointersRef.current.size < 2) {
+      pinchRef.current = null;
+      setMultiTouch(false);
+    }
 
     if (panRef.current?.pointerId === event.pointerId) {
       panRef.current = null;
@@ -870,7 +888,7 @@ export default function PriceChart({
       }`}
       style={{
         height: `calc(var(--chart-h) + ${panes.length * (PANE_HEIGHT + PANE_GAP)}px)`,
-        touchAction: "none",
+        touchAction: multiTouch ? "none" : "pan-y",
       }}
     >
       <svg width={geometry.width} height={geometry.height} className="block overflow-visible">
