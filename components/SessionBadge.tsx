@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n";
+
 import type { MarketSession } from "@/lib/types";
 import { sessionLabel } from "@/lib/session";
 import { formatCompact, formatTimeInZone } from "@/lib/format";
@@ -48,10 +50,11 @@ export default function SessionBadge({
   detailed = false,
   className = "",
 }: SessionBadgeProps) {
+  const { t } = useI18n();
   if (!session) return null;
 
   const tone = SESSION_TONE[session];
-  const label = sessionLabel(session);
+  const label = t(sessionLabel(session));
   const time = detailed && marketTime
     ? formatTimeInZone(marketTime, "America/New_York", {
         hour: "2-digit",

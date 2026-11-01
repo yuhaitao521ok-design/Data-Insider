@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n";
+
 import Sparkline from "@/components/Sparkline";
 import { CROSS_ASSET_DEFINITIONS } from "@/lib/market-panels";
 import { formatNumber, formatPercent } from "@/lib/format";
@@ -19,13 +21,14 @@ export default function CrossAssetPanel({
   selected,
   onSelect,
 }: CrossAssetPanelProps) {
+  const { t } = useI18n();
   return (
     <section
       className="overflow-hidden rounded-xl border border-border bg-card"
-      aria-label="跨资产行情"
+      aria-label={t("跨资产行情")}
     >
       <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
-        <h2 className="text-[12px] font-medium">跨资产</h2>
+        <h2 className="text-[12px] font-medium">{t("跨资产")}</h2>
         <span className="text-[9.5px] text-muted-foreground">风险偏好速览 · 点击看走势</span>
       </div>
 
@@ -55,7 +58,7 @@ export default function CrossAssetPanel({
               type="button"
               onClick={() => onSelect(definition.symbol)}
               aria-pressed={active}
-              title={`查看走势：${definition.label}（${definition.symbol}）`}
+              title={`查看走势：${t(definition.label)}（${definition.symbol}）`}
               className={`flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors ${
                 active ? "bg-muted/70" : "hover:bg-hover"
               }`}
@@ -65,7 +68,7 @@ export default function CrossAssetPanel({
                   active ? "font-medium text-foreground" : "text-foreground/85"
                 }`}
               >
-                {definition.label}
+                {t(definition.label)}
               </span>
               <Sparkline
                 data={quote?.sparkline ?? []}

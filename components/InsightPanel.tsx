@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n";
+
 import { useState } from "react";
 import type { InsightResponse, RangeKey } from "@/lib/types";
 import { formatTimeInZone } from "@/lib/format";
@@ -32,6 +34,7 @@ export default function InsightPanel({
   loading,
   error,
 }: InsightPanelProps) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(true);
 
   return (
@@ -141,7 +144,7 @@ export default function InsightPanel({
 
           {data.risks.length > 0 && (
             <div className="rounded-lg border border-negative/20 bg-negative-soft p-3">
-              <p className="mb-1 text-[11px] font-medium text-negative-text">风险提示</p>
+              <p className="mb-1 text-[11px] font-medium text-negative-text">{t("风险提示")}</p>
               <ul className="space-y-1">
                 {data.risks.map((risk, index) => (
                   <li key={index} className="text-[11px] leading-5 text-foreground/75">

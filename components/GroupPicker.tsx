@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n";
+
 import { useEffect, useRef, useState } from "react";
 import {
   MAX_GROUP_NAME,
@@ -27,6 +29,7 @@ export default function GroupPicker({
   onCreateGroup,
   onClose,
 }: GroupPickerProps) {
+  const { t } = useI18n();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -114,8 +117,8 @@ export default function GroupPicker({
                   setError(null);
                 }
               }}
-              placeholder="新分组名称"
-              aria-label="新分组名称"
+              placeholder={t("新分组名称")}
+              aria-label={t("新分组名称")}
               className="h-6 min-w-0 flex-1 rounded-md border border-border bg-card px-1.5 text-[11px] outline-none focus:border-accent/60"
             />
             <button

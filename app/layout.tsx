@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import LocaleProvider from "@/components/LocaleProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -17,15 +18,17 @@ export const viewport: Viewport = {
 };
 
 /** 在首帧前确定主题，避免亮/暗闪烁 */
-const themeScript = `(function(){try{var s=localStorage.getItem("data-insider:theme");var d=s?s==="dark":window.matchMedia("(prefers-color-scheme: dark)").matches;document.documentElement.classList.toggle("dark",d);}catch(e){}})();`;
+const themeScript = `(function(){try{var s=localStorage.getItem("data-insider:theme");var d=s?s==="dark":window.matchMedia("(prefers-color-scheme: dark)").matches;document.documentElement.classList.toggle("dark",d);var l=localStorage.getItem("data-insider:locale:v1");var m={"zh-Hans":"zh-Hans","zh-Hant":"zh-Hant","en":"en"};if(l&&m[l]){document.documentElement.lang=m[l];document.documentElement.dataset.locale=l;}}catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="zh-CN" suppressHydrationWarning>
+    <html lang="zh-Hans" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body>{children}</body>
+      <body>
+        <LocaleProvider>{children}</LocaleProvider>
+      </body>
     </html>
   );
 }

@@ -406,6 +406,22 @@ wrangler.jsonc          Cloudflare Worker 配置（OpenNext）
 open-next.config.ts     OpenNext 适配器配置
 ```
 
+## 多语言（简体 / 繁體 / English）
+
+头部右侧的地球按钮可切换语言，三个选项：
+
+| 选项 | `<html lang>` | 说明 |
+| --- | --- | --- |
+| 简体中文 | `zh-Hans` | 默认 / 源语言 |
+| 繁體中文 | `zh-Hant` | 独立词典 |
+| English | `en` | 独立词典 |
+
+- 首次访问按浏览器语言自动选择（`zh-*` → 简体，`zh-TW/HK/MO` → 繁体，`en-*` → 英文），之后记住选择（`localStorage: data-insider:locale:v1`）
+- 首帧前就用内联脚本设置 `<html lang>` 与 `data-locale`，避免语言闪烁
+- 实现：`lib/i18n.ts` 用**中文原文作为 key**（组件里 `t("自选股")`），缺翻译时自动回退中文，不会出现空白或 key 泄漏；`components/LocaleProvider.tsx` 提供上下文，`components/LocaleSwitcher.tsx` 是切换按钮
+- 当前已覆盖：导航 / 页面标题、自选股面板（含分组、添加框、搜索建议）、图表工具栏与坐标悬浮、全球指数、板块热力、跨资产、技术面、基本面、价格提醒、搜索框、页脚等主要文案
+- 未覆盖的深层文案（部分服务端错误、AI 面板细节）会回退中文；追加翻译只需在 `lib/i18n.ts` 的两本词典里补 key
+
 ## 界面与主题
 
 界面参考 [OpenRouter](https://openrouter.ai) 的设计语言：

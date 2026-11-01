@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n";
+
 import { useEffect, useRef, useState } from "react";
 import { describeAlert, type AlertDirection, type PriceAlert } from "@/lib/alerts";
 import { formatPrice, formatTimeInZone } from "@/lib/format";
@@ -29,6 +31,7 @@ export default function PriceAlerts({
   onReenable,
   onRequestPermission,
 }: PriceAlertsProps) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [direction, setDirection] = useState<AlertDirection>("above");
   const [draft, setDraft] = useState("");
@@ -83,7 +86,7 @@ export default function PriceAlerts({
         className={`inline-flex h-7 items-center gap-1 rounded-lg border bg-card px-2 text-[11px] transition-colors hover:bg-muted hover:text-foreground ${
           activeCount > 0 ? "border-accent/40 text-foreground" : "border-border text-muted-foreground"
         }`}
-        title="价格提醒"
+        title={t("价格提醒")}
       >
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path
@@ -111,7 +114,7 @@ export default function PriceAlerts({
         >
           <div className="mb-2 flex items-center justify-between">
             <span className="text-[11px] font-medium">{symbol} 价格提醒</span>
-            <span className="text-[10px] text-muted-foreground">仅本地保存</span>
+            <span className="text-[10px] text-muted-foreground">{t("仅本地保存")}</span>
           </div>
 
           <div className="flex items-center gap-1">
@@ -143,8 +146,8 @@ export default function PriceAlerts({
                 if (event.key === "Enter") submit();
               }}
               inputMode="decimal"
-              placeholder="目标价"
-              aria-label="目标价"
+              placeholder={t("目标价")}
+              aria-label={t("目标价")}
               className="num h-7 min-w-0 flex-1 rounded-md border border-border bg-card px-2 text-[11px] outline-none focus:border-accent/60"
             />
 
@@ -211,7 +214,7 @@ export default function PriceAlerts({
                         type="button"
                         onClick={() => onReenable(alert.id)}
                         className="shrink-0 rounded border border-border px-1 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                        title="重新启用"
+                        title={t("重新启用")}
                       >
                         重开
                       </button>
@@ -220,8 +223,8 @@ export default function PriceAlerts({
                       type="button"
                       onClick={() => onRemove(alert.id)}
                       className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-[12px] leading-none text-muted-foreground transition-colors hover:bg-muted hover:text-negative-text"
-                      title="删除提醒"
-                      aria-label="删除提醒"
+                      title={t("删除提醒")}
+                      aria-label={t("删除提醒")}
                     >
                       ×
                     </button>

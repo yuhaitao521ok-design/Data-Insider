@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n";
+
 import { useEffect, useRef, useState } from "react";
 import {
   INDICATOR_DEFINITIONS,
@@ -27,6 +29,7 @@ interface EditingState {
  * 添加 / 移除 / 参数全部在菜单内完成，避免指标标签占满工具栏。
  */
 export default function IndicatorControls({ configs, onChange }: IndicatorControlsProps) {
+  const { t } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -130,7 +133,7 @@ export default function IndicatorControls({ configs, onChange }: IndicatorContro
       <button
         type="button"
         onClick={openMenu}
-        aria-label="技术指标"
+        aria-label={t("技术指标")}
         aria-expanded={menuOpen}
         aria-haspopup="true"
         className={`inline-flex h-7 items-center gap-1 rounded-lg border px-2 text-[11px] transition-colors ${
@@ -153,7 +156,7 @@ export default function IndicatorControls({ configs, onChange }: IndicatorContro
       {menuOpen && (
         <div className="absolute right-0 top-full z-50 mt-1.5 max-h-[min(72vh,560px)] w-[340px] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-[var(--shadow-pop)] scroll-thin rise">
           <div className="flex items-center justify-between px-2 pb-1 pt-1.5">
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">技术指标</p>
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{t("技术指标")}</p>
             <span className="num text-[10px] text-muted-foreground/70">
               {configs.length} / {INDICATOR_TYPES.length} 已启用
             </span>
@@ -185,7 +188,7 @@ export default function IndicatorControls({ configs, onChange }: IndicatorContro
                     <div className="flex items-center justify-between gap-2">
                       <span className="flex items-center gap-1.5">
                         <span className="text-[12.5px] font-medium">{definition.name}</span>
-                        {active && <span className="text-[10px] text-accent">已添加</span>}
+                        {active && <span className="text-[10px] text-accent">{t("已添加")}</span>}
                       </span>
 
                       <span className="flex shrink-0 items-center gap-1">

@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n";
+
 import { useEffect } from "react";
 
 export interface AlertToastItem {
@@ -17,6 +19,7 @@ interface AlertToastsProps {
 
 /** 右下角的提醒 toast；带关闭按钮，8 秒后自动消失（由父组件定时清理） */
 export default function AlertToasts({ items, onDismiss }: AlertToastsProps) {
+  const { t } = useI18n();
   useEffect(() => {
     if (items.length === 0) return;
     const timers = items.map((item) =>
@@ -59,7 +62,7 @@ export default function AlertToasts({ items, onDismiss }: AlertToastsProps) {
               type="button"
               onClick={() => onDismiss(item.id)}
               className="-mr-1 -mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              aria-label="关闭提醒"
+              aria-label={t("关闭提醒")}
             >
               ×
             </button>
