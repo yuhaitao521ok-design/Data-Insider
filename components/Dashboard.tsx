@@ -1368,18 +1368,80 @@ export default function Dashboard() {
             <span className="text-[15px] font-medium tracking-tight">Data Insider</span>
           </a>
 
-          <nav className="ml-2 hidden items-center gap-0.5 lg:flex" aria-label={t("页面导航")}>
+          <nav className="ml-3 hidden items-stretch gap-1 self-stretch lg:flex" aria-label={t("页面导航")}>
             {[
-              { label: t("行情"), href: "#market" },
-              { label: t("自选股"), href: "#watchlist" },
-              ...(aiEnabled ? [{ label: t("AI 解读"), href: "#insight" }] : []),
+              {
+                label: t("行情"),
+                href: "#chart",
+                icon: (
+                  <path
+                    d="M4 16.5 8.5 10l3.6 4.2L16.5 7.5H20"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                ),
+              },
+              {
+                label: t("自选股"),
+                href: "#watchlist",
+                icon: (
+                  <path
+                    d="M6 4h12v16l-6-3.6L6 20V4Z"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinejoin="round"
+                  />
+                ),
+              },
+              {
+                label: t("全景"),
+                href: "#panorama",
+                icon: (
+                  <>
+                    <rect x="4" y="4" width="7" height="7" rx="1.4" stroke="currentColor" strokeWidth="1.6" />
+                    <rect x="13" y="4" width="7" height="7" rx="1.4" stroke="currentColor" strokeWidth="1.6" />
+                    <rect x="4" y="13" width="7" height="7" rx="1.4" stroke="currentColor" strokeWidth="1.6" />
+                    <rect x="13" y="13" width="7" height="7" rx="1.4" stroke="currentColor" strokeWidth="1.6" />
+                  </>
+                ),
+              },
+              ...(aiEnabled
+                ? [
+                    {
+                      label: t("AI 解读"),
+                      href: "#insight",
+                      icon: (
+                        <path
+                          d="M12 4.5 13.8 9l4.5 1.8-4.5 1.8L12 17l-1.8-4.4L5.7 10.8 10.2 9 12 4.5Z"
+                          stroke="currentColor"
+                          strokeWidth="1.6"
+                          strokeLinejoin="round"
+                        />
+                      ),
+                    },
+                  ]
+                : []),
             ].map((item) => (
               <a
                 key={item.href}
                 href={item.href}
-                className="rounded-md px-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                className="group relative flex items-center gap-1.5 rounded-lg px-2.5 text-[14px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  aria-hidden="true"
+                  className="text-muted-foreground/80 transition-colors group-hover:text-foreground"
+                >
+                  {item.icon}
+                </svg>
                 {item.label}
+                {/* 参考 OpenRouter：hover 时底部出现强调色下划线 */}
+                <span className="pointer-events-none absolute inset-x-2 bottom-0 h-[2px] scale-x-0 rounded-full bg-accent transition-transform duration-200 group-hover:scale-x-100" />
               </a>
             ))}
           </nav>
@@ -1456,10 +1518,9 @@ export default function Dashboard() {
       </header>
 
       <main id="top" className="mx-auto max-w-[1440px] px-4 pb-24 pt-5 lg:px-6 lg:pb-5 xl:max-w-[1640px] 2xl:max-w-[2200px]">
-        <div id="market" className="mb-4 flex scroll-mt-20 flex-wrap items-end justify-between gap-2">
+        <div id="market" className="mb-4 flex scroll-mt-20 flex-wrap items-center justify-between gap-2">
           <div>
-            <h1 className="text-[24px] font-medium leading-tight tracking-tight">{t("美股行情")}</h1>
-            <p className="mt-1 text-[12px] text-muted-foreground">
+            <p className="text-[12px] text-muted-foreground">
               {t("多周期报价与走势")} · Yahoo Finance / Nasdaq
               {aiEnabled ? " · Perplexity AI" : ""}
             </p>
