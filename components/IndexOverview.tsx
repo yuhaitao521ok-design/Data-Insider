@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n";
+
 import Sparkline from "@/components/Sparkline";
 import SessionBadge from "@/components/SessionBadge";
 import { INDEX_DEFINITIONS } from "@/lib/index-groups";
@@ -31,6 +33,7 @@ export default function IndexOverview({
   onSelect,
   onRetry,
 }: IndexOverviewProps) {
+  const { t } = useI18n();
   const updatedLabel = updatedAt
     ? formatTimeInZone(updatedAt, "Asia/Shanghai", {
         hour: "2-digit",
@@ -42,11 +45,11 @@ export default function IndexOverview({
   return (
     <section
       className="mb-4 overflow-hidden rounded-xl border border-border bg-card"
-      aria-label="全球指数概览"
+      aria-label={t("全球指数概览")}
     >
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3.5 py-2">
         <div className="flex items-center gap-2">
-          <h2 className="text-[12.5px] font-medium">全球指数</h2>
+          <h2 className="text-[12.5px] font-medium">{t("全球指数")}</h2>
           <span className="text-[10px] text-muted-foreground">美股 · 亚太</span>
         </div>
         <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
@@ -87,14 +90,14 @@ export default function IndexOverview({
               type="button"
               onClick={() => onSelect(definition.symbol)}
               aria-pressed={selected === definition.symbol}
-              title={`${definition.label}（${definition.symbol}）`}
+              title={`${t(definition.label)}（${definition.symbol}）`}
               className={`group relative flex flex-col gap-1.5 px-3.5 py-2.5 text-left transition-colors hover:bg-hover ${
                 selected === definition.symbol ? "bg-muted/60" : "bg-card"
               }`}
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate text-[11.5px] font-medium leading-4 text-foreground/90">
-                  {definition.label}
+                  {t(definition.label)}
                 </span>
                 <span className="flex shrink-0 items-center gap-1">
                   {definition.region === "us" &&

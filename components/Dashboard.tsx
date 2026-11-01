@@ -1,11 +1,14 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import SearchBox from "@/components/SearchBox";
 import Sparkline from "@/components/Sparkline";
 import PriceChart from "@/components/PriceChart";
 import InsightPanel from "@/components/InsightPanel";
 import ThemeToggle from "@/components/ThemeToggle";
+import LocaleSwitcher from "@/components/LocaleSwitcher";
 import IndicatorControls from "@/components/IndicatorControls";
 import IntervalSelect from "@/components/IntervalSelect";
 import IndexOverview from "@/components/IndexOverview";
@@ -121,6 +124,7 @@ async function readError(response: Response, fallback: string): Promise<string> 
 }
 
 export default function Dashboard() {
+  const { t } = useI18n();
   const [hydrated, setHydrated] = useState(false);
   const [watchlist, setWatchlist] = useState<string[]>([...DEFAULT_WATCHLIST]);
   const [selected, setSelected] = useState<string>(DEFAULT_WATCHLIST[0]);
@@ -1311,11 +1315,11 @@ export default function Dashboard() {
             <span className="text-[15px] font-medium tracking-tight">Data Insider</span>
           </a>
 
-          <nav className="ml-2 hidden items-center gap-0.5 lg:flex" aria-label="页面导航">
+          <nav className="ml-2 hidden items-center gap-0.5 lg:flex" aria-label={t("页面导航")}>
             {[
-              { label: "行情", href: "#market" },
-              { label: "自选股", href: "#watchlist" },
-              ...(aiEnabled ? [{ label: "AI 解读", href: "#insight" }] : []),
+              { label: t("行情"), href: "#market" },
+              { label: t("自选股"), href: "#watchlist" },
+              ...(aiEnabled ? [{ label: t("AI 解读"), href: "#insight" }] : []),
             ].map((item) => (
               <a
                 key={item.href}
@@ -1345,7 +1349,7 @@ export default function Dashboard() {
                   autoRefresh ? "bg-positive live-dot" : "bg-muted-foreground/40"
                 }`}
               />
-              <span className="hidden sm:inline">{autoRefresh ? "实时" : "已暂停"}</span>
+              <span className="hidden sm:inline">{autoRefresh ? t("实时") : t("已暂停")}</span>
             </button>
 
             <button
@@ -1355,8 +1359,8 @@ export default function Dashboard() {
                 void loadChart(selected, range, interval);
               }}
               className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              title="立即刷新"
-              aria-label="立即刷新"
+              title={t("立即刷新")}
+              aria-label={t("立即刷新")}
             >
               <svg
                 width="14"
@@ -1376,6 +1380,7 @@ export default function Dashboard() {
               </svg>
             </button>
 
+            <LocaleSwitcher />
             <ThemeToggle />
 
             <a
@@ -1400,7 +1405,7 @@ export default function Dashboard() {
       <main id="top" className="mx-auto max-w-[1440px] px-4 py-5 lg:px-6">
         <div id="market" className="mb-4 flex scroll-mt-20 flex-wrap items-end justify-between gap-2">
           <div>
-            <h1 className="text-[24px] font-medium leading-tight tracking-tight">美股行情</h1>
+            <h1 className="text-[24px] font-medium leading-tight tracking-tight">{t("美股行情")}</h1>
             <p className="mt-1 text-[12px] text-muted-foreground">
               多周期报价与走势 · Yahoo Finance / Nasdaq
               {aiEnabled ? " · Perplexity AI" : ""}
@@ -1419,7 +1424,7 @@ export default function Dashboard() {
                   quote?.source === "perplexity" ? "bg-amber-500" : "bg-positive"
                 }`}
               />
-              {quote ? SOURCE_LABEL[quote.source] : "连接中"}
+              {quote ? t(SOURCE_LABEL[quote.source]) : t("连接中")}
             </span>
             <span className="flex items-center gap-1.5">
               <span
@@ -1446,7 +1451,7 @@ export default function Dashboard() {
 
         {breadth && (
           <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border bg-card px-3 py-2 text-[11px] text-muted-foreground">
-            <span className="font-medium text-foreground">自选股概览</span>
+            <span className="font-medium text-foreground">{t("自选股概览")}</span>
             <span className="inline-flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-positive" />
               <span className="num text-foreground/80">{breadth.up}</span> 涨
@@ -1506,7 +1511,7 @@ export default function Dashboard() {
           >
             <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
               <div className="flex items-center gap-2">
-                <h2 className="text-[13px] font-medium">自选股</h2>
+                <h2 className="text-[13px] font-medium">{t("自选股")}</h2>
                 <span
                   title={`自选股 ${watchlist.length} / ${MAX_WATCHLIST}`}
                   className={`num rounded-full px-1.5 text-[10px] leading-4 ${
@@ -1528,8 +1533,8 @@ export default function Dashboard() {
                     setNewGroupName("");
                   }}
                   data-group-create-toggle
-                  aria-label="新建分组"
-                  title="新建分组（把标的分类）"
+                  aria-label={t("新建分组")}
+                  title={t("新建分组（把标的分类）")}
                   className={`inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[10.5px] transition-colors ${
                     creatingGroup
                       ? "bg-accent-soft text-accent"
@@ -1544,7 +1549,7 @@ export default function Dashboard() {
                       strokeLinejoin="round"
                     />
                   </svg>
-                  分组
+                  {t("分组")}
                 </button>
                 <button
                   type="button"
@@ -1567,7 +1572,7 @@ export default function Dashboard() {
                       strokeLinejoin="round"
                     />
                   </svg>
-                  涨跌幅
+                  {t("涨跌幅")}
                   <span className="num" aria-hidden="true">
                     {sortMode === "change-desc" ? "↓" : sortMode === "change-asc" ? "↑" : "↕"}
                   </span>
@@ -1582,8 +1587,8 @@ export default function Dashboard() {
                       ? "bg-accent-soft text-accent"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   }`}
-                  aria-label="添加自选股"
-                  title="添加自选股（可直接选分组）"
+                  aria-label={t("添加自选股")}
+                  title={t("添加自选股（可直接选分组）")}
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path
@@ -1629,18 +1634,18 @@ export default function Dashboard() {
                   maxLength={12}
                   spellCheck={false}
                   autoComplete="off"
-                  placeholder="股票代码，如 AAPL"
-                  aria-label="输入股票代码"
+                  placeholder={t("股票代码，如 AAPL")}
+                  aria-label={t("输入股票代码")}
                   className="h-7 min-w-0 flex-1 rounded-md border border-border bg-card px-1.5 text-[11px] uppercase tracking-wide outline-none placeholder:normal-case placeholder:tracking-normal focus:border-accent/60"
                 />
                 <select
                   value={addSymbolGroup ?? ""}
                   onChange={(event) => setAddSymbolGroup(event.target.value || null)}
-                  aria-label="选择分组"
-                  title="加入哪个分组"
+                  aria-label={t("选择分组")}
+                  title={t("加入哪个分组")}
                   className="h-7 max-w-[104px] shrink-0 rounded-md border border-border bg-card px-1 text-[11px] text-foreground outline-none focus:border-accent/60"
                 >
-                  <option value="">未分组</option>
+                  <option value="">{t("未分组")}</option>
                   {groups.map((group) => (
                     <option key={group.id} value={group.id}>
                       {group.name}
@@ -1665,7 +1670,7 @@ export default function Dashboard() {
                 {addSymbolInput.trim().length > 0 && (
                   <div
                     className="scroll-thin max-h-[200px] overflow-y-auto border-t border-border bg-card"
-                    aria-label="搜索结果"
+                    aria-label={t("搜索结果")}
                   >
                     {addSuggestions.length > 0 ? (
                       addSuggestions.map((item, index) => {
@@ -1731,23 +1736,23 @@ export default function Dashboard() {
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
                       const message = createGroupAndAssign(newGroupName);
-                      if (message) notify("分组", message);
+                      if (message) notify(t("分组"), message);
                     }
                     if (event.key === "Escape") setCreatingGroup(false);
                   }}
-                  placeholder="分组名称，如 科技 / 指数"
-                  aria-label="新分组名称"
+                  placeholder={t("分组名称，如 科技 / 指数")}
+                  aria-label={t("新分组名称")}
                   className="h-6 min-w-0 flex-1 rounded-md border border-border bg-card px-1.5 text-[11px] outline-none focus:border-accent/60"
                 />
                 <button
                   type="button"
                   onClick={() => {
                     const message = createGroupAndAssign(newGroupName);
-                    if (message) notify("分组", message);
+                    if (message) notify(t("分组"), message);
                   }}
                   className="h-6 shrink-0 rounded-md bg-foreground px-2 text-[10.5px] font-medium text-background"
                 >
-                  创建
+                  {t("创建")}
                 </button>
               </div>
             )}
@@ -1755,7 +1760,7 @@ export default function Dashboard() {
             <div
               ref={watchlistListRef}
               className="scroll-thin flex gap-1 overflow-x-auto p-2 lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-y-auto"
-              aria-label="自选股列表（可拖动排序）"
+              aria-label={t("自选股列表（可拖动排序）")}
             >
               {watchlistSections.map((section) => {
                 const collapsed = Boolean(collapsedGroups[section.id]);
@@ -1816,7 +1821,7 @@ export default function Dashboard() {
                               }}
                               disabled={Boolean(drag?.symbol)}
                               aria-label={`${section.name} 分组操作`}
-                              title="分组操作"
+                              title={t("分组操作")}
                               className="flex h-5 w-5 items-center justify-center rounded text-[12px] leading-none text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
                             >
                               ⋯
@@ -1829,14 +1834,14 @@ export default function Dashboard() {
                                     autoFocus
                                     defaultValue={section.name}
                                     maxLength={MAX_GROUP_NAME}
-                                    aria-label="重命名分组"
+                                    aria-label={t("重命名分组")}
                                     onKeyDown={(event) => {
                                       if (event.key === "Enter") {
                                         const message = renameGroupTo(
                                           section.id,
                                           event.currentTarget.value,
                                         );
-                                        if (message) notify("分组", message);
+                                        if (message) notify(t("分组"), message);
                                       }
                                       if (event.key === "Escape") setRenamingGroup(null);
                                     }}
@@ -1850,14 +1855,14 @@ export default function Dashboard() {
                                       onClick={() => setRenamingGroup(section.id)}
                                       className="flex w-full items-center rounded-md px-1.5 py-1 text-left text-[11px] text-foreground/85 transition-colors hover:bg-muted"
                                     >
-                                      重命名
+                                      {t("重命名")}
                                     </button>
                                     <button
                                       type="button"
                                       onClick={() => deleteGroup(section.id)}
                                       className="flex w-full items-center rounded-md px-1.5 py-1 text-left text-[11px] text-negative-text transition-colors hover:bg-negative-soft"
                                     >
-                                      删除分组（标的保留）
+                                      {t("删除分组")}
                                     </button>
                                   </>
                                 )}
@@ -1978,7 +1983,7 @@ export default function Dashboard() {
                                   )}
                                 </div>
                                 <p className="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground">
-                                  {item?.name ?? (quotesLoading ? "加载中…" : "暂无数据")}
+                                  {item?.name ?? (quotesLoading ? t("加载中") : t("暂无数据"))}
                                 </p>
                               </div>
 
@@ -2046,13 +2051,13 @@ export default function Dashboard() {
           <section className="min-w-0 space-y-4">
             {quotesError && (
               <div className="flex items-center gap-3 rounded-xl border border-negative/25 bg-negative-soft px-3 py-2 text-[12px] text-negative-text">
-                <span className="flex-1">行情加载失败：{quotesError}</span>
+                <span className="flex-1">{t("行情加载失败")}：{quotesError}</span>
                 <button
                   type="button"
                   onClick={() => void loadQuotes()}
                   className="rounded-md border border-negative/30 px-2 py-1 text-[11px] transition-colors hover:bg-negative/10"
                 >
-                  重试
+                  {t("重试")}
                 </button>
               </div>
             )}
@@ -2082,7 +2087,7 @@ export default function Dashboard() {
                           className="rounded-md border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] leading-4 text-amber-600 dark:text-amber-400"
                           title="Yahoo / Nasdaq 暂不可用，此报价由 Perplexity 联网检索估算，仅供参考"
                         >
-                          AI 估算
+                          {t("AI 估算")}
                         </span>
                       )}
                       <button
@@ -2095,7 +2100,7 @@ export default function Dashboard() {
                             ? "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
                             : "border-accent/30 bg-accent-soft text-accent hover:border-accent/50"
                         }`}
-                        title={inWatchlist ? "从自选股移除" : "加入自选股"}
+                        title={inWatchlist ? t("从自选股移除") : t("加入自选股")}
                       >
                         <svg
                           width="10"
@@ -2111,7 +2116,7 @@ export default function Dashboard() {
                             strokeLinejoin="round"
                           />
                         </svg>
-                        {inWatchlist ? "已自选" : "加自选"}
+                        {inWatchlist ? t("已自选") : t("加自选")}
                       </button>
                     </div>
                     <p className="mt-1 max-w-[320px] truncate text-[12px] text-muted-foreground sm:max-w-md">
@@ -2151,7 +2156,7 @@ export default function Dashboard() {
                             minute: "2-digit",
                           })
                         : "--"}{" "}
-                      · {quote ? SOURCE_LABEL[quote.source] : "—"}
+                      · {quote ? t(SOURCE_LABEL[quote.source]) : "—"}
                       {stale ? " · 缓存" : ""}
                     </p>
                   </div>
@@ -2171,7 +2176,7 @@ export default function Dashboard() {
                             : "text-muted-foreground hover:text-foreground"
                         }`}
                       >
-                        {RANGE_CONFIG[key].label}
+                        {t(RANGE_CONFIG[key].label)}
                       </button>
                     ))}
                   </div>
@@ -2179,7 +2184,7 @@ export default function Dashboard() {
                     <div
                       className="inline-flex items-center gap-0.5 rounded-lg bg-muted p-0.5"
                       role="group"
-                      aria-label="图表类型"
+                      aria-label={t("图表类型")}
                     >
                       {CHART_MODES.map((option) => (
                         <button
@@ -2194,7 +2199,7 @@ export default function Dashboard() {
                               : "text-muted-foreground hover:text-foreground"
                           }`}
                         >
-                          {option.label}
+                          {t(option.label)}
                         </button>
                       ))}
                     </div>
@@ -2216,8 +2221,8 @@ export default function Dashboard() {
                       onClick={exportCsv}
                       disabled={!chart}
                       className="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                      aria-label="导出 CSV"
-                      title="导出当前图表数据（CSV）"
+                      aria-label={t("导出 CSV")}
+                      title={t("导出当前图表数据（CSV）")}
                     >
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path
@@ -2266,7 +2271,7 @@ export default function Dashboard() {
                           onClick={() => void loadChart(selected, range, interval)}
                           className="h-8 rounded-lg bg-foreground px-3 text-[12px] font-medium text-background transition-opacity hover:opacity-90"
                         >
-                          重新加载
+                          {t("重新加载")}
                         </button>
                         {(range === "1D" || range === "5D") && (
                           <button
@@ -2356,7 +2361,7 @@ export default function Dashboard() {
 
           <aside
             className="min-w-0 space-y-4 lg:col-span-2 xl:col-span-1"
-            aria-label="市场全景"
+            aria-label={t("市场全景")}
           >
             <CrossAssetPanel
               quotes={crossQuotes}
@@ -2387,7 +2392,7 @@ export default function Dashboard() {
       <footer className="border-t border-border">
         <div className="mx-auto flex max-w-[1440px] flex-col gap-2 px-4 py-6 text-[11px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between lg:px-6">
           <p>
-            数据来源 Yahoo Finance / Nasdaq / Perplexity · 行情可能延迟 15 分钟 · 仅供学习研究，不构成投资建议
+            {t("数据来源 Yahoo Finance / Nasdaq / Perplexity · 行情可能延迟 15 分钟 · 仅供学习研究，不构成投资建议")}
           </p>
           <div className="flex items-center gap-4">
             <a

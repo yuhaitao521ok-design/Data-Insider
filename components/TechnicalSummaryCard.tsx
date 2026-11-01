@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n";
+
 import type { TechnicalSummary } from "@/lib/technical";
 import { RANGE_CONFIG, INTERVAL_CONFIG, type IntervalKey, type RangeKey } from "@/lib/types";
 
@@ -27,6 +29,7 @@ export default function TechnicalSummaryCard({
   range,
   interval,
 }: TechnicalSummaryCardProps) {
+  const { t } = useI18n();
   const color = TONE_COLOR[summary.verdict];
   const barWidth = Math.min(50, Math.abs(summary.score) / 2);
   const barLeft = summary.score >= 0 ? 50 : 50 - barWidth;
@@ -35,15 +38,15 @@ export default function TechnicalSummaryCard({
     <article className="overflow-hidden rounded-xl border border-border bg-card">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="text-[13px] font-medium">技术面</h3>
+          <h3 className="text-[13px] font-medium">{t("技术面")}</h3>
           <span className="text-[10px] text-muted-foreground">
-            {RANGE_CONFIG[range].label} · {INTERVAL_CONFIG[interval].short}
+            {t(RANGE_CONFIG[range].label)} · {INTERVAL_CONFIG[interval].short}
           </span>
           {summary.enough && (
             <span
               className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] leading-4 ${TONE_CLASS[summary.verdict]}`}
             >
-              {summary.verdictLabel} · {summary.score > 0 ? "+" : ""}
+              {t(summary.verdictLabel)} · {summary.score > 0 ? "+" : ""}
               {summary.score}
             </span>
           )}
@@ -71,7 +74,7 @@ export default function TechnicalSummaryCard({
             {summary.items.map((item) => (
               <div key={item.key} className="min-w-0">
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-[10.5px] text-muted-foreground">{item.label}</span>
+                  <span className="text-[10.5px] text-muted-foreground">{t(item.label)}</span>
                   <span
                     className={`num text-[11px] ${
                       item.tone === "up"

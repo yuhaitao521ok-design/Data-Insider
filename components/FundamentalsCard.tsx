@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n";
+
 import type { Fundamentals } from "@/lib/types";
 import { formatCompact, formatNumber, formatPercent, formatPrice } from "@/lib/format";
 
@@ -28,6 +30,7 @@ export default function FundamentalsCard({
   error,
   onRetry,
 }: FundamentalsCardProps) {
+  const { t } = useI18n();
   const metrics: { label: string; value: string; title?: string }[] = [
     {
       label: "总市值",
@@ -77,7 +80,7 @@ export default function FundamentalsCard({
     <article className="overflow-hidden rounded-xl border border-border bg-card">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
         <div className="flex items-center gap-2">
-          <h3 className="text-[13px] font-medium">基本面</h3>
+          <h3 className="text-[13px] font-medium">{t("基本面")}</h3>
           <span className="text-[11px] text-muted-foreground">{symbol}</span>
           {data && (
             <span className="rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] leading-4 text-muted-foreground">
@@ -113,8 +116,8 @@ export default function FundamentalsCard({
         <>
           <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
             {metrics.map((metric) => (
-              <div key={metric.label} className="bg-card px-4 py-2.5" title={metric.title}>
-                <p className="text-[10.5px] text-muted-foreground">{metric.label}</p>
+              <div key={t(metric.label)} className="bg-card px-4 py-2.5" title={metric.title}>
+                <p className="text-[10.5px] text-muted-foreground">{t(metric.label)}</p>
                 <p className="num mt-0.5 truncate text-[12.5px] text-foreground">{metric.value}</p>
               </div>
             ))}

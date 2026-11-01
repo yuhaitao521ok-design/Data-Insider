@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n";
+
 import { useEffect, useRef, useState } from "react";
 import type { SearchResult } from "@/lib/types";
 
@@ -8,6 +10,7 @@ interface SearchBoxProps {
 }
 
 export default function SearchBox({ onPick }: SearchBoxProps) {
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [open, setOpen] = useState(false);
@@ -123,9 +126,9 @@ export default function SearchBox({ onPick }: SearchBoxProps) {
           onChange={(event) => setQuery(event.target.value)}
           onFocus={() => results.length > 0 && setOpen(true)}
           onKeyDown={handleKeyDown}
-          placeholder="搜索代码或公司，如 AAPL / 英伟达"
+          placeholder={t("搜索代码或公司，如 AAPL / 英伟达")}
           className="w-full bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
-          aria-label="搜索股票"
+          aria-label={t("搜索股票")}
           autoComplete="off"
           spellCheck={false}
         />
@@ -171,7 +174,7 @@ export default function SearchBox({ onPick }: SearchBoxProps) {
               <span className="w-14 shrink-0 text-[13px] font-medium text-accent">
                 {tickerCandidate}
               </span>
-              <span className="text-[12px] text-muted-foreground">直接添加该代码</span>
+              <span className="text-[12px] text-muted-foreground">{t("直接添加该代码")}</span>
             </button>
           )}
         </div>

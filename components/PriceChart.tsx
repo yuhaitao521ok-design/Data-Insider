@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n";
+
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ChartMode, ChartPoint, ChartSessions, IntervalKey, RangeKey } from "@/lib/types";
 import type { ChartOverlay, ChartPane } from "@/lib/indicators";
@@ -178,6 +180,7 @@ export default function PriceChart({
   alertLines = [],
   sessions,
 }: PriceChartProps) {
+  const { t } = useI18n();
   const wrapRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [hover, setHover] = useState<number | null>(null);
@@ -565,7 +568,7 @@ export default function PriceChart({
       .map((line) => ({
         id: line.id,
         y: yFor(line.price),
-        label: `提醒 ${formatTick(line.price)}`,
+        label: `${t("提醒")} ${formatTick(line.price)}`,
         direction: line.direction,
       }));
 
@@ -764,7 +767,7 @@ export default function PriceChart({
         className="relative flex w-full items-center justify-center text-[12px] text-muted-foreground [--chart-h:250px] sm:[--chart-h:310px] lg:[--chart-h:370px]"
         style={{ height: `calc(var(--chart-h) + ${panes.length * (PANE_HEIGHT + PANE_GAP)}px)` }}
       >
-        暂无走势数据
+        {t("暂无走势数据")}
       </div>
     );
   }
@@ -956,7 +959,7 @@ export default function PriceChart({
               fontSize="9"
               style={{ fill: "var(--chart-label)" }}
             >
-              昨收
+              {t("昨收")}
             </text>
           </g>
         )}
@@ -1253,8 +1256,8 @@ export default function PriceChart({
             type="button"
             onClick={() => setViewport(null)}
             className="rounded px-1 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="重置缩放"
-            title="重置缩放（也可以双击图表）"
+            aria-label={t("重置缩放")}
+            title={t("重置缩放（也可以双击图表）")}
           >
             重置
           </button>
@@ -1271,7 +1274,7 @@ export default function PriceChart({
             <span className="flex min-w-0 items-center gap-1 text-[10px] leading-4 text-muted-foreground">
               {hoverSession !== "regular" && (
                 <span className="shrink-0 rounded-sm bg-muted px-1 text-[9px] leading-[14px] text-foreground/70">
-                  {hoverSession === "pre" ? "盘前" : "盘后"}
+                  {hoverSession === "pre" ? t("盘前") : t("盘后")}
                 </span>
               )}
               <span className="truncate">{formatFullTime(hovered.t, timezone)}</span>
@@ -1308,19 +1311,19 @@ export default function PriceChart({
             </div>
 
             <div className="mt-2 grid grid-cols-[auto_1fr_auto_1fr] items-center gap-x-2 gap-y-1 text-[10px] leading-4">
-              <span className="text-muted-foreground">开</span>
+              <span className="text-muted-foreground">{t("开")}</span>
               <span className="num text-right text-foreground/85">
                 {formatPrice(hovered.open, currency)}
               </span>
-              <span className="pl-1 text-muted-foreground">高</span>
+              <span className="pl-1 text-muted-foreground">{t("高")}</span>
               <span className="num text-right text-foreground/85">
                 {formatPrice(hovered.high, currency)}
               </span>
-              <span className="text-muted-foreground">低</span>
+              <span className="text-muted-foreground">{t("低")}</span>
               <span className="num text-right text-foreground/85">
                 {formatPrice(hovered.low, currency)}
               </span>
-              <span className="pl-1 text-muted-foreground">量</span>
+              <span className="pl-1 text-muted-foreground">{t("量")}</span>
               <span className="num text-right text-foreground/85">
                 {formatCompact(hovered.volume)}
               </span>
