@@ -18,6 +18,8 @@ interface GroupPickerProps {
   /** 返回错误信息；成功返回 null */
   onCreateGroup: (name: string) => string | null;
   onClose: () => void;
+  /** 触发按钮的视口位置；有值时用 fixed 定位，避免被横向滚动容器裁切 */
+  anchor?: { left: number; right: number; top: number; bottom: number } | null;
 }
 
 /** 自选股分组选择器（行内弹层）：选已有分组 / 归入未分组 / 新建分组 */
@@ -28,6 +30,7 @@ export default function GroupPicker({
   onAssign,
   onCreateGroup,
   onClose,
+  anchor,
 }: GroupPickerProps) {
   const { t } = useI18n();
   const [creating, setCreating] = useState(false);
@@ -65,12 +68,29 @@ export default function GroupPicker({
   const optionClass =
     "flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[11px] text-foreground/85 transition-colors hover:bg-muted";
 
+  const width = 196;
+  const viewportWidth = typeof window !== "undefined" ? window.innerWidth : 360;
+  const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 640;
+  const left = anchor
+    ? Math.min(Math.max(anchor.right - width, 8), Math.max(viewportWidth - width - 8, 8))
+    : undefined;
+  const belowTop = anchor ? anchor.bottom + 6 : 0;
+  // 空间不够时向上弹，避免超出屏幕
+  const top = anchor
+    ? belowTop + 220 > viewportHeight
+      ? Math.max(anchor.top - 226, 8)
+      : belowTop
+    : undefined;
+
   return (
     <div
       ref={rootRef}
       role="dialog"
       aria-label={`${symbol} 分组`}
-      className="absolute right-0 top-full z-50 mt-1 w-[186px] rounded-lg border border-border bg-popover p-1.5 shadow-[var(--shadow-pop)] rise"
+      style={anchor ? { left, top, width } : { width }}
+      className={`z-50 rounded-lg border border-border bg-popover p-1.5 shadow-[var(--shadow-pop)] rise ${
+        anchor ? "fixed" : "absolute right-0 top-full mt-1"
+      }`}
     >
       <p className="mb-1 px-1 text-[10px] text-muted-foreground">{symbol} 的分组</p>
 

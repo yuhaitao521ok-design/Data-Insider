@@ -161,6 +161,10 @@ export default function Dashboard() {
   const [groupMap, setGroupMap] = useState<Record<string, string>>({});
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [groupPicker, setGroupPicker] = useState<string | null>(null);
+  /** 分组弹层的锚点（视口坐标），避免被横向滚动容器裁切 */
+  const [groupAnchor, setGroupAnchor] = useState<{ left: number; right: number; top: number; bottom: number } | null>(null);
+  /** 分组「⋯」菜单的锚点 */
+  const [menuAnchor, setMenuAnchor] = useState<{ left: number; right: number; top: number; bottom: number } | null>(null);
   const [groupMenu, setGroupMenu] = useState<string | null>(null);
   /** 专注模式：图表铺满视口 */
   const [focusMode, setFocusMode] = useState(false);
@@ -1877,7 +1881,14 @@ export default function Dashboard() {
                           >
                             <button
                               type="button"
-                              onClick={() => {
+                              onClick={(event) => {
+                                const rect = event.currentTarget.getBoundingClientRect();
+                                setMenuAnchor({
+                                  left: rect.left,
+                                  right: rect.right,
+                                  top: rect.top,
+                                  bottom: rect.bottom,
+                                });
                                 setGroupMenu((prev) => (prev === section.id ? null : section.id));
                                 setRenamingGroup(null);
                               }}
@@ -1890,7 +1901,29 @@ export default function Dashboard() {
                             </button>
 
                             {groupMenu === section.id && (
-                              <div className="absolute right-0 top-full z-50 mt-1 w-[150px] rounded-lg border border-border bg-popover p-1 shadow-[var(--shadow-pop)]">
+                              <div
+                                className="z-50 w-[150px] rounded-lg border border-border bg-popover p-1 shadow-[var(--shadow-pop)]"
+                                style={
+                                  menuAnchor
+                                    ? {
+                                        position: "fixed",
+                                        top:
+                                          menuAnchor.bottom + 160 >
+                                          (typeof window !== "undefined" ? window.innerHeight : 640)
+                                            ? Math.max(menuAnchor.top - 164, 8)
+                                            : menuAnchor.bottom + 6,
+                                        left: Math.min(
+                                          Math.max(menuAnchor.right - 150, 8),
+                                          Math.max(
+                                            (typeof window !== "undefined" ? window.innerWidth : 360) -
+                                              158,
+                                            8,
+                                          ),
+                                        ),
+                                      }
+                                    : undefined
+                                }
+                              >
                                 {renamingGroup === section.id ? (
                                   <input
                                     autoFocus
@@ -2010,6 +2043,13 @@ export default function Dashboard() {
                                     onPointerDown={(event) => event.stopPropagation()}
                                     onClick={(event) => {
                                       event.stopPropagation();
+                                      const rect = event.currentTarget.getBoundingClientRect();
+                                      setGroupAnchor({
+                                        left: rect.left,
+                                        right: rect.right,
+                                        top: rect.top,
+                                        bottom: rect.bottom,
+                                      });
                                       setGroupPicker((prev) => (prev === symbol ? null : symbol));
                                     }}
                                     aria-label={`${symbol} 分组`}
@@ -2079,6 +2119,7 @@ export default function Dashboard() {
                                 onAssign={assignGroup}
                                 onCreateGroup={(name) => createGroupAndAssign(name, symbol)}
                                 onClose={() => setGroupPicker(null)}
+                                anchor={groupAnchor}
                               />
                             )}
 
