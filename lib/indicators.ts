@@ -23,6 +23,8 @@ export interface IndicatorParamField {
   max: number;
   step: number;
   integer: boolean;
+  /** 动态字段：返回 false 时在参数面板里隐藏（例如 MA 只显示前 N 条） */
+  visibleWhen?: (params: Record<string, number>) => boolean;
 }
 
 export interface IndicatorDefinition {
@@ -32,6 +34,53 @@ export interface IndicatorDefinition {
   location: "overlay" | "pane";
   defaults: Record<string, number>;
   fields: IndicatorParamField[];
+}
+
+/** MA / EMA 最多支持几条线 */
+export const MAX_MA_LINES = 6;
+const MA_PERIOD_PRESETS = [5, 20, 60, 120, 250, 500];
+
+function clampLineCount(value: number | undefined): number {
+  const numeric = Number(value);
+  const base = Number.isFinite(numeric) ? Math.round(numeric) : 3;
+  return Math.min(MAX_MA_LINES, Math.max(1, base));
+}
+
+/** MA / EMA 共用「线条数量 + 最多 6 条周期」的参数定义 */
+function movingAverageParams(): Pick<IndicatorDefinition, "defaults" | "fields"> {
+  const defaults: Record<string, number> = { count: 3 };
+  const fields: IndicatorParamField[] = [
+    { key: "count", label: "线条数量", min: 1, max: MAX_MA_LINES, step: 1, integer: true },
+  ];
+
+  for (let index = 1; index <= MAX_MA_LINES; index += 1) {
+    defaults[`p${index}`] = MA_PERIOD_PRESETS[index - 1] ?? 500;
+    fields.push({
+      key: `p${index}`,
+      label: `第 ${index} 条周期`,
+      min: 2,
+      max: 500,
+      step: 1,
+      integer: true,
+      visibleWhen: (params) => index <= clampLineCount(params.count),
+    });
+  }
+
+  return { defaults, fields };
+}
+
+/** 当前生效的均线周期：按数量截断 + 去重 + 升序（避免用户填乱序时线条交叉重叠） */
+export function activePeriods(params: Record<string, number>): number[] {
+  const count = clampLineCount(params.count);
+  const periods: number[] = [];
+
+  for (let index = 1; index <= count; index += 1) {
+    const value = Number(params[`p${index}`]);
+    if (Number.isFinite(value) && value >= 2) periods.push(Math.round(value));
+  }
+
+  const unique = Array.from(new Set(periods)).sort((a, b) => a - b);
+  return unique.length > 0 ? unique : [MA_PERIOD_PRESETS[0]];
 }
 
 export const INDICATOR_DEFINITIONS: Record<IndicatorType, IndicatorDefinition> = {
@@ -62,26 +111,16 @@ export const INDICATOR_DEFINITIONS: Record<IndicatorType, IndicatorDefinition> =
   MA: {
     type: "MA",
     name: "MA",
-    description: "简单移动平均线（3 条），判断趋势方向与支撑压力",
+    description: "简单移动平均线，可自定义 1–6 条（自动按周期排序）",
     location: "overlay",
-    defaults: { fast: 5, mid: 20, slow: 60 },
-    fields: [
-      { key: "fast", label: "快线周期", min: 2, max: 200, step: 1, integer: true },
-      { key: "mid", label: "中线周期", min: 3, max: 300, step: 1, integer: true },
-      { key: "slow", label: "慢线周期", min: 4, max: 500, step: 1, integer: true },
-    ],
+    ...movingAverageParams(),
   },
   EMA: {
     type: "EMA",
     name: "EMA",
-    description: "指数移动平均线（3 条，虚线），对近期价格更敏感",
+    description: "指数移动平均线，可自定义 1–6 条（虚线，对近期更敏感）",
     location: "overlay",
-    defaults: { fast: 5, mid: 20, slow: 60 },
-    fields: [
-      { key: "fast", label: "快线周期", min: 2, max: 200, step: 1, integer: true },
-      { key: "mid", label: "中线周期", min: 3, max: 300, step: 1, integer: true },
-      { key: "slow", label: "慢线周期", min: 4, max: 500, step: 1, integer: true },
-    ],
+    ...movingAverageParams(),
   },
   BOLL: {
     type: "BOLL",
@@ -255,6 +294,7 @@ export function validateParams(
   const definition = INDICATOR_DEFINITIONS[type];
 
   for (const field of definition.fields) {
+    if (field.visibleWhen && !field.visibleWhen(params)) continue;
     const value = params[field.key];
     if (typeof value !== "number" || !Number.isFinite(value)) {
       return `${field.label}必须是数字`;
@@ -269,9 +309,6 @@ export function validateParams(
   }
   if (type === "RSI" && params.overbought <= params.oversold) {
     return "超买阈值必须大于超卖阈值";
-  }
-  if ((type === "MA" || type === "EMA") && !(params.fast < params.mid && params.mid < params.slow)) {
-    return "均线周期需满足：快线 < 中线 < 慢线";
   }
   return null;
 }
@@ -301,7 +338,7 @@ export function sanitizeIndicatorConfigs(raw: unknown): IndicatorConfig[] {
 
 /** 指标标签上的参数摘要，例如 12 / 26 / 9、14 · 30/70、20 · 2σ */
 export function paramsSummary(type: IndicatorType, params: Record<string, number>): string {
-  if (type === "MA" || type === "EMA") return `${params.fast} / ${params.mid} / ${params.slow}`;
+  if (type === "MA" || type === "EMA") return activePeriods(params).join(" / ");
   if (type === "MACD") return `${params.fast} / ${params.slow} / ${params.signal}`;
   if (type === "RSI") return `${params.period} · ${params.oversold}/${params.overbought}`;
   return `${params.period} · ${params.multiplier}σ`;
@@ -317,7 +354,7 @@ export function requiredIndicatorPoints(config: IndicatorConfig): number {
   const params = normalizeParams(config.type, config.params);
   if (config.type === "MACD") return params.slow + params.signal - 1;
   if (config.type === "RSI") return params.period + 1;
-  if (config.type === "MA" || config.type === "EMA") return params.slow;
+  if (config.type === "MA" || config.type === "EMA") return Math.max(...activePeriods(params));
   return params.period;
 }
 
@@ -409,19 +446,15 @@ export function buildIndicatorRenderData(
 
     if (config.type === "MA" || config.type === "EMA") {
       const isEma = config.type === "EMA";
-      const periods: { key: "fast" | "mid" | "slow"; color: string }[] = [
-        { key: "fast", color: "var(--chart-series-1)" },
-        { key: "mid", color: "var(--chart-series-2)" },
-        { key: "slow", color: "var(--chart-series-3)" },
-      ];
+      const periods = activePeriods(params);
 
       overlays.push({
         id: config.id,
-        label: `${config.type}(${params.fast},${params.mid},${params.slow})`,
-        series: periods.map(({ key, color }) => ({
-          label: `${config.type}${params[key]}`,
-          values: isEma ? ema(closes, params[key]) : sma(closes, params[key]),
-          color,
+        label: `${config.type}(${periods.join(",")})`,
+        series: periods.map((period, index) => ({
+          label: `${config.type}${period}`,
+          values: isEma ? ema(closes, period) : sma(closes, period),
+          color: `var(--chart-series-${(index % 6) + 1})`,
           type: "line" as const,
           // EMA 用虚线，和同时开启的 MA 区分
           dashed: isEma,

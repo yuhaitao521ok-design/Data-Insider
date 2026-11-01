@@ -261,7 +261,9 @@ export default function IndicatorControls({ configs, onChange }: IndicatorContro
                     className="mx-2 mb-2 rounded-md border border-border bg-background/70 p-2.5"
                   >
                     <div className="space-y-1.5">
-                      {definition.fields.map((field) => (
+                      {definition.fields
+                        .filter((field) => field.visibleWhen?.(editing.draft) ?? true)
+                        .map((field) => (
                         <label key={field.key} className="flex items-center justify-between gap-2">
                           <span className="text-[11px] text-muted-foreground">{field.label}</span>
                           <input
@@ -280,7 +282,7 @@ export default function IndicatorControls({ configs, onChange }: IndicatorContro
                             aria-label={`${type} ${field.label}`}
                           />
                         </label>
-                      ))}
+                        ))}
                     </div>
 
                     {error && (
