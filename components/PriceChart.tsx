@@ -198,6 +198,8 @@ export default function PriceChart({
   const pointersRef = useRef<Map<number, { x: number; y: number; type: string }>>(new Map());
   const panRef = useRef<{ pointerId: number; startX: number; startY: number; startView: ZoomWindow; moved: boolean; touch: boolean } | null>(null);
   const pinchRef = useRef<{ distance: number; ratio: number } | null>(null);
+  /** 本次手势里发生过捏合 → 手指全部抬起前不再接管平移（避免松一指后瞬间跳动） */
+  const pinchLockRef = useRef(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const gradientId = useId().replace(/[:]/g, "");
 
@@ -354,6 +356,7 @@ export default function PriceChart({
     );
 
     if (touchPointers.length >= 2) {
+      pinchLockRef.current = true;
       setMultiTouch(true);
       const [a, b] = touchPointers.map(([, pointer]) => pointer);
       pinchRef.current = {
@@ -368,7 +371,7 @@ export default function PriceChart({
     // 鼠标按下时阻止文本选择 / 原生拖拽，否则第二次拖拽会变成「拖动选中的文字」
     if (event.pointerType !== "touch") event.preventDefault();
 
-    if (allPoints.length > 1) {
+    if (allPoints.length > 1 && !pinchLockRef.current) {
       panRef.current = {
         pointerId: event.pointerId,
         startX: event.clientX,
@@ -450,10 +453,11 @@ export default function PriceChart({
 
   function handlePointerEnd(event: React.PointerEvent<HTMLDivElement>) {
     pointersRef.current.delete(event.pointerId);
-    if (pointersRef.current.size < 2) {
-      pinchRef.current = null;
+    if (pointersRef.current.size === 0) {
+      pinchLockRef.current = false;
       setMultiTouch(false);
     }
+    if (pointersRef.current.size < 2) pinchRef.current = null;
 
     if (panRef.current?.pointerId === event.pointerId) {
       panRef.current = null;
@@ -802,6 +806,18 @@ export default function PriceChart({
     safeHover !== null && points[safeHover]
       ? { x: geometry.xFor(safeHover), y: geometry.yFor(points[safeHover].close) }
       : null;
+  /** Zoom buttons: anchor at the plot center; step > 1 zooms in, step < 1 zooms out. */
+  function zoomStep(step: number) {
+    if (allPoints.length < 24) return;
+    setViewport((previous) => {
+      const current = previous
+        ? clampViewport(previous, allPoints.length)
+        : fullWindow(allPoints.length);
+      const next = zoomByScale(current, allPoints.length, 0.5, step);
+      return next.end - next.start >= allPoints.length - 1 ? null : next;
+    });
+  }
+
   const zoomRangeLabel =
     points.length > 1
       ? `${formatAxisTime(points[0].t, range, timezone, interval)} ~ ${formatAxisTime(
@@ -1267,8 +1283,29 @@ export default function PriceChart({
         />
       </svg>
 
+      <div className="absolute right-2 top-2 z-10 flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => zoomStep(0.8)}
+          className="flex h-6 w-6 items-center justify-center rounded-md border border-border bg-card/90 text-[13px] leading-none text-muted-foreground shadow-sm backdrop-blur transition-colors hover:text-foreground"
+          aria-label={t("缩小")}
+          title={t("缩小")}
+        >
+          −
+        </button>
+        <button
+          type="button"
+          onClick={() => zoomStep(1.25)}
+          className="flex h-6 w-6 items-center justify-center rounded-md border border-border bg-card/90 text-[13px] leading-none text-muted-foreground shadow-sm backdrop-blur transition-colors hover:text-foreground"
+          aria-label={t("放大")}
+          title={t("放大")}
+        >
+          +
+        </button>
+      </div>
+
       {isZoomed && (
-        <div className="absolute right-2 top-2 z-10 flex items-center gap-1.5 rounded-md border border-border bg-card/90 px-1.5 py-0.5 text-[10px] text-muted-foreground shadow-sm backdrop-blur">
+        <div className="absolute left-2 top-2 z-10 hidden items-center gap-1.5 sm:flex rounded-md border border-border bg-card/90 px-1.5 py-0.5 text-[10px] text-muted-foreground shadow-sm backdrop-blur">
           <span className="num text-foreground/80">{zoomRangeLabel}</span>
           <span className="num opacity-60">
             {points.length}/{totalPoints}
