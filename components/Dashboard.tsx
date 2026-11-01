@@ -2394,6 +2394,10 @@ export default function Dashboard() {
                   </div>
                 )}
 
+                <p className="mt-2 text-[10px] leading-4 text-muted-foreground md:hidden">
+                  {t("手势：单指左右拖动平移 · 双指捏合缩放 · 双击复位")}
+                </p>
+
                 <div className="mt-3">
                   {chartError ? (
                     <div className="flex h-[260px] flex-col items-center justify-center gap-2.5 sm:h-[340px] lg:h-[440px] 2xl:h-[480px]">

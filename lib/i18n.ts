@@ -260,6 +260,10 @@ const ZH_HANT: Record<string, string> = {
   "全景": "全景",
   "移动端导航": "行動版導覽",
 
+  "缩小": "縮小",
+  "放大": "放大",
+  "手势：单指左右拖动平移 · 双指捏合缩放 · 双击复位": "手勢：單指左右拖動平移 · 雙指捏合縮放 · 雙擊重置",
+
 };
 
 /** 英文词典（key 为简体原文） */
@@ -501,6 +505,10 @@ const EN: Record<string, string> = {
   "切换为横向滑动": "Switch to scroll view",
   "全景": "Overview",
   "移动端导航": "Mobile navigation",
+
+  "缩小": "Zoom out",
+  "放大": "Zoom in",
+  "手势：单指左右拖动平移 · 双指捏合缩放 · 双击复位": "Gestures: drag sideways to pan · pinch to zoom · double-tap to reset",
 
 };
 
