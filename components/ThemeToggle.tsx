@@ -1,11 +1,14 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n";
+
 import { useEffect, useState } from "react";
 
 const THEME_KEY = "data-insider:theme";
 
 /** 亮 / 暗主题切换，状态写入 localStorage，与 layout 中的首帧脚本共用同一个 key */
 export default function ThemeToggle() {
+  const { t } = useI18n();
   const [dark, setDark] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -29,8 +32,8 @@ export default function ThemeToggle() {
     <button
       type="button"
       onClick={toggle}
-      aria-label={dark ? "切换到亮色主题" : "切换到暗色主题"}
-      title={dark ? "切换到亮色主题" : "切换到暗色主题"}
+      aria-label={dark ? t("切换到亮色主题") : t("切换到暗色主题")}
+      title={dark ? t("切换到亮色主题") : t("切换到暗色主题")}
       className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
     >
       {mounted && dark ? (

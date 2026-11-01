@@ -62,9 +62,9 @@ export default function IndexOverview({
               {t("重试")}
             </button>
           ) : (
-            <span>{loading ? "更新中…" : "点击查看走势"}</span>
+            <span>{loading ? t("更新中…") : t("点击查看走势")}</span>
           )}
-          {updatedLabel && <span className="num hidden sm:inline">更新 {updatedLabel}</span>}
+          {updatedLabel && <span className="num hidden sm:inline">{t("更新")} {updatedLabel}</span>}
         </div>
       </div>
 
