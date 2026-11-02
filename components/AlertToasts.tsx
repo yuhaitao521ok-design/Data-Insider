@@ -61,7 +61,7 @@ export default function AlertToasts({ items, onDismiss }: AlertToastsProps) {
             <button
               type="button"
               onClick={() => onDismiss(item.id)}
-              className="-mr-1 -mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="-mr-1 -mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
               aria-label={t("关闭提醒")}
             >
               ×

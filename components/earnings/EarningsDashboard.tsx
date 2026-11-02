@@ -130,7 +130,7 @@ export default function EarningsDashboard() {
               <button
                 type="button"
                 onClick={() => setDate((prev) => shiftDate(prev, -1))}
-                className="flex h-6 w-6 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="flex h-6 w-6 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-hover hover:text-foreground"
                 aria-label={t("前一天")}
               >
                 ‹
@@ -145,7 +145,7 @@ export default function EarningsDashboard() {
               <button
                 type="button"
                 onClick={() => setDate((prev) => shiftDate(prev, 1))}
-                className="flex h-6 w-6 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="flex h-6 w-6 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-hover hover:text-foreground"
                 aria-label={t("后一天")}
               >
                 ›
@@ -153,7 +153,7 @@ export default function EarningsDashboard() {
               <button
                 type="button"
                 onClick={() => setDate(todayInEastern())}
-                className="h-7 rounded-md border border-border px-2 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                className="h-7 rounded-md border border-border px-2 text-[11px] text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
               >
                 {t("今天")}
               </button>
@@ -258,7 +258,7 @@ export default function EarningsDashboard() {
             <button
               type="button"
               onClick={() => setView("calendar")}
-              className="ml-auto h-7 rounded-md border border-border px-2 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="ml-auto h-7 rounded-md border border-border px-2 text-[11px] text-muted-foreground hover:bg-hover hover:text-foreground"
             >
               {t("返回日历")}
             </button>

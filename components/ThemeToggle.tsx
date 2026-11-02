@@ -34,7 +34,7 @@ export default function ThemeToggle() {
       onClick={toggle}
       aria-label={dark ? t("切换到亮色主题") : t("切换到暗色主题")}
       title={dark ? t("切换到亮色主题") : t("切换到暗色主题")}
-      className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
     >
       {mounted && dark ? (
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">

@@ -85,7 +85,7 @@ export default function InsightPanel({
             <button
               type="button"
               onClick={() => setExpanded((prev) => !prev)}
-              className="h-7 rounded-lg border border-border px-2 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="h-7 rounded-lg border border-border px-2 text-[11px] text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
               aria-label={expanded ? "收起" : "展开"}
             >
               {expanded ? "收起" : "展开"}

@@ -1,5 +1,16 @@
 import { createContext, useContext } from "react";
 
+import {
+  CONTENT_CONS_EN,
+  CONTENT_CONS_HANT,
+  CONTENT_EN,
+  CONTENT_HANT,
+  CONTENT_PROS_EN,
+  CONTENT_PROS_HANT,
+  CONTENT_SUMMARY_EN,
+  CONTENT_SUMMARY_HANT,
+} from "@/lib/i18n-content";
+
 /**
  * 轻量 i18n：以中文原文为 key。
  *  - 组件里直接 `t("自选股")`
@@ -415,6 +426,10 @@ const ZH_HANT: Record<string, string> = {
   "EMA 死叉": "EMA 死叉",
   "MACD 死叉": "MACD 死叉",
   "跌破低点": "跌破低點",
+  "优点": "優點",
+  "缺点": "缺點",
+  "悬停查看说明": "懸停查看說明",
+
 };
 
 /** 英文词典（key 为简体原文） */
@@ -812,6 +827,10 @@ const EN: Record<string, string> = {
   "EMA 死叉": "EMA death cross",
   "MACD 死叉": "MACD death cross",
   "跌破低点": "Below low",
+  "优点": "Pros",
+  "缺点": "Cons",
+  "悬停查看说明": "Hover for details",
+
 };
 
 const DICTIONARIES: Record<Locale, Record<string, string>> = {
@@ -916,6 +935,18 @@ export function translate(text: string, locale: Locale): string {
 
   const exact = DICTIONARIES[locale]?.[text];
   if (exact) return exact;
+
+  const content =
+    locale === "zh-Hant"
+      ? (CONTENT_HANT[text] ??
+        CONTENT_SUMMARY_HANT[text] ??
+        CONTENT_PROS_HANT[text] ??
+        CONTENT_CONS_HANT[text])
+      : (CONTENT_EN[text] ??
+        CONTENT_SUMMARY_EN[text] ??
+        CONTENT_PROS_EN[text] ??
+        CONTENT_CONS_EN[text]);
+  if (content) return content;
 
   let output = text;
   for (const item of [...PHRASES, ...DESCRIPTIONS]) {

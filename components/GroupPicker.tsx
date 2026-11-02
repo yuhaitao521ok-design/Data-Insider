@@ -66,7 +66,7 @@ export default function GroupPicker({
   }
 
   const optionClass =
-    "flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[11px] text-foreground/85 transition-colors hover:bg-muted";
+    "flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[11px] text-foreground/85 transition-colors hover:bg-hover";
 
   const width = 196;
   const viewportWidth = typeof window !== "undefined" ? window.innerWidth : 360;
@@ -154,7 +154,7 @@ export default function GroupPicker({
             type="button"
             disabled={groups.length >= MAX_GROUPS}
             onClick={() => setCreating(true)}
-            className="flex w-full items-center gap-1 rounded-md px-1.5 py-1 text-left text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex w-full items-center gap-1 rounded-md px-1.5 py-1 text-left text-[11px] text-muted-foreground transition-colors hover:bg-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
           >
             {t("＋ 新建分组")}
           </button>

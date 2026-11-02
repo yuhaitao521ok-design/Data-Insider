@@ -108,7 +108,7 @@ export default function InstitutionsDashboard() {
             <button
               type="button"
               onClick={() => void loadOwnership(symbol)}
-              className="h-7 rounded-md border border-border px-2 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="h-7 rounded-md border border-border px-2 text-[11px] text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
             >
               {t("刷新")}
             </button>
@@ -208,7 +208,7 @@ export default function InstitutionsDashboard() {
                   className={`flex w-full flex-col gap-0.5 rounded-lg px-2 py-1.5 text-left transition-colors ${
                     investorId === item.id
                       ? "bg-accent-soft text-accent"
-                      : "text-foreground/85 hover:bg-muted"
+                      : "text-foreground/85 hover:bg-hover"
                   }`}
                 >
                   <span className="text-[12px] font-medium">{item.nameZh}</span>
@@ -240,7 +240,7 @@ export default function InstitutionsDashboard() {
                 <button
                   type="button"
                   onClick={() => void loadFiling(investorId)}
-                  className="h-7 rounded-md border border-border px-2 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  className="h-7 rounded-md border border-border px-2 text-[11px] text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
                 >
                   {t("刷新")}
                 </button>

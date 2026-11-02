@@ -188,7 +188,7 @@ export default function ResearchDashboard() {
           <button
             type="button"
             onClick={() => void load()}
-            className="h-7 rounded-md border border-border px-2 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="h-7 rounded-md border border-border px-2 text-[11px] text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
           >
             {t("刷新")}
           </button>

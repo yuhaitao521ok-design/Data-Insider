@@ -1499,7 +1499,7 @@ export default function Dashboard() {
                   className={`inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[10.5px] transition-colors ${
                     creatingGroup
                       ? "bg-accent-soft text-accent"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      : "text-muted-foreground hover:bg-hover hover:text-foreground"
                   }`}
                 >
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -1520,7 +1520,7 @@ export default function Dashboard() {
                   title={`按涨跌幅排序 · 当前：${sortWatchlistLabel(sortMode)}（点击切换）`}
                   className={`inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[10.5px] transition-colors ${
                     sortMode === "manual"
-                      ? "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      ? "text-muted-foreground hover:bg-hover hover:text-foreground"
                       : "bg-accent-soft text-accent"
                   }`}
                 >
@@ -1543,7 +1543,7 @@ export default function Dashboard() {
                   onClick={() => setWatchlistStacked((prev) => !prev)}
                   aria-label={watchlistStacked ? t("切换为横向滑动") : t("切换为竖向列表")}
                   title={watchlistStacked ? t("横向滑动") : t("竖向列表")}
-                  className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:hidden"
+                  className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-hover hover:text-foreground md:hidden"
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     {watchlistStacked ? (
@@ -1561,7 +1561,7 @@ export default function Dashboard() {
                   className={`flex h-6 w-6 items-center justify-center rounded-md transition-colors ${
                     addBoxOpen
                       ? "bg-accent-soft text-accent"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      : "text-muted-foreground hover:bg-hover hover:text-foreground"
                   }`}
                   aria-label={t("添加自选股")}
                   title={t("添加自选股（可直接选分组）")}
@@ -1660,7 +1660,7 @@ export default function Dashboard() {
                             onClick={() => submitAdd(item.symbol)}
                             onMouseEnter={() => setAddActiveIndex(index)}
                             className={`flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors ${
-                              addActiveIndex === index ? "bg-muted" : "hover:bg-muted"
+                              addActiveIndex === index ? "bg-muted" : "hover:bg-hover"
                             }`}
                           >
                             <span className="w-[50px] shrink-0 truncate text-[11px] font-medium text-foreground">
@@ -1810,7 +1810,7 @@ export default function Dashboard() {
                               disabled={Boolean(drag?.symbol)}
                               aria-label={`${section.name} 分组操作`}
                               title={t("分组操作")}
-                              className="flex h-5 w-5 items-center justify-center rounded text-[12px] leading-none text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+                              className="flex h-5 w-5 items-center justify-center rounded text-[12px] leading-none text-muted-foreground transition-colors hover:bg-hover hover:text-foreground disabled:opacity-40"
                             >
                               ⋯
                             </button>
@@ -1863,7 +1863,7 @@ export default function Dashboard() {
                                     <button
                                       type="button"
                                       onClick={() => setRenamingGroup(section.id)}
-                                      className="flex w-full items-center rounded-md px-1.5 py-1 text-left text-[11px] text-foreground/85 transition-colors hover:bg-muted"
+                                      className="flex w-full items-center rounded-md px-1.5 py-1 text-left text-[11px] text-foreground/85 transition-colors hover:bg-hover"
                                     >
                                       {t("重命名")}
                                     </button>
@@ -2096,7 +2096,7 @@ export default function Dashboard() {
                   <button
                     type="button"
                     onClick={() => setFocusMode(false)}
-                    className="inline-flex h-7 items-center gap-1 rounded-lg border border-border bg-card px-2 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    className="inline-flex h-7 items-center gap-1 rounded-lg border border-border bg-card px-2 text-[11px] text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
                   >
                     {t("退出专注")}
                   </button>
@@ -2137,7 +2137,7 @@ export default function Dashboard() {
                         }
                         className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] leading-4 transition-colors ${
                           inWatchlist
-                            ? "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                            ? "border-border text-muted-foreground hover:bg-hover hover:text-foreground"
                             : "border-accent/30 bg-accent-soft text-accent hover:border-accent/50"
                         }`}
                         title={inWatchlist ? t("从自选股移除") : t("加入自选股")}
@@ -2281,7 +2281,7 @@ export default function Dashboard() {
                     <button
                       type="button"
                       onClick={() => setFocusMode((prev) => !prev)}
-                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
                       aria-label={focusMode ? t("退出专注") : t("专注模式")}
                       title={focusMode ? t("退出专注") : t("专注模式（铺满屏幕看图）")}
                     >
@@ -2297,7 +2297,7 @@ export default function Dashboard() {
                       type="button"
                       onClick={exportCsv}
                       disabled={!chart}
-                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:bg-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
                       aria-label={t("导出 CSV")}
                       title={t("导出当前图表数据（CSV）")}
                     >
@@ -2358,7 +2358,7 @@ export default function Dashboard() {
                           <button
                             type="button"
                             onClick={() => setRange("1M")}
-                            className="h-8 rounded-lg border border-border px-3 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                            className="h-8 rounded-lg border border-border px-3 text-[12px] text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
                           >
                             {t("切换到 1 个月")}
                           </button>
@@ -2464,7 +2464,7 @@ export default function Dashboard() {
               <button
                 type="button"
                 onClick={() => void loadMarkets()}
-                className="w-full rounded-lg border border-border bg-card px-3 py-2 text-left text-[10.5px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                className="w-full rounded-lg border border-border bg-card px-3 py-2 text-left text-[10.5px] text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
               >
                 市场面板加载失败：{marketsError}（点击重试）
               </button>

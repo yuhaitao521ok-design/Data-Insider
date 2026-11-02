@@ -1388,7 +1388,7 @@ export default function PriceChart({
           <button
             type="button"
             onClick={() => setViewport(null)}
-            className="rounded px-1 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="rounded px-1 text-[10px] text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
             aria-label={t("重置缩放")}
             title={t("重置缩放（也可以双击图表）")}
           >

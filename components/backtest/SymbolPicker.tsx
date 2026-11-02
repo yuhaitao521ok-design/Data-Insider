@@ -135,7 +135,7 @@ export default function SymbolPicker({
               type="button"
               role="option"
               onClick={() => commit(item.symbol)}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted"
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-hover"
             >
               <span className="w-[52px] shrink-0 truncate text-[11.5px] font-medium text-foreground">
                 {item.symbol}
@@ -175,7 +175,7 @@ export default function SymbolPicker({
                 className={`num rounded-md border px-1.5 py-0.5 text-[10.5px] transition-colors ${
                   symbol === value
                     ? "border-accent/40 bg-accent-soft text-accent"
-                    : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                    : "border-border text-muted-foreground hover:bg-hover hover:text-foreground"
                 }`}
               >
                 {symbol}

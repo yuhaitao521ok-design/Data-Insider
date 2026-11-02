@@ -59,7 +59,7 @@ export default function SiteHeader({ onPickSymbol }: SiteHeaderProps) {
   }
 
   const navItemClass =
-    "group relative flex items-center gap-1.5 rounded-lg px-2.5 text-[14px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground";
+    "group relative flex items-center gap-1.5 rounded-lg px-2.5 text-[14px] font-medium text-muted-foreground transition-colors hover:bg-hover hover:text-foreground";
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
@@ -128,7 +128,7 @@ export default function SiteHeader({ onPickSymbol }: SiteHeaderProps) {
                       type="button"
                       role="menuitem"
                       onClick={() => goAnchor(item.key)}
-                      className="flex w-full flex-col gap-0.5 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-muted"
+                      className="flex w-full flex-col gap-0.5 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-hover"
                     >
                       <span className="text-[13px] font-medium text-foreground">
                         {t(item.label)}
@@ -175,7 +175,7 @@ export default function SiteHeader({ onPickSymbol }: SiteHeaderProps) {
             href="https://github.com/yuhaitao521ok-design/Data-Insider"
             target="_blank"
             rel="noreferrer noopener"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
             aria-label={t("GitHub 仓库")}
             title={t("GitHub 仓库")}
           >

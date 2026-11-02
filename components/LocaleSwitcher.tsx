@@ -37,7 +37,7 @@ export default function LocaleSwitcher() {
         aria-expanded={open}
         aria-haspopup="listbox"
         title={t("切换语言 / Language")}
-        className={`flex h-8 items-center gap-1 rounded-lg px-2 transition-colors hover:bg-muted ${
+        className={`flex h-8 items-center gap-1 rounded-lg px-2 transition-colors hover:bg-hover ${
           open ? "text-foreground" : "text-muted-foreground"
         }`}
       >
@@ -74,7 +74,7 @@ export default function LocaleSwitcher() {
                 className={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-[11.5px] transition-colors ${
                   active
                     ? "bg-accent-soft text-accent"
-                    : "text-foreground/85 hover:bg-muted hover:text-foreground"
+                    : "text-foreground/85 hover:bg-hover hover:text-foreground"
                 }`}
               >
                 {LOCALE_META[item].label}
