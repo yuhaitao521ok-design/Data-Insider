@@ -76,7 +76,7 @@
   --negative-soft: rgba(255, 45, 85, 0.08);
 
   --overlay: rgba(9, 9, 11, 0.04);
-  --hover: rgba(9, 9, 11, 0.035);
+  --hover: rgba(9, 9, 11, 0.065);
 
   --chart-grid: rgba(9, 9, 11, 0.07);
   --chart-label: #71717a;
@@ -89,6 +89,10 @@
   --chart-series-5: #ec4899;
   --chart-series-6: #14b8a6;
   --chart-band: rgba(99, 102, 241, 0.08);
+  --bt-strategy: #4f46e5;
+  --bt-benchmark: #64748b;
+  --bt-price: #ea8a1f;
+  --bt-price-soft: rgba(234, 138, 31, 0.16);
   --chart-extended: rgba(9, 9, 11, 0.04);
 
   --shadow-pop: 0 8px 24px -8px rgba(9, 9, 11, 0.16), 0 2px 6px rgba(9, 9, 11, 0.06);
@@ -103,7 +107,7 @@
   --foreground: #e4e4e7;
   --card: #0f0f11;
   --popover: #141417;
-  --muted: #1b1b1f;
+  --muted: #202027;
   --muted-foreground: #a1a1aa;
 
   --border: #26262b;
@@ -122,7 +126,7 @@
   --negative-soft: rgba(255, 45, 85, 0.1);
 
   --overlay: rgba(255, 255, 255, 0.06);
-  --hover: rgba(255, 255, 255, 0.05);
+  --hover: rgba(255, 255, 255, 0.11);
 
   --chart-grid: rgba(255, 255, 255, 0.06);
   --chart-label: #8b8b93;
@@ -135,6 +139,10 @@
   --chart-series-5: #f472b6;
   --chart-series-6: #2dd4bf;
   --chart-band: rgba(129, 140, 248, 0.1);
+  --bt-strategy: #a5b4fc;
+  --bt-benchmark: #94a3b8;
+  --bt-price: #fbbf24;
+  --bt-price-soft: rgba(251, 191, 36, 0.18);
   --chart-extended: rgba(255, 255, 255, 0.05);
 
   --shadow-pop: 0 12px 32px -12px rgba(0, 0, 0, 0.7), 0 2px 8px rgba(0, 0, 0, 0.4);

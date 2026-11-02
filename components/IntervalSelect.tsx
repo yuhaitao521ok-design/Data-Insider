@@ -55,7 +55,7 @@ export default function IntervalSelect({
         disabled={disabled}
         aria-expanded={open}
         aria-haspopup="listbox"
-        className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-border bg-card px-2 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+        className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-border bg-card px-2 text-[11px] text-muted-foreground transition-colors hover:bg-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
         title={t("选择 K 线间隔")}
       >
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -101,7 +101,7 @@ export default function IntervalSelect({
                   setOpen(false);
                 }}
                 className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors ${
-                  active ? "bg-muted" : "hover:bg-muted"
+                  active ? "bg-muted" : "hover:bg-hover"
                 }`}
               >
                 <span

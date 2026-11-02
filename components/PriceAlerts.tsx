@@ -83,7 +83,7 @@ export default function PriceAlerts({
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
         aria-haspopup="dialog"
-        className={`inline-flex h-7 items-center gap-1 rounded-lg border bg-card px-2 text-[11px] transition-colors hover:bg-muted hover:text-foreground ${
+        className={`inline-flex h-7 items-center gap-1 rounded-lg border bg-card px-2 text-[11px] transition-colors hover:bg-hover hover:text-foreground ${
           activeCount > 0 ? "border-accent/40 text-foreground" : "border-border text-muted-foreground"
         }`}
         title={t("价格提醒")}
@@ -166,7 +166,7 @@ export default function PriceAlerts({
             <button
               type="button"
               onClick={onRequestPermission}
-              className="mt-2 w-full rounded-md border border-border px-2 py-1 text-[10.5px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="mt-2 w-full rounded-md border border-border px-2 py-1 text-[10.5px] text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
             >
               {t("开启浏览器通知（页面在后台时也能收到）")}
             </button>
@@ -213,7 +213,7 @@ export default function PriceAlerts({
                       <button
                         type="button"
                         onClick={() => onReenable(alert.id)}
-                        className="shrink-0 rounded border border-border px-1 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        className="shrink-0 rounded border border-border px-1 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
                         title={t("重新启用")}
                       >
                         {t("重开")}
@@ -222,7 +222,7 @@ export default function PriceAlerts({
                     <button
                       type="button"
                       onClick={() => onRemove(alert.id)}
-                      className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-[12px] leading-none text-muted-foreground transition-colors hover:bg-muted hover:text-negative-text"
+                      className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-[12px] leading-none text-muted-foreground transition-colors hover:bg-hover hover:text-negative-text"
                       title={t("删除提醒")}
                       aria-label={t("删除提醒")}
                     >

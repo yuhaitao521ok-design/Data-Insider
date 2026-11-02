@@ -57,7 +57,7 @@ export default function IndexOverview({
             <button
               type="button"
               onClick={onRetry}
-              className="rounded border border-border px-1.5 py-0.5 transition-colors hover:bg-muted hover:text-foreground"
+              className="rounded border border-border px-1.5 py-0.5 transition-colors hover:bg-hover hover:text-foreground"
             >
               {t("重试")}
             </button>

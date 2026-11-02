@@ -150,7 +150,7 @@ export default function SearchBox({ onPick }: SearchBoxProps) {
               onMouseEnter={() => setActive(index)}
               onClick={() => pick(item.symbol)}
               className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left transition-colors ${
-                active === index ? "bg-muted" : "hover:bg-muted"
+                active === index ? "bg-muted" : "hover:bg-hover"
               }`}
             >
               <span className="w-14 shrink-0 truncate text-[13px] font-medium text-foreground">
@@ -169,7 +169,7 @@ export default function SearchBox({ onPick }: SearchBoxProps) {
             <button
               type="button"
               onClick={() => pick(tickerCandidate!)}
-              className="mt-1 flex w-full items-center gap-2 rounded-md border-t border-border px-2 py-2 text-left transition-colors hover:bg-muted"
+              className="mt-1 flex w-full items-center gap-2 rounded-md border-t border-border px-2 py-2 text-left transition-colors hover:bg-hover"
             >
               <span className="w-14 shrink-0 text-[13px] font-medium text-accent">
                 {tickerCandidate}

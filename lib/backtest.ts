@@ -1,21 +1,16 @@
-import { bollinger, ema, macd, rsi, sma } from "@/lib/indicators";
 import type { ChartPoint } from "@/lib/types";
 
-/** 轻量回测引擎：6 个信号策略，支持多策略联动，全部本地计算。 */
+/** 回测引擎：多策略（见 backtest-catalog）自由组合，全部本地计算。 */
 
-export const STRATEGY_KEYS = [
-  "ma-cross",
-  "ema-cross",
-  "rsi-reversal",
-  "boll-breakout",
-  "macd-cross",
-  "donchian",
-] as const;
+import { STRATEGIES, STRATEGY_MAP, type StrategyMeta } from "@/lib/backtest-catalog";
 
-export type StrategyKey = (typeof STRATEGY_KEYS)[number];
+export const STRATEGY_KEYS = STRATEGIES.map((item) => item.key);
+export type StrategyKey = string;
 
 /** 多策略联动方式：any = 任一给出买入即持有；all = 全部看多才持有 */
 export type CombineMode = "any" | "all";
+
+export { STRATEGIES };
 
 export interface BacktestParams {
   /** 启用的策略（至少一个） */
@@ -37,6 +32,8 @@ export interface BacktestParams {
   signal: number;
   /** Donchian 出场回看（跌破 N 日最低） */
   exitLookback: number;
+  /** 动量 / ADX / 反弹等阈值 */
+  threshold: number;
   /** 手续费，单位 bp（万分之） */
   feeBps: number;
 }
@@ -52,6 +49,7 @@ export const DEFAULT_PARAMS: BacktestParams = {
   multiplier: 2,
   signal: 9,
   exitLookback: 10,
+  threshold: 25,
   feeBps: 5,
 };
 
@@ -95,127 +93,16 @@ export interface BacktestResult {
 }
 
 /** 单个策略的看多信号序列（1 = 看多，0 = 看空） */
-type SignalFn = (points: ChartPoint[], params: BacktestParams) => number[];
-
-function upper(points: ChartPoint[]) {
-  return points.map((point) => (point.high ?? point.close) as number);
-}
-function lower(points: ChartPoint[]) {
-  return points.map((point) => (point.low ?? point.close) as number);
-}
-
-const SIGNALS: Record<StrategyKey, SignalFn> = {
-  "ma-cross": (points, params) => {
-    const closes = points.map((point) => point.close);
-    const fast = sma(closes, Math.max(2, Math.round(params.fast)));
-    const slow = sma(closes, Math.max(3, Math.round(params.slow)));
-    return points.map((_, index) => {
-      const f = fast[index];
-      const s = slow[index];
-      return f !== null && s !== null && f > s ? 1 : 0;
-    });
-  },
-
-  "ema-cross": (points, params) => {
-    const closes = points.map((point) => point.close);
-    const fast = ema(closes, Math.max(2, Math.round(params.fast)));
-    const slow = ema(closes, Math.max(3, Math.round(params.slow)));
-    return points.map((_, index) => {
-      const f = fast[index];
-      const s = slow[index];
-      return f !== null && s !== null && f > s ? 1 : 0;
-    });
-  },
-
-  "rsi-reversal": (points, params) => {
-    const closes = points.map((point) => point.close);
-    const values = rsi(closes, Math.max(2, Math.round(params.slow)));
-    let holding = 0;
-    return points.map((_, index) => {
-      const value = values[index];
-      if (value === null) return 0;
-      if (!holding && value <= params.oversold) holding = 1;
-      else if (holding && value >= params.overbought) holding = 0;
-      return holding;
-    });
-  },
-
-  "boll-breakout": (points, params) => {
-    const closes = points.map((point) => point.close);
-    const bands = bollinger(
-      closes,
-      Math.max(2, Math.round(params.slow)),
-      Math.max(0.5, params.multiplier),
-    );
-    let holding = 0;
-    return points.map((_, index) => {
-      const upperBand = bands.upper[index];
-      const middle = bands.middle[index];
-      const close = closes[index];
-      if (upperBand === null || middle === null) return 0;
-      if (!holding && close > upperBand) holding = 1;
-      else if (holding && close < middle) holding = 0;
-      return holding;
-    });
-  },
-
-  "macd-cross": (points, params) => {
-    const closes = points.map((point) => point.close);
-    const result = macd(
-      closes,
-      Math.max(2, Math.round(params.fast)),
-      Math.max(3, Math.round(params.slow)),
-      Math.max(2, Math.round(params.signal)),
-    );
-    return points.map((_, index) => {
-      const dif = result.macd[index];
-      const dea = result.signal[index];
-      return dif !== null && dea !== null && dif > dea ? 1 : 0;
-    });
-  },
-
-  donchian: (points, params) => {
-    const lookback = Math.max(3, Math.round(params.slow));
-    const exitLookback = Math.max(2, Math.round(params.exitLookback));
-    const highs = upper(points);
-    const lows = lower(points);
-    let holding = 0;
-
-    return points.map((_, index) => {
-      if (index < lookback) return 0;
-      const windowHigh = Math.max(...highs.slice(index - lookback, index));
-      const exitLow = Math.min(...lows.slice(Math.max(0, index - exitLookback), index));
-      const close = points[index].close;
-      if (!holding && close >= windowHigh) holding = 1;
-      else if (holding && close <= exitLow) holding = 0;
-      return holding;
-    });
-  },
-};
-
-export function strategyLabel(key: StrategyKey): string {
-  switch (key) {
-    case "ma-cross":
-      return "均线交叉";
-    case "ema-cross":
-      return "EMA 交叉";
-    case "rsi-reversal":
-      return "RSI 反转";
-    case "boll-breakout":
-      return "BOLL 突破";
-    case "macd-cross":
-      return "MACD 金叉";
-    case "donchian":
-      return "唐奇安突破";
-  }
-}
-
-/** 组合策略信号：any = 取并集，all = 取交集 */
+/** 组合策略信号：any = 并集，all = 交集 */
 export function buildSignals(points: ChartPoint[], params: BacktestParams): number[] {
-  const enabled: StrategyKey[] =
-    params.strategies.length > 0 ? params.strategies : ["ma-cross"];
-  const perStrategy = enabled.map((key) => SIGNALS[key](points, params));
+  const enabled = params.strategies.length > 0 ? params.strategies : ["ma-cross"];
+  const metas = enabled.flatMap((key) => {
+    const meta = STRATEGY_MAP[key];
+    return meta ? [meta] : [];
+  });
+  if (metas.length === 0) return new Array(points.length).fill(0);
 
+  const perStrategy = metas.map((meta) => meta.signal(points, toStrategyParams(params)));
   if (perStrategy.length === 1) return perStrategy[0];
 
   return points.map((_, index) => {
@@ -226,17 +113,26 @@ export function buildSignals(points: ChartPoint[], params: BacktestParams): numb
   });
 }
 
-export function strategyExitReason(params: BacktestParams): string {
-  const first = params.strategies[0] ?? "ma-cross";
-  const map: Record<StrategyKey, string> = {
-    "ma-cross": "均线死叉",
-    "ema-cross": "EMA 死叉",
-    "rsi-reversal": "RSI 出场",
-    "boll-breakout": "跌破中轨",
-    "macd-cross": "MACD 死叉",
-    donchian: "跌破低点",
+function toStrategyParams(params: BacktestParams) {
+  return {
+    fast: params.fast,
+    slow: params.slow,
+    oversold: params.oversold,
+    overbought: params.overbought,
+    multiplier: params.multiplier,
+    signal: params.signal,
+    exitLookback: params.exitLookback,
+    threshold: params.threshold,
   };
-  return map[first];
+}
+
+export function strategyLabel(key: StrategyKey): string {
+  return STRATEGY_MAP[key]?.label ?? key;
+}
+
+function strategyExitReason(params: BacktestParams): string {
+  const first = params.strategies[0] ?? "ma-cross";
+  return `${strategyLabel(first)} · 离场`;
 }
 
 const TRADING_DAYS = 252;

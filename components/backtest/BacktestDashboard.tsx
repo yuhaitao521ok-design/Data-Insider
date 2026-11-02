@@ -8,6 +8,7 @@ import SymbolPicker from "@/components/backtest/SymbolPicker";
 import { useI18n } from "@/lib/i18n";
 import { formatNumber, formatPercent, formatPrice } from "@/lib/format";
 import { DEFAULT_PARAMS, runBacktest, type BacktestParams } from "@/lib/backtest";
+import { STRATEGY_MAP } from "@/lib/backtest-catalog";
 import { HISTORY_KEY, pushHistory, sanitizeHistory } from "@/lib/backtest-history";
 import { DEFAULT_WATCHLIST, RANGE_CONFIG, type ChartPoint, type RangeKey } from "@/lib/types";
 
@@ -102,7 +103,7 @@ export default function BacktestDashboard() {
   const field = (
     key: keyof Pick<
       BacktestParams,
-      "fast" | "slow" | "oversold" | "overbought" | "multiplier" | "signal" | "exitLookback" | "feeBps"
+      "fast" | "slow" | "oversold" | "overbought" | "multiplier" | "signal" | "exitLookback" | "threshold" | "feeBps"
     >,
     label: string,
     min: number,
@@ -128,12 +129,37 @@ export default function BacktestDashboard() {
     </label>
   );
 
-  const uses = (key: keyof BacktestParams) => Boolean(params.strategies.length);
-  void uses;
-  const hasMa = params.strategies.some((s) => s === "ma-cross" || s === "ema-cross" || s === "macd-cross");
-  const hasRsi = params.strategies.includes("rsi-reversal");
-  const hasBoll = params.strategies.includes("boll-breakout");
-  const hasDonchian = params.strategies.includes("donchian");
+  /** 当前所选策略需要展示的参数（多个策略取并集，按固定顺序） */
+  const activeFields = useMemo(() => {
+    const order = ["fast", "slow", "oversold", "overbought", "multiplier", "signal", "exitLookback", "threshold"] as const;
+    const needed = new Set<string>();
+    for (const key of params.strategies) {
+      const meta = STRATEGY_MAP[key];
+      for (const item of meta?.fields ?? []) needed.add(item);
+    }
+    return order.filter((item) => needed.has(item));
+  }, [params.strategies]);
+
+  function renderField(key: (typeof activeFields)[number]) {
+    switch (key) {
+      case "fast":
+        return field("fast", "快线周期", 2, 100);
+      case "slow":
+        return field("slow", "慢线周期", 2, 200);
+      case "oversold":
+        return field("oversold", "买入阈值", 5, 45);
+      case "overbought":
+        return field("overbought", "卖出阈值", 55, 95);
+      case "multiplier":
+        return field("multiplier", "标准差倍数", 1, 4, 0.1);
+      case "signal":
+        return field("signal", "MACD 信号", 2, 50);
+      case "exitLookback":
+        return field("exitLookback", "出场回看", 2, 60);
+      case "threshold":
+        return field("threshold", "阈值", 1, 60);
+    }
+  }
 
   return (
     <PageShell
@@ -143,7 +169,7 @@ export default function BacktestDashboard() {
         <button
           type="button"
           onClick={() => void load(symbol, range)}
-          className="h-7 rounded-md border border-border px-2.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="h-7 rounded-md border border-border px-2.5 text-[11px] text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
         >
           {t("刷新")}
         </button>
@@ -206,7 +232,7 @@ export default function BacktestDashboard() {
                   className={`num flex-1 rounded border px-1 py-0.5 text-[10px] transition-colors ${
                     params.initialCapital === value
                       ? "border-accent/40 bg-accent-soft text-accent"
-                      : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                      : "border-border text-muted-foreground hover:bg-hover hover:text-foreground"
                   }`}
                 >
                   {value >= 1000 ? `${value / 1000}k` : value}
@@ -225,19 +251,7 @@ export default function BacktestDashboard() {
             <StrategyPicker params={params} onChange={update} />
 
             <div className="mt-3 space-y-1.5 border-t border-border pt-2">
-              {hasMa && field("fast", "快线周期", 2, 100)}
-              {(hasMa || hasRsi || hasBoll || hasDonchian) &&
-                field(
-                  "slow",
-                  hasRsi ? "RSI 周期" : hasBoll ? "计算周期" : hasDonchian ? "突破回看" : "慢线周期",
-                  3,
-                  200,
-                )}
-              {hasRsi && field("oversold", "买入阈值", 10, 45)}
-              {hasRsi && field("overbought", "卖出阈值", 55, 90)}
-              {hasBoll && field("multiplier", "标准差倍数", 1, 4, 0.1)}
-              {params.strategies.includes("macd-cross") && field("signal", "MACD 信号", 2, 50)}
-              {hasDonchian && field("exitLookback", "出场回看", 2, 60)}
+              {activeFields.map((key) => renderField(key))}
               {field("feeBps", "手续费 bp", 0, 50)}
             </div>
           </section>

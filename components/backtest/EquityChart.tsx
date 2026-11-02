@@ -22,7 +22,7 @@ interface EquityChartProps {
   };
 }
 
-const PAD = { top: 14, right: 58, bottom: 24, left: 8 };
+const PAD = { top: 16, right: 62, bottom: 26, left: 52 };
 
 /** 净值曲线：左轴金额、右轴股价、底部时间轴，可切换叠加股价线 */
 const money = (value: number) =>
@@ -152,20 +152,20 @@ export default function EquityChart({
       <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-1">
         <div className="flex items-center gap-3 text-[10.5px] text-muted-foreground">
           <span className="inline-flex items-center gap-1">
-            <span className="h-0.5 w-3 rounded bg-accent" /> {labels.strategy}
+            <span className="h-0.5 w-3 rounded" style={{ background: "var(--bt-strategy)" }} /> {labels.strategy}
           </span>
           <span className="inline-flex items-center gap-1">
-            <span className="h-0.5 w-3 rounded bg-muted-foreground/50" /> {labels.benchmark}
+            <span className="h-0.5 w-3 rounded" style={{ background: "var(--bt-benchmark)" }} /> {labels.benchmark}
           </span>
           <button
             type="button"
             onClick={() => setShowPrice((prev) => !prev)}
             aria-pressed={showPrice}
-            className={`inline-flex items-center gap-1 rounded px-1 transition-colors hover:text-foreground ${
-              showPrice ? "text-foreground" : "opacity-60"
+            className={`inline-flex items-center gap-1 rounded px-1 transition-colors hover:bg-hover hover:text-foreground ${
+              showPrice ? "text-foreground" : "opacity-50"
             }`}
           >
-            <span className="h-0.5 w-3 rounded border-t border-dashed border-foreground/50" />
+            <span className="h-0.5 w-3 rounded border-t-2 border-dashed" style={{ borderColor: "var(--bt-price)" }} />
             {labels.price}
           </button>
         </div>
@@ -222,25 +222,41 @@ export default function EquityChart({
           <path
             d={geometry.pricePath}
             fill="none"
-            strokeWidth="1"
-            strokeDasharray="3 3"
-            style={{ stroke: "var(--chart-label)", opacity: 0.55 }}
+            strokeWidth="1.2"
+            strokeDasharray="4 3"
+            style={{ stroke: "var(--bt-price)", opacity: 0.9 }}
             vectorEffect="non-scaling-stroke"
           />
         )}
+
+        {/* 左侧股价刻度 */}
+        {showPrice &&
+          geometry.priceTicks.map((tick, index) => (
+            <text
+              key={`price-${index}`}
+              x={PAD.left - 6}
+              y={tick.y + 3.5}
+              textAnchor="end"
+              fontSize="10"
+              className="num"
+              style={{ fill: "var(--bt-price)" }}
+            >
+              {tick.label}
+            </text>
+          ))}
 
         <path
           d={geometry.benchmarkPath}
           fill="none"
           strokeWidth="1.1"
-          style={{ stroke: "var(--muted-foreground)", opacity: 0.55 }}
+          style={{ stroke: "var(--bt-benchmark)", opacity: 0.85 }}
           vectorEffect="non-scaling-stroke"
         />
         <path
           d={geometry.strategyPath}
           fill="none"
           strokeWidth="1.7"
-          style={{ stroke: "var(--accent)" }}
+          style={{ stroke: "var(--bt-strategy)" }}
           vectorEffect="non-scaling-stroke"
         />
 
@@ -270,7 +286,7 @@ export default function EquityChart({
               cy={geometry.yMoney(hovered.value)}
               r="4"
               strokeWidth="2"
-              style={{ fill: "var(--accent)", stroke: "var(--card)" }}
+              style={{ fill: "var(--bt-strategy)", stroke: "var(--card)" }}
             />
           </g>
         )}

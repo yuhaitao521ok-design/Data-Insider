@@ -139,7 +139,7 @@ export default function IndicatorControls({ configs, onChange }: IndicatorContro
         className={`inline-flex h-7 items-center gap-1 rounded-lg border px-2 text-[11px] transition-colors ${
           configs.length > 0
             ? "border-accent/30 bg-accent-soft text-accent hover:border-accent/50"
-            : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
+            : "border-border bg-card text-muted-foreground hover:bg-hover hover:text-foreground"
         }`}
       >
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -202,7 +202,7 @@ export default function IndicatorControls({ configs, onChange }: IndicatorContro
                               className={`inline-flex h-6 items-center gap-1 rounded-md border px-1.5 text-[10px] transition-colors ${
                                 expanded
                                   ? "border-accent/40 bg-accent-soft text-accent"
-                                  : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                                  : "border-border text-muted-foreground hover:bg-hover hover:text-foreground"
                               }`}
                             >
                               <svg
@@ -300,7 +300,7 @@ export default function IndicatorControls({ configs, onChange }: IndicatorContro
                           setEditing({ ...editing, draft: defaultParams(type) });
                           setError(null);
                         }}
-                        className="h-7 rounded-md border border-border px-2 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        className="h-7 rounded-md border border-border px-2 text-[11px] text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
                       >
                         {t("重置默认")}
                       </button>
