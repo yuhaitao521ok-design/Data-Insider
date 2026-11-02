@@ -10,6 +10,8 @@ import InsightPanel from "@/components/InsightPanel";
 import ThemeToggle from "@/components/ThemeToggle";
 import LocaleSwitcher from "@/components/LocaleSwitcher";
 import MobileTabBar from "@/components/MobileTabBar";
+import SiteHeader from "@/components/SiteHeader";
+import SiteFooter from "@/components/SiteFooter";
 import IndicatorControls from "@/components/IndicatorControls";
 import IntervalSelect from "@/components/IntervalSelect";
 import IndexOverview from "@/components/IndexOverview";
@@ -130,7 +132,13 @@ export default function Dashboard() {
   const { t } = useI18n();
   const [hydrated, setHydrated] = useState(false);
   const [watchlist, setWatchlist] = useState<string[]>([...DEFAULT_WATCHLIST]);
-  const [selected, setSelected] = useState<string>(DEFAULT_WATCHLIST[0]);
+  const [selected, setSelected] = useState<string>(() => {
+    if (typeof window === "undefined") return DEFAULT_WATCHLIST[0];
+    const fromUrl = new URLSearchParams(window.location.search).get("symbol");
+    return fromUrl && /^[A-Za-z0-9.^=-]{1,12}$/.test(fromUrl)
+      ? fromUrl.toUpperCase()
+      : DEFAULT_WATCHLIST[0];
+  });
   const [range, setRange] = useState<RangeKey>("1M");
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [indicators, setIndicators] = useState<IndicatorConfig[]>([]);
@@ -1352,205 +1360,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
-        <div className="mx-auto flex max-w-[1440px] xl:max-w-[1640px] 2xl:max-w-[2200px] flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 lg:px-6">
-          <a href="#top" className="flex shrink-0 items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-card text-foreground">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path
-                  d="M4 16.5 8.5 10l3.6 4.2L16.5 7.5H20"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <circle cx="4" cy="16.5" r="1.7" fill="currentColor" />
-              </svg>
-            </span>
-            <span className="text-[15px] font-medium tracking-tight">Data Insider</span>
-          </a>
-
-          <nav
-            className="ml-3 hidden items-stretch gap-1 self-stretch lg:flex"
-            aria-label={t("页面导航")}
-          >
-            {/* 行情：hover / 点击展开下拉 */}
-            <div
-              className="relative flex items-stretch"
-              onMouseEnter={() => setNavMenu("market")}
-              onMouseLeave={() => setNavMenu((prev) => (prev === "market" ? null : prev))}
-            >
-              <button
-                type="button"
-                onClick={() => setNavMenu((prev) => (prev === "market" ? null : "market"))}
-                aria-expanded={navMenu === "market"}
-                aria-haspopup="menu"
-                className={`group relative flex items-center gap-1.5 rounded-lg px-2.5 text-[14px] font-medium transition-colors hover:bg-muted hover:text-foreground ${
-                  navMenu === "market" ? "bg-muted text-foreground" : "text-muted-foreground"
-                }`}
-              >
-                <svg
-                  width="15"
-                  height="15"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  aria-hidden="true"
-                  className="text-muted-foreground/80 transition-colors group-hover:text-foreground"
-                >
-                  <path
-                    d="M4 16.5 8.5 10l3.6 4.2L16.5 7.5H20"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                {t("行情")}
-                <svg
-                  width="9"
-                  height="9"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  aria-hidden="true"
-                  className={`transition-transform ${navMenu === "market" ? "rotate-180" : ""}`}
-                >
-                  <path
-                    d="m6 9 6 6 6-6"
-                    stroke="currentColor"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                <span
-                  className={`pointer-events-none absolute inset-x-2 bottom-0 h-[2px] rounded-full bg-accent transition-transform duration-200 ${
-                    navMenu === "market" ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100"
-                  }`}
-                />
-              </button>
-
-              {navMenu === "market" && (
-                <div
-                  role="menu"
-                  aria-label={t("行情")}
-                  className="absolute left-0 top-full z-50 w-[220px] pt-1"
-                >
-                  <div className="rounded-xl border border-border bg-popover p-1 shadow-[var(--shadow-pop)] rise">
-                    {[
-                      { key: "chart", label: t("个股行情"), href: "#chart", hint: t("走势图与关键指标") },
-                      { key: "indices", label: t("全球指数"), href: "#indices", hint: t("美股 · 亚太") },
-                      { key: "watchlist", label: t("自选股"), href: "#watchlist", hint: t("分组与快速添加") },
-                      { key: "panorama", label: t("市场全景"), href: "#panorama", hint: t("跨资产与板块热力") },
-                    ].map((item) => (
-                      <a
-                        key={item.key}
-                        role="menuitem"
-                        href={item.href}
-                        onClick={(event) => {
-                          event.preventDefault();
-                          scrollToSectionWithRetry(item.href.replace("#", ""));
-                          setNavMenu(null);
-                        }}
-                        className="flex flex-col gap-0.5 rounded-lg px-2.5 py-1.5 transition-colors hover:bg-muted"
-                      >
-                        <span className="text-[13px] font-medium text-foreground">{item.label}</span>
-                        <span className="text-[10.5px] leading-4 text-muted-foreground">{item.hint}</span>
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {aiEnabled && (
-              <a
-                href="#insight"
-                className="group relative flex items-center gap-1.5 rounded-lg px-2.5 text-[14px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true" className="text-muted-foreground/80 transition-colors group-hover:text-foreground">
-                  <path
-                    d="M12 4.5 13.8 9l4.5 1.8-4.5 1.8L12 17l-1.8-4.4L5.7 10.8 10.2 9 12 4.5Z"
-                    stroke="currentColor"
-                    strokeWidth="1.6"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                {t("AI 解读")}
-                <span className="pointer-events-none absolute inset-x-2 bottom-0 h-[2px] scale-x-0 rounded-full bg-accent transition-transform duration-200 group-hover:scale-x-100" />
-              </a>
-            )}
-          </nav>
-
-          <div className="order-4 w-full sm:order-none sm:ml-auto sm:w-[260px]">
-            <SearchBox onPick={addSymbol} />
-          </div>
-
-          <div className="ml-auto flex items-center gap-0.5 sm:ml-0">
-            <button
-              type="button"
-              onClick={() => setAutoRefresh((prev) => !prev)}
-              className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[11px] transition-colors hover:bg-muted ${
-                autoRefresh ? "text-foreground" : "text-muted-foreground"
-              }`}
-              title={autoRefresh ? t("点击暂停自动刷新") : t("点击开启自动刷新")}
-            >
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  autoRefresh ? "bg-positive live-dot" : "bg-muted-foreground/40"
-                }`}
-              />
-              <span className="hidden sm:inline">{autoRefresh ? t("实时") : t("已暂停")}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                void loadQuotes();
-                void loadChart(selected, range, interval);
-              }}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              title={t("立即刷新")}
-              aria-label={t("立即刷新")}
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                className={quotesLoading || chartLoading ? "animate-spin" : ""}
-                aria-hidden="true"
-              >
-                <path
-                  d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4.5h-4.5"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-
-            <LocaleSwitcher />
-            <ThemeToggle />
-
-            <a
-              href="https://github.com/yuhaitao521ok-design/Data-Insider"
-              target="_blank"
-              rel="noreferrer noopener"
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              aria-label={t("GitHub 仓库")}
-              title={t("GitHub 仓库")}
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.1.68-.22.68-.49 0-.24-.01-1.04-.01-1.89-2.78.62-3.37-1.21-3.37-1.21-.45-1.18-1.11-1.49-1.11-1.49-.91-.64.07-.62.07-.62 1 .07 1.53 1.05 1.53 1.05.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.36-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.04 1.03-2.76-.1-.26-.45-1.3.1-2.71 0 0 .84-.27 2.75 1.05a9.36 9.36 0 0 1 5 0c1.91-1.32 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.64 1.03 2.76 0 3.94-2.34 4.81-4.57 5.06.36.32.68.94.68 1.9 0 1.37-.01 2.47-.01 2.81 0 .27.18.6.69.49A10.03 10.03 0 0 0 22 12.25C22 6.58 17.52 2 12 2Z"
-                  fill="currentColor"
-                />
-              </svg>
-            </a>
-          </div>
-        </div>
-      </header>
+      <SiteHeader onPickSymbol={addSymbol} />
 
       <main id="top" className="mx-auto max-w-[1440px] px-4 pb-24 pt-5 lg:px-6 lg:pb-5 xl:max-w-[1640px] 2xl:max-w-[2200px]">
         <div id="market" className="mb-4 flex scroll-mt-20 flex-wrap items-center justify-between gap-2">
@@ -2664,24 +2474,7 @@ export default function Dashboard() {
 
       </main>
 
-      <footer className="border-t border-border">
-        <div className="mx-auto flex max-w-[1440px] xl:max-w-[1640px] 2xl:max-w-[2200px] flex-col gap-2 px-4 pb-24 pt-6 text-[11px] text-muted-foreground sm:flex-row lg:pb-6 sm:items-center sm:justify-between lg:px-6">
-          <p>
-            {t("数据来源 Yahoo Finance / Nasdaq / Perplexity · 行情可能延迟 15 分钟 · 仅供学习研究，不构成投资建议")}
-          </p>
-          <div className="flex items-center gap-4">
-            <a
-              href="https://github.com/yuhaitao521ok-design/Data-Insider"
-              target="_blank"
-              rel="noreferrer noopener"
-              className="transition-colors hover:text-foreground"
-            >
-              GitHub
-            </a>
-            <span className="hidden sm:inline">Data Insider</span>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
 
       <MobileTabBar />
 

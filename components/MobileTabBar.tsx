@@ -1,32 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useI18n } from "@/lib/i18n";
-import { scrollToSection } from "@/lib/scroll";
 
-const TABS = ["market", "watchlist", "panorama"] as const;
-const TAB_LABEL: Record<(typeof TABS)[number], string> = {
-  market: "行情",
-  watchlist: "自选股",
-  panorama: "全景",
-};
+const TABS = [
+  { key: "market", href: "/", label: "行情" },
+  { key: "earnings", href: "/earnings", label: "财报站" },
+  { key: "research", href: "/research", label: "量化研究" },
+  { key: "backtest", href: "/backtest", label: "回测" },
+  { key: "institutions", href: "/institutions", label: "机构持仓" },
+] as const;
 
-/** 滚动目标：行情直接定位到图表区 */
-const TAB_TARGET: Record<(typeof TABS)[number], string> = {
-  market: "chart",
-  watchlist: "watchlist",
-  panorama: "panorama",
-};
-
-/** 移动端底部标签栏：三个锚点（行情 / 自选股 / 市场全景） */
+/** 移动端底部标签栏：五个功能页 */
 export default function MobileTabBar() {
   const { t } = useI18n();
-  const [active, setActive] = useState<(typeof TABS)[number]>("market");
-
-  function go(id: (typeof TABS)[number]) {
-    setActive(id);
-    scrollToSection(TAB_TARGET[id]);
-  }
+  const pathname = usePathname();
 
   return (
     <nav
@@ -34,22 +23,21 @@ export default function MobileTabBar() {
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       aria-label={t("移动端导航")}
     >
-      <div className="mx-auto flex max-w-md items-stretch justify-around px-2">
+      <div className="mx-auto flex max-w-lg items-stretch justify-around">
         {TABS.map((tab) => {
-          const current = active === tab;
+          const current = pathname === tab.href;
           return (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => go(tab)}
+            <Link
+              key={tab.key}
+              href={tab.href}
+              data-tab={tab.key}
               aria-current={current ? "page" : undefined}
-              data-tab={tab}
               className={`flex flex-1 flex-col items-center gap-1 py-2 text-[10.5px] transition-colors ${
                 current ? "text-accent" : "text-muted-foreground"
               }`}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                {tab === "market" && (
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                {tab.key === "market" && (
                   <path
                     d="M4 16.5 8.5 10l3.6 4.2L16.5 7.5H20"
                     stroke="currentColor"
@@ -58,27 +46,34 @@ export default function MobileTabBar() {
                     strokeLinejoin="round"
                   />
                 )}
-                {tab === "watchlist" && (
+                {tab.key === "earnings" && (
                   <>
-                    <path
-                      d="M6 4h12v16l-6-3.6L6 20V4Z"
-                      stroke="currentColor"
-                      strokeWidth="1.7"
-                      strokeLinejoin="round"
-                    />
+                    <rect x="5" y="4" width="14" height="16" rx="2" stroke="currentColor" strokeWidth="1.6" />
+                    <path d="M9 9h6M9 13h6M9 17h3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
                   </>
                 )}
-                {tab === "panorama" && (
+                {tab.key === "research" && (
                   <>
-                    <rect x="4" y="4" width="7" height="7" rx="1.4" stroke="currentColor" strokeWidth="1.6" />
-                    <rect x="13" y="4" width="7" height="7" rx="1.4" stroke="currentColor" strokeWidth="1.6" />
-                    <rect x="4" y="13" width="7" height="7" rx="1.4" stroke="currentColor" strokeWidth="1.6" />
-                    <rect x="13" y="13" width="7" height="7" rx="1.4" stroke="currentColor" strokeWidth="1.6" />
+                    <path d="M4 19V5M4 19h16" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                    <path d="M8 15v-4M12 15V7M16 15v-6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                  </>
+                )}
+                {tab.key === "backtest" && (
+                  <>
+                    <path d="M4 17l5-6 4 3 7-8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                    <circle cx="9" cy="11" r="1.4" fill="currentColor" />
+                  </>
+                )}
+                {tab.key === "institutions" && (
+                  <>
+                    <circle cx="9" cy="9" r="3" stroke="currentColor" strokeWidth="1.6" />
+                    <path d="M3.5 19c0-2.8 2.5-4.5 5.5-4.5s5.5 1.7 5.5 4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                    <path d="M16 6.5a2.8 2.8 0 0 1 0 5.4M17.5 18.8c0-2 .7-3.4 3-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                   </>
                 )}
               </svg>
-              {t(TAB_LABEL[tab])}
-            </button>
+              {t(tab.label)}
+            </Link>
           );
         })}
       </div>
