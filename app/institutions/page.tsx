@@ -1,0 +1,11 @@
+import type { Metadata } from "next";
+import InstitutionsDashboard from "@/components/institutions/InstitutionsDashboard";
+
+export const metadata: Metadata = {
+  title: "机构持仓 · Data Insider",
+  description: "机构持股比例、内部人交易，以及巴菲特 / 桥水 / 段永平 / 李录等名人最新 13F 持仓",
+};
+
+export default function Page() {
+  return <InstitutionsDashboard />;
+}
