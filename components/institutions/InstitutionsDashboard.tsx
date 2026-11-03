@@ -64,6 +64,7 @@ export default function InstitutionsDashboard() {
 
   const [filter, setFilter] = useState("");
   const [ascending, setAscending] = useState(false);
+  const [investorQuery, setInvestorQuery] = useState("");
 
   const loadOwnership = useCallback(async (nextSymbol: string) => {
     if (!SYMBOL_RE.test(nextSymbol)) return;
@@ -117,6 +118,15 @@ export default function InstitutionsDashboard() {
   }, [draft, tab, loadOwnership]);
 
   const investor = SUPER_INVESTORS.find((item) => item.id === investorId) ?? SUPER_INVESTORS[0];
+
+  /** 投资人很多，支持按中文名 / 英文名 / 基金名快速筛选 */
+  const investors = useMemo(() => {
+    const keyword = investorQuery.trim().toLowerCase();
+    if (!keyword) return SUPER_INVESTORS;
+    return SUPER_INVESTORS.filter((item) =>
+      `${item.nameZh} ${item.name} ${item.fund}`.toLowerCase().includes(keyword),
+    );
+  }, [investorQuery]);
 
   const rows = useMemo(() => {
     if (!filing) return [];
@@ -190,11 +200,47 @@ export default function InstitutionsDashboard() {
                 {t("超级投资者")}
               </p>
               <span className="num rounded bg-muted px-1.5 py-0.5 text-[9.5px] text-muted-foreground">
-                {SUPER_INVESTORS.length}
+                {investors.length === SUPER_INVESTORS.length
+                  ? SUPER_INVESTORS.length
+                  : `${investors.length}/${SUPER_INVESTORS.length}`}
               </span>
             </div>
-            <div className="flex gap-1.5 overflow-x-auto p-1.5 scroll-thin xl:block xl:max-h-[640px] xl:space-y-0.5 xl:overflow-y-auto">
-              {SUPER_INVESTORS.map((item) => {
+            <div className="border-b border-border px-2 py-1.5">
+              <div className="relative">
+                <input
+                  value={investorQuery}
+                  onChange={(event) => setInvestorQuery(event.target.value)}
+                  placeholder={t("搜索投资人")}
+                  aria-label={t("搜索投资人")}
+                  className="h-7 w-full rounded-md border border-border bg-card pl-2 pr-6 text-[11px] outline-none transition-colors focus:border-accent/60 focus:ring-2 focus:ring-accent/15"
+                />
+                {investorQuery.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setInvestorQuery("")}
+                    aria-label={t("清除")}
+                    title={t("清除")}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path
+                        d="m6 6 12 12M18 6 6 18"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-1.5 overflow-x-auto p-1.5 scroll-thin xl:block xl:max-h-[560px] xl:space-y-0.5 xl:overflow-y-auto">
+              {investors.length === 0 ? (
+                <p className="px-2 py-3 text-[10.5px] text-muted-foreground">
+                  {t("没有匹配的投资人")}
+                </p>
+              ) : null}
+              {investors.map((item) => {
                 const active = item.id === investorId;
                 return (
                   <button
