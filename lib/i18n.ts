@@ -445,6 +445,13 @@ const ZH_HANT: Record<string, string> = {
   "3–6 个月的短线可用小时线：噪音和滑点更大，结论仅供参考。":
     "3–6 個月的短線可用小時線：噪音和滑點更大，結論僅供參考。",
   "超额收益": "超額收益",
+  "名人 13F 季度持仓 · 机构持股 · 内部人交易": "名人 13F 季度持倉 · 機構持股 · 內部人交易",
+  "集中度": "集中度",
+  "前十大持仓": "前十大持倉",
+  "持仓明细": "持倉明細",
+  "搜索持仓（名称或代码）": "搜尋持倉（名稱或代碼）",
+  "没有匹配的持仓": "沒有匹配的持倉",
+  "常用标的": "常用標的",
 
 };
 
@@ -862,6 +869,14 @@ const EN: Record<string, string> = {
   "3–6 个月的短线可用小时线：噪音和滑点更大，结论仅供参考。":
     "For 3–6 month trades hourly bars work, though noise and slippage are larger — treat results as indicative.",
   "超额收益": "Excess return",
+  "名人 13F 季度持仓 · 机构持股 · 内部人交易":
+    "Superinvestor 13F holdings · institutional ownership · insider trades",
+  "集中度": "Concentration",
+  "前十大持仓": "Top 10 holdings",
+  "持仓明细": "Holdings detail",
+  "搜索持仓（名称或代码）": "Filter holdings (name or CUSIP)",
+  "没有匹配的持仓": "No matching holdings",
+  "常用标的": "Quick picks",
 
 };
 
