@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 interface Point {
   t: number;
@@ -19,15 +19,26 @@ interface EquityChartProps {
     benchmark: string;
     price: string;
     empty: string;
+    buy: string;
+    sell: string;
+    initial: string;
   };
 }
 
-const PAD = { top: 16, right: 62, bottom: 26, left: 52 };
+const PAD = { top: 18, right: 62, bottom: 28, left: 60 };
 
-/** 净值曲线：左轴金额、右轴股价、底部时间轴，可切换叠加股价线 */
 const money = (value: number) =>
-  value.toLocaleString("en-US", { maximumFractionDigits: 0 });
+  Math.abs(value) >= 1000
+    ? `${(value / 1000).toLocaleString("en-US", { maximumFractionDigits: 1 })}k`
+    : value.toLocaleString("en-US", { maximumFractionDigits: 0 });
 
+const full = (value: number) =>
+  value.toLocaleString("en-US", { maximumFractionDigits: value < 10 ? 2 : 0 });
+
+/**
+ * 净值曲线：左轴金额、右轴股价、底部时间轴。
+ * 宽度按容器实测（不再拉伸 viewBox），曲线与刻度始终清晰。
+ */
 export default function EquityChart({
   equity,
   benchmark,
@@ -38,13 +49,25 @@ export default function EquityChart({
 }: EquityChartProps) {
   const [showPrice, setShowPrice] = useState(true);
   const [hover, setHover] = useState<number | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(880);
 
-  const width = 900;
-  const height = 360;
+  useEffect(() => {
+    const element = wrapRef.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      const next = entries[0]?.contentRect.width ?? 0;
+      if (next > 0) setWidth(Math.round(next));
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  const height = width < 560 ? 260 : 340;
 
   const geometry = useMemo(() => {
     if (equity.length < 2) return null;
-    const innerWidth = width - PAD.left - PAD.right;
+    const innerWidth = Math.max(width - PAD.left - PAD.right, 10);
     const innerHeight = height - PAD.top - PAD.bottom;
 
     const moneyValues = [
@@ -70,11 +93,22 @@ export default function EquityChart({
 
     const toPath = (series: Point[]) =>
       series
-        .map((item, index) => `${index === 0 ? "M" : "L"}${xFor(index).toFixed(1)} ${yMoney(item.value).toFixed(1)}`)
+        .map(
+          (item, index) =>
+            `${index === 0 ? "M" : "L"}${xFor(index).toFixed(1)} ${yMoney(item.value).toFixed(1)}`,
+        )
         .join(" ");
 
+    const strategyPath = toPath(equity);
+    const areaPath = `${strategyPath} L${xFor(equity.length - 1).toFixed(1)} ${(
+      PAD.top + innerHeight
+    ).toFixed(1)} L${xFor(0).toFixed(1)} ${(PAD.top + innerHeight).toFixed(1)} Z`;
+
     const pricePath = price
-      .map((item, index) => `${index === 0 ? "M" : "L"}${xFor(index).toFixed(1)} ${yPrice(item.value).toFixed(1)}`)
+      .map(
+        (item, index) =>
+          `${index === 0 ? "M" : "L"}${xFor(index).toFixed(1)} ${yPrice(item.value).toFixed(1)}`,
+      )
       .join(" ");
 
     const grid = Array.from({ length: 5 }, (_, index) => {
@@ -86,19 +120,21 @@ export default function EquityChart({
     const priceTicks = Array.from({ length: 3 }, (_, index) => {
       const ratio = index / 2;
       const value = maxPrice - ratio * (maxPrice - minPrice);
-      return { y: yPrice(value), label: value.toFixed(2) };
+      return { y: yPrice(value), label: value.toFixed(value < 30 ? 2 : 1) };
     });
 
-    const labelCount = equity.length >= 6 ? 6 : equity.length;
+    const spanDays = (equity[equity.length - 1].t - equity[0].t) / 86_400;
+    const dateFormat = new Intl.DateTimeFormat(
+      "zh-CN",
+      spanDays > 400 ? { year: "2-digit", month: "2-digit" } : { month: "2-digit", day: "2-digit" },
+    );
+
+    const labelCount = Math.min(equity.length, width < 560 ? 3 : 6);
     const xLabels = Array.from({ length: labelCount }, (_, index) => {
       const pointIndex = Math.round((index / Math.max(labelCount - 1, 1)) * (equity.length - 1));
       return {
         x: xFor(pointIndex),
-        label: new Intl.DateTimeFormat("zh-CN", {
-          year: "2-digit",
-          month: "2-digit",
-          day: "2-digit",
-        }).format(new Date(equity[pointIndex].t * 1000)),
+        label: dateFormat.format(new Date(equity[pointIndex].t * 1000)),
         anchor: (index === 0 ? "start" : index === labelCount - 1 ? "end" : "middle") as
           | "start"
           | "middle"
@@ -122,68 +158,74 @@ export default function EquityChart({
       return result;
     });
 
+    const initialValue = benchmark[0]?.value ?? equity[0]?.value ?? 0;
+
     return {
-      innerWidth,
       innerHeight,
       xFor,
       yMoney,
-      strategyPath: toPath(equity),
+      strategyPath,
+      areaPath,
       benchmarkPath: toPath(benchmark),
       pricePath,
       grid,
       priceTicks,
       xLabels,
       markers,
+      initial: initialValue >= lo && initialValue <= hi ? yMoney(initialValue) : null,
     };
-  }, [equity, benchmark, price, trades]);
+  }, [equity, benchmark, price, trades, width, height]);
 
   if (!geometry) {
     return (
-      <div className="flex h-[360px] items-center justify-center text-[12px] text-muted-foreground">
+      <div className="flex h-[300px] items-center justify-center text-[12px] text-muted-foreground">
         {labels.empty}
       </div>
     );
   }
 
   const hovered = hover !== null ? equity[hover] : null;
+  const hoveredBenchmark = hover !== null ? benchmark[hover] : null;
+  const hoveredPrice = hover !== null ? price[hover] : null;
+  const plotBottom = PAD.top + geometry.innerHeight;
+  const tooltipLeft = hover !== null ? Math.min(Math.max(geometry.xFor(hover), 96), width - 96) : 0;
 
   return (
-    <div className="relative w-full">
-      <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-1">
-        <div className="flex items-center gap-3 text-[10.5px] text-muted-foreground">
-          <span className="inline-flex items-center gap-1">
-            <span className="h-0.5 w-3 rounded" style={{ background: "var(--bt-strategy)" }} /> {labels.strategy}
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <span className="h-0.5 w-3 rounded" style={{ background: "var(--bt-benchmark)" }} /> {labels.benchmark}
-          </span>
-          <button
-            type="button"
-            onClick={() => setShowPrice((prev) => !prev)}
-            aria-pressed={showPrice}
-            className={`inline-flex items-center gap-1 rounded px-1 transition-colors hover:bg-hover hover:text-foreground ${
-              showPrice ? "text-foreground" : "opacity-50"
-            }`}
-          >
-            <span className="h-0.5 w-3 rounded border-t-2 border-dashed" style={{ borderColor: "var(--bt-price)" }} />
-            {labels.price}
-          </button>
-        </div>
-        {hovered && (
-          <span className="num text-[10.5px] text-muted-foreground">
-            {new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium" }).format(
-              new Date(hovered.t * 1000),
-            )}{" "}
-            ·{" "}
-            <span className="text-foreground">{money(hovered.value)}</span>
-          </span>
-        )}
+    <div ref={wrapRef} className="relative w-full">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 pb-1.5 text-[10.5px] text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full" style={{ background: "var(--bt-strategy)" }} />
+          {labels.strategy}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-0.5 w-3.5 rounded" style={{ background: "var(--bt-benchmark)" }} />
+          {labels.benchmark}
+        </span>
+        <button
+          type="button"
+          onClick={() => setShowPrice((prev) => !prev)}
+          aria-pressed={showPrice}
+          className={`inline-flex items-center gap-1.5 rounded px-1 py-0.5 transition-colors hover:bg-hover hover:text-foreground ${
+            showPrice ? "text-foreground" : "opacity-50"
+          }`}
+        >
+          <span
+            className="h-0.5 w-3.5 rounded border-t-2 border-dashed"
+            style={{ borderColor: "var(--bt-price)" }}
+          />
+          {labels.price}
+        </button>
+        <span className="ml-auto inline-flex items-center gap-1.5">
+          <span className="text-[9px]" style={{ color: "var(--positive)" }}>▲</span>
+          {labels.buy}
+          <span className="ml-1 text-[9px]" style={{ color: "var(--negative)" }}>▼</span>
+          {labels.sell}
+        </span>
       </div>
 
       <svg
         viewBox={`0 0 ${width} ${height}`}
-        className="h-[320px] w-full sm:h-[360px]"
-        preserveAspectRatio="none"
+        className="block w-full"
         role="img"
         aria-label={labels.strategy}
         onPointerMove={(event) => {
@@ -196,8 +238,16 @@ export default function EquityChart({
         }}
         onPointerLeave={() => setHover(null)}
       >
+        <defs>
+          <linearGradient id="bt-equity-fill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--bt-strategy)" stopOpacity="0.24" />
+            <stop offset="55%" stopColor="var(--bt-strategy)" stopOpacity="0.08" />
+            <stop offset="100%" stopColor="var(--bt-strategy)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
         {geometry.grid.map((line) => (
-          <g key={line.y}>
+          <g key={`grid-${line.y}`}>
             <line
               x1={PAD.left}
               x2={width - PAD.right}
@@ -207,8 +257,9 @@ export default function EquityChart({
               style={{ stroke: "var(--chart-grid)" }}
             />
             <text
-              x={width - PAD.right + 6}
+              x={PAD.left - 8}
               y={line.y + 3.5}
+              textAnchor="end"
               fontSize="10"
               className="num"
               style={{ fill: "var(--chart-label)" }}
@@ -218,25 +269,47 @@ export default function EquityChart({
           </g>
         ))}
 
+        {/* 初始资金参考线 */}
+        {geometry.initial !== null && (
+          <g style={{ pointerEvents: "none" }}>
+            <line
+              x1={PAD.left}
+              x2={width - PAD.right}
+              y1={geometry.initial}
+              y2={geometry.initial}
+              strokeWidth="1"
+              strokeDasharray="2 4"
+              style={{ stroke: "var(--chart-reference)" }}
+            />
+            <text
+              x={PAD.left + 4}
+              y={geometry.initial - 4}
+              fontSize="9"
+              style={{ fill: "var(--chart-label)" }}
+            >
+              {labels.initial}
+            </text>
+          </g>
+        )}
+
         {showPrice && geometry.pricePath && (
           <path
             d={geometry.pricePath}
             fill="none"
             strokeWidth="1.2"
             strokeDasharray="4 3"
-            style={{ stroke: "var(--bt-price)", opacity: 0.9 }}
+            style={{ stroke: "var(--bt-price)", opacity: 0.85 }}
             vectorEffect="non-scaling-stroke"
           />
         )}
 
-        {/* 左侧股价刻度 */}
+        {/* 右侧股价刻度 */}
         {showPrice &&
           geometry.priceTicks.map((tick, index) => (
             <text
               key={`price-${index}`}
-              x={PAD.left - 6}
+              x={width - PAD.right + 8}
               y={tick.y + 3.5}
-              textAnchor="end"
               fontSize="10"
               className="num"
               style={{ fill: "var(--bt-price)" }}
@@ -245,38 +318,46 @@ export default function EquityChart({
             </text>
           ))}
 
+        <path d={geometry.areaPath} fill="url(#bt-equity-fill)" style={{ pointerEvents: "none" }} />
         <path
           d={geometry.benchmarkPath}
           fill="none"
           strokeWidth="1.1"
-          style={{ stroke: "var(--bt-benchmark)", opacity: 0.85 }}
+          style={{ stroke: "var(--bt-benchmark)", opacity: 0.7 }}
           vectorEffect="non-scaling-stroke"
         />
         <path
           d={geometry.strategyPath}
           fill="none"
-          strokeWidth="1.7"
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+          strokeLinecap="round"
           style={{ stroke: "var(--bt-strategy)" }}
           vectorEffect="non-scaling-stroke"
         />
 
         {geometry.markers.map((marker, index) => (
-          <circle
-            key={index}
-            cx={marker.x}
-            cy={marker.y}
-            r="2.6"
-            style={{ fill: marker.kind === "buy" ? "var(--positive)" : "var(--negative)" }}
+          <path
+            key={`marker-${index}`}
+            d={
+              marker.kind === "buy"
+                ? `M${marker.x} ${marker.y - 3.8} L${marker.x + 3.3} ${marker.y + 2.6} L${marker.x - 3.3} ${marker.y + 2.6} Z`
+                : `M${marker.x} ${marker.y + 3.8} L${marker.x + 3.3} ${marker.y - 2.6} L${marker.x - 3.3} ${marker.y - 2.6} Z`
+            }
+            style={{
+              fill: marker.kind === "buy" ? "var(--positive)" : "var(--negative)",
+              opacity: 0.9,
+            }}
           />
         ))}
 
         {hover !== null && hovered && (
-          <g>
+          <g style={{ pointerEvents: "none" }}>
             <line
               x1={geometry.xFor(hover)}
               x2={geometry.xFor(hover)}
               y1={PAD.top}
-              y2={height - PAD.bottom}
+              y2={plotBottom}
               strokeWidth="1"
               strokeDasharray="3 3"
               style={{ stroke: "var(--chart-crosshair)" }}
@@ -295,7 +376,7 @@ export default function EquityChart({
           <text
             key={`${label.label}-${index}`}
             x={label.x}
-            y={height - 6}
+            y={height - 8}
             textAnchor={label.anchor}
             fontSize="10"
             className="num"
@@ -306,7 +387,55 @@ export default function EquityChart({
         ))}
       </svg>
 
-      <p className="px-4 pb-2 text-[10px] text-muted-foreground">
+      {hover !== null && hovered && (
+        <div
+          className="pointer-events-none absolute top-7 z-10 min-w-[150px] -translate-x-1/2 rounded-lg border border-border bg-popover/95 px-2.5 py-2 shadow-[var(--shadow-pop)] backdrop-blur"
+          style={{ left: tooltipLeft }}
+        >
+          <p className="num text-[10px] text-muted-foreground">
+            {new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium" }).format(
+              new Date(hovered.t * 1000),
+            )}
+          </p>
+          <div className="mt-1 space-y-0.5">
+            <div className="flex items-center justify-between gap-3 text-[10.5px]">
+              <span className="inline-flex items-center gap-1 text-muted-foreground">
+                <span
+                  className="h-2 w-2 rounded-full"
+                  style={{ background: "var(--bt-strategy)" }}
+                />
+                {labels.strategy}
+              </span>
+              <span className="num text-foreground">{full(hovered.value)}</span>
+            </div>
+            {hoveredBenchmark && (
+              <div className="flex items-center justify-between gap-3 text-[10.5px]">
+                <span className="inline-flex items-center gap-1 text-muted-foreground">
+                  <span className="h-0.5 w-2 rounded" style={{ background: "var(--bt-benchmark)" }} />
+                  {labels.benchmark}
+                </span>
+                <span className="num text-muted-foreground">{full(hoveredBenchmark.value)}</span>
+              </div>
+            )}
+            {showPrice && hoveredPrice && (
+              <div className="flex items-center justify-between gap-3 text-[10.5px]">
+                <span className="inline-flex items-center gap-1 text-muted-foreground">
+                  <span
+                    className="h-0.5 w-2 rounded border-t border-dashed"
+                    style={{ borderColor: "var(--bt-price)" }}
+                  />
+                  {labels.price}
+                </span>
+                <span className="num" style={{ color: "var(--bt-price)" }}>
+                  {full(hoveredPrice.value)}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <p className="px-4 pb-2 pt-1 text-[10px] text-muted-foreground">
         {currency} · {labels.price}
       </p>
     </div>

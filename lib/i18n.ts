@@ -429,6 +429,22 @@ const ZH_HANT: Record<string, string> = {
   "优点": "優點",
   "缺点": "缺點",
   "悬停查看说明": "懸停查看說明",
+  "清除": "清除",
+  "搜索并选择一个标的后会记录在这里": "搜尋並選擇一個標的後會記錄在這裡",
+  "点击直接切换回测标的": "點擊直接切換回測標的",
+  "悬停策略查看说明": "懸停策略查看說明",
+  "多策略自由组合 · 日线 / 周线 / 月线可选 · 本地回测，含手续费":
+    "多策略自由組合 · 日線 / 週線 / 月線可選 · 本地回測，含手續費",
+  "K 线周期": "K 線週期",
+  "根 K 线": "根 K 線",
+  "回测粒度建议": "回測粒度建議",
+  "日线是最常用的回测粒度：数据完整、信号稳定，适合大多数中长线策略。":
+    "日線是最常用的回測粒度：資料完整、訊號穩定，適合大多數中長線策略。",
+  "5 年以上的长线可切到周线或月线：噪音更少、交易更少，但信号更滞后。":
+    "5 年以上的長線可切到週線或月線：噪音更少、交易更少，但訊號更滯後。",
+  "3–6 个月的短线可用小时线：噪音和滑点更大，结论仅供参考。":
+    "3–6 個月的短線可用小時線：噪音和滑點更大，結論僅供參考。",
+  "超额收益": "超額收益",
 
 };
 
@@ -830,6 +846,22 @@ const EN: Record<string, string> = {
   "优点": "Pros",
   "缺点": "Cons",
   "悬停查看说明": "Hover for details",
+  "清除": "Clear",
+  "搜索并选择一个标的后会记录在这里": "Picked symbols show up here",
+  "点击直接切换回测标的": "Click to switch the backtest symbol",
+  "悬停策略查看说明": "Hover a strategy for details",
+  "多策略自由组合 · 日线 / 周线 / 月线可选 · 本地回测，含手续费":
+    "Multi-strategy · daily / weekly / monthly bars · local backtest with fees",
+  "K 线周期": "Bar interval",
+  "根 K 线": "bars",
+  "回测粒度建议": "Choosing a bar interval",
+  "日线是最常用的回测粒度：数据完整、信号稳定，适合大多数中长线策略。":
+    "Daily bars are the usual default: complete data, stable signals, right for most swing and position strategies.",
+  "5 年以上的长线可切到周线或月线：噪音更少、交易更少，但信号更滞后。":
+    "For 5y+ horizons switch to weekly or monthly: less noise and fewer trades, but slower signals.",
+  "3–6 个月的短线可用小时线：噪音和滑点更大，结论仅供参考。":
+    "For 3–6 month trades hourly bars work, though noise and slippage are larger — treat results as indicative.",
+  "超额收益": "Excess return",
 
 };
 

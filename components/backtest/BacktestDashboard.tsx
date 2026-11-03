@@ -9,10 +9,22 @@ import { useI18n } from "@/lib/i18n";
 import { formatNumber, formatPercent, formatPrice } from "@/lib/format";
 import { DEFAULT_PARAMS, runBacktest, type BacktestParams } from "@/lib/backtest";
 import { STRATEGY_MAP } from "@/lib/backtest-catalog";
+import {
+  BACKTEST_RANGES,
+  defaultBacktestInterval,
+  estimateBars,
+  intervalsForBacktest,
+} from "@/lib/backtest-frame";
 import { HISTORY_KEY, pushHistory, sanitizeHistory } from "@/lib/backtest-history";
-import { DEFAULT_WATCHLIST, RANGE_CONFIG, type ChartPoint, type RangeKey } from "@/lib/types";
+import {
+  DEFAULT_WATCHLIST,
+  INTERVAL_CONFIG,
+  RANGE_CONFIG,
+  type ChartPoint,
+  type IntervalKey,
+  type RangeKey,
+} from "@/lib/types";
 
-const BACKTEST_RANGES: RangeKey[] = ["1Y", "5Y", "MAX"];
 const SYMBOL_RE = /^[A-Z0-9.^=-]{1,12}$/;
 
 const CAPITALS = [1_000, 10_000, 100_000];
@@ -23,6 +35,7 @@ export default function BacktestDashboard() {
   const [draft, setDraft] = useState<string>(DEFAULT_WATCHLIST[0]);
   const [history, setHistory] = useState<string[]>([DEFAULT_WATCHLIST[0]]);
   const [range, setRange] = useState<RangeKey>("5Y");
+  const [interval, setIntervalKey] = useState<IntervalKey>(defaultBacktestInterval("5Y"));
   const [params, setParams] = useState<BacktestParams>(DEFAULT_PARAMS);
   const [points, setPoints] = useState<ChartPoint[]>([]);
   const [currency, setCurrency] = useState("USD");
@@ -53,14 +66,14 @@ export default function BacktestDashboard() {
 
   // 只有合法代码才请求（避免删除输入时 404 报错）
   const load = useCallback(
-    async (nextSymbol: string, nextRange: RangeKey) => {
+    async (nextSymbol: string, nextRange: RangeKey, nextInterval: IntervalKey) => {
       if (!SYMBOL_RE.test(nextSymbol)) return;
       const requestId = ++requestRef.current;
       setLoading(true);
       setError(null);
       try {
         const response = await fetch(
-          `/api/chart?symbol=${encodeURIComponent(nextSymbol)}&range=${nextRange}&interval=1d`,
+          `/api/chart?symbol=${encodeURIComponent(nextSymbol)}&range=${nextRange}&interval=${nextInterval}`,
           { cache: "no-store" },
         );
         if (requestId !== requestRef.current) return;
@@ -84,12 +97,12 @@ export default function BacktestDashboard() {
   );
 
   useEffect(() => {
-    void load(symbol, range);
-  }, [symbol, range, load]);
+    void load(symbol, range, interval);
+  }, [symbol, range, interval, load]);
 
   const result = useMemo(
-    () => (points.length > 0 ? runBacktest(points, params) : null),
-    [points, params],
+    () => (points.length > 0 ? runBacktest(points, params, interval) : null),
+    [points, params, interval],
   );
 
   function commitSymbol(next: string) {
@@ -98,7 +111,23 @@ export default function BacktestDashboard() {
     setHistory((prev) => pushHistory(prev, next));
   }
 
+  /** 切换区间时，若当前 K 线周期在该区间不可用，自动落到默认周期 */
+  function changeRange(next: RangeKey) {
+    setRange(next);
+    const allowed = intervalsForBacktest(next);
+    setIntervalKey((prev) =>
+      allowed.includes(prev) ? prev : defaultBacktestInterval(next),
+    );
+  }
+
   const update = (patch: Partial<BacktestParams>) => setParams((prev) => ({ ...prev, ...patch }));
+
+  const allowedIntervals = useMemo(() => intervalsForBacktest(range), [range]);
+  const bars = estimateBars(range, interval);
+  const frameLabel = `${t(INTERVAL_CONFIG[interval].label)} · ${t(RANGE_CONFIG[range].label)}`;
+  const selectedStrategies = params.strategies
+    .map((key) => STRATEGY_MAP[key]?.label)
+    .filter((label): label is string => Boolean(label));
 
   const field = (
     key: keyof Pick<
@@ -124,7 +153,7 @@ export default function BacktestDashboard() {
           update({ [key]: Math.min(max, Math.max(min, value)) } as Partial<BacktestParams>);
         }}
         aria-label={t(label)}
-        className="num h-7 w-[76px] rounded-md border border-border bg-card px-2 text-right text-[12px] outline-none focus:border-accent/60"
+        className="num h-7 w-[76px] rounded-md border border-border bg-card px-2 text-right text-[12px] outline-none transition-colors focus:border-accent/60 focus:ring-2 focus:ring-accent/15"
       />
     </label>
   );
@@ -164,21 +193,35 @@ export default function BacktestDashboard() {
   return (
     <PageShell
       title={t("策略回测")}
-      description={t("6 种策略自由组合 · 自定义初始资金 · 本地回测，含手续费")}
+      description={t("多策略自由组合 · 日线 / 周线 / 月线可选 · 本地回测，含手续费")}
       actions={
         <button
           type="button"
-          onClick={() => void load(symbol, range)}
-          className="h-7 rounded-md border border-border px-2.5 text-[11px] text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
+          onClick={() => void load(symbol, range, interval)}
+          className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-[11px] text-muted-foreground transition-colors hover:border-accent/40 hover:bg-hover hover:text-foreground"
         >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
           {t("刷新")}
         </button>
       }
     >
-      <div className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
-        <aside className="space-y-4">
-          <section className="rounded-xl border border-border bg-card p-3">
-            <p className="mb-2 text-[11px] font-medium text-muted-foreground">{t("标的与区间")}</p>
+      <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)]">
+        <aside className="min-w-0 space-y-3">
+          <section className="rounded-xl border border-border bg-card p-3 shadow-[0_1px_2px_rgba(9,9,11,0.04)]">
+            <p className="mb-2 flex items-center justify-between text-[11px] font-medium text-muted-foreground">
+              {t("标的与区间")}
+              <span className="num rounded bg-muted px-1.5 py-0.5 text-[9.5px] font-normal text-muted-foreground/80">
+                {frameLabel}
+              </span>
+            </p>
             <SymbolPicker
               value={symbol}
               onChange={commitSymbol}
@@ -187,20 +230,54 @@ export default function BacktestDashboard() {
               onClearHistory={() => setHistory([])}
               invalid={draft.length > 0 && !SYMBOL_RE.test(draft)}
             />
-            <div className="mt-2 flex items-center gap-1.5">
-              <span className="text-[11px] text-muted-foreground">{t("回测区间")}</span>
-              <select
-                value={range}
-                onChange={(event) => setRange(event.target.value as RangeKey)}
-                aria-label={t("回测区间")}
-                className="h-7 flex-1 rounded-md border border-border bg-card px-1.5 text-[11.5px] outline-none"
-              >
-                {BACKTEST_RANGES.map((item) => (
-                  <option key={item} value={item}>
-                    {t(RANGE_CONFIG[item].label)}
-                  </option>
-                ))}
-              </select>
+
+            <div className="mt-3 space-y-2">
+              <div>
+                <p className="mb-1 text-[10.5px] text-muted-foreground">{t("回测区间")}</p>
+                <div className="flex gap-1">
+                  {BACKTEST_RANGES.map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => changeRange(item)}
+                      aria-pressed={range === item}
+                      className={`num h-6 flex-1 rounded-md border text-[10.5px] transition-colors ${
+                        range === item
+                          ? "border-accent/50 bg-accent-soft font-medium text-accent"
+                          : "border-border text-muted-foreground hover:border-accent/30 hover:bg-hover hover:text-foreground"
+                      }`}
+                    >
+                      {t(RANGE_CONFIG[item].label)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-1 flex items-center justify-between text-[10.5px] text-muted-foreground">
+                  {t("K 线周期")}
+                  <span className="text-[10px] text-muted-foreground/70">
+                    ≈ {bars.toLocaleString("en-US")} {t("根 K 线")}
+                  </span>
+                </p>
+                <div className="flex gap-1">
+                  {allowedIntervals.map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => setIntervalKey(item)}
+                      aria-pressed={interval === item}
+                      className={`h-6 flex-1 rounded-md border text-[10.5px] transition-colors ${
+                        interval === item
+                          ? "border-accent/50 bg-accent-soft font-medium text-accent"
+                          : "border-border text-muted-foreground hover:border-accent/30 hover:bg-hover hover:text-foreground"
+                      }`}
+                    >
+                      {t(INTERVAL_CONFIG[item].label)}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </section>
 
@@ -208,21 +285,19 @@ export default function BacktestDashboard() {
             <p className="mb-2 text-[11px] font-medium text-muted-foreground">
               {t("初始资金（USD）")}
             </p>
-            <div className="flex items-center gap-1.5">
-              <input
-                type="number"
-                min={100}
-                step={1000}
-                value={params.initialCapital}
-                onChange={(event) => {
-                  const value = Number.parseFloat(event.target.value);
-                  if (!Number.isFinite(value)) return;
-                  update({ initialCapital: Math.max(100, value) });
-                }}
-                aria-label={t("初始资金（USD）")}
-                className="num h-7 w-full rounded-md border border-border bg-card px-2 text-right text-[12px] outline-none focus:border-accent/60"
-              />
-            </div>
+            <input
+              type="number"
+              min={100}
+              step={1000}
+              value={params.initialCapital}
+              onChange={(event) => {
+                const value = Number.parseFloat(event.target.value);
+                if (!Number.isFinite(value)) return;
+                update({ initialCapital: Math.max(100, value) });
+              }}
+              aria-label={t("初始资金（USD）")}
+              className="num h-7 w-full rounded-md border border-border bg-card px-2 text-right text-[12px] outline-none transition-colors focus:border-accent/60 focus:ring-2 focus:ring-accent/15"
+            />
             <div className="mt-1.5 flex gap-1">
               {CAPITALS.map((value) => (
                 <button
@@ -244,7 +319,7 @@ export default function BacktestDashboard() {
           <section className="rounded-xl border border-border bg-card p-3">
             <div className="mb-2 flex items-center justify-between">
               <p className="text-[11px] font-medium text-muted-foreground">{t("策略")}</p>
-              <span className="text-[10px] text-muted-foreground">
+              <span className="rounded bg-muted px-1.5 py-0.5 text-[9.5px] text-muted-foreground">
                 {params.strategies.length} {t("个已选")}
               </span>
             </div>
@@ -255,27 +330,77 @@ export default function BacktestDashboard() {
               {field("feeBps", "手续费 bp", 0, 50)}
             </div>
           </section>
+
+          <section className="rounded-xl border border-border bg-muted/30 p-3">
+            <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">
+              {t("回测粒度建议")}
+            </p>
+            <ul className="space-y-1 text-[10.5px] leading-4 text-muted-foreground">
+              <li>{t("日线是最常用的回测粒度：数据完整、信号稳定，适合大多数中长线策略。")}</li>
+              <li>{t("5 年以上的长线可切到周线或月线：噪音更少、交易更少，但信号更滞后。")}</li>
+              <li>{t("3–6 个月的短线可用小时线：噪音和滑点更大，结论仅供参考。")}</li>
+            </ul>
+          </section>
         </aside>
 
-        <section className="space-y-4">
+        <section className="min-w-0 space-y-3" aria-busy={loading}>
           {error ? (
-            <p className="rounded-xl border border-border bg-card px-4 py-6 text-[12px] text-negative-text">
-              {error}
-            </p>
-          ) : loading ? (
-            <div className="skeleton h-[420px] rounded-xl" />
+            <div className="rounded-xl border border-border bg-card p-5">
+              <p className="text-[12px] text-negative-text">{error}</p>
+              <button
+                type="button"
+                onClick={() => void load(symbol, range, interval)}
+                className="mt-2 h-7 rounded-md border border-border px-2.5 text-[11px] text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
+              >
+                {t("重试")}
+              </button>
+            </div>
+          ) : loading && !result ? (
+            <div className="space-y-3">
+              <div className="skeleton h-[76px] rounded-xl" />
+              <div className="skeleton h-[360px] rounded-xl" />
+            </div>
           ) : !result ? (
-            <p className="rounded-xl border border-border bg-card px-4 py-6 text-[12px] text-muted-foreground">
+            <p className="rounded-xl border border-dashed border-border bg-card px-4 py-8 text-center text-[12px] text-muted-foreground">
               {t("数据点不足，无法回测")}
             </p>
           ) : (
             <>
-              <section className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-4">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-xl border border-border bg-card px-3 py-2 text-[10.5px] text-muted-foreground">
+                <span className="num text-[12.5px] font-medium tracking-wide text-foreground">
+                  {symbol}
+                </span>
+                <span className="num rounded bg-muted px-1.5 py-0.5">{frameLabel}</span>
+                {selectedStrategies.map((label) => (
+                  <span
+                    key={label}
+                    className="rounded border border-accent/25 bg-accent-soft px-1.5 py-0.5 text-accent"
+                  >
+                    {t(label)}
+                  </span>
+                ))}
+                <span className="num ml-auto inline-flex items-center gap-1.5">
+                  {loading && (
+                    <span className="h-2.5 w-2.5 animate-spin rounded-full border border-accent border-t-transparent" />
+                  )}
+                  {t("按收盘价成交，含手续费")}
+                </span>
+              </div>
+
+              <section className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
                 {[
                   { label: t("最终市值"), value: result.stats.finalValue === null ? "--" : formatPrice(result.stats.finalValue, currency), tone: (result.stats.profit ?? 0) >= 0 },
                   { label: t("盈亏"), value: result.stats.profit === null ? "--" : formatPrice(result.stats.profit, currency), tone: (result.stats.profit ?? 0) >= 0 },
                   { label: t("策略收益"), value: formatPercent(result.stats.totalReturn), tone: (result.stats.totalReturn ?? 0) >= 0 },
                   { label: t("买入持有"), value: formatPercent(result.stats.benchmarkReturn), tone: (result.stats.benchmarkReturn ?? 0) >= 0 },
+                  {
+                    label: t("超额收益"),
+                    value:
+                      result.stats.totalReturn === null || result.stats.benchmarkReturn === null
+                        ? "--"
+                        : formatPercent(result.stats.totalReturn - result.stats.benchmarkReturn),
+                    tone: (result.stats.totalReturn ?? 0) - (result.stats.benchmarkReturn ?? 0) >= 0,
+                  },
                   { label: t("年化收益"), value: formatPercent(result.stats.cagr), tone: (result.stats.cagr ?? 0) >= 0 },
                   { label: t("最大回撤"), value: formatPercent(result.stats.maxDrawdown), tone: false },
                   { label: t("夏普"), value: formatNumber(result.stats.sharpe, 2), tone: null },
@@ -283,12 +408,14 @@ export default function BacktestDashboard() {
                   { label: t("交易次数"), value: String(result.stats.tradeCount), tone: null },
                   { label: t("平均持仓"), value: result.stats.avgDays === null ? "--" : `${formatNumber(result.stats.avgDays, 0)} ${t("天")}`, tone: null },
                   { label: t("持仓占比"), value: formatPercent(result.stats.exposure, 1).replace("+", ""), tone: null },
-                  { label: t("初始资金"), value: formatPrice(result.stats.initialCapital, currency), tone: null },
                 ].map((item) => (
-                  <div key={item.label} className="bg-card px-4 py-2.5">
+                  <div
+                    key={item.label}
+                    className="bg-card px-3.5 py-2.5 transition-colors hover:bg-muted/50"
+                  >
                     <p className="text-[10.5px] text-muted-foreground">{item.label}</p>
                     <p
-                      className={`num mt-0.5 text-[13px] ${
+                      className={`num mt-0.5 text-[13.5px] font-medium ${
                         item.tone === null
                           ? "text-foreground"
                           : item.tone
@@ -303,10 +430,10 @@ export default function BacktestDashboard() {
               </section>
 
               <section className="overflow-hidden rounded-xl border border-border bg-card">
-                <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
                   <h2 className="text-[13px] font-medium">{t("净值曲线")}</h2>
-                  <span className="text-[10px] text-muted-foreground">
-                    {symbol} · {t(RANGE_CONFIG[range].label)}
+                  <span className="num text-[10px] text-muted-foreground">
+                    {symbol} · {frameLabel}
                   </span>
                 </div>
                 <EquityChart
@@ -320,13 +447,21 @@ export default function BacktestDashboard() {
                     benchmark: t("买入持有"),
                     price: t("股价"),
                     empty: t("暂无数据"),
+                    buy: t("买入"),
+                    sell: t("卖出"),
+                    initial: t("初始资金"),
                   }}
                 />
               </section>
 
               <section className="overflow-hidden rounded-xl border border-border bg-card">
-                <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
-                  <h2 className="text-[13px] font-medium">{t("交易明细")}</h2>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
+                  <h2 className="text-[13px] font-medium">
+                    {t("交易明细")}
+                    <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">
+                      {result.trades.length}
+                    </span>
+                  </h2>
                   <span className="text-[10px] text-muted-foreground">
                     {t("按收盘价成交，含手续费")}
                   </span>
@@ -338,7 +473,7 @@ export default function BacktestDashboard() {
                 ) : (
                   <div className="max-h-[380px] overflow-auto scroll-thin">
                     <table className="w-full min-w-[680px] text-[11.5px]">
-                      <thead className="sticky top-0 bg-card">
+                      <thead className="sticky top-0 z-10 bg-card/95 backdrop-blur">
                         <tr className="text-[10px] text-muted-foreground">
                           <th className="px-3 py-1.5 text-left font-medium">{t("买入")}</th>
                           <th className="px-3 py-1.5 text-left font-medium">{t("卖出")}</th>
@@ -351,7 +486,10 @@ export default function BacktestDashboard() {
                       </thead>
                       <tbody>
                         {result.trades.map((trade) => (
-                          <tr key={`${trade.entryDate}-${trade.exitDate}`} className="border-t border-border/60">
+                          <tr
+                            key={`${trade.entryDate}-${trade.exitDate}`}
+                            className="border-t border-border/60 transition-colors hover:bg-muted/40"
+                          >
                             <td className="num px-3 py-1.5">
                               {formatDay(trade.entryDate)} · {formatPrice(trade.entryPrice, currency)}
                             </td>
@@ -361,14 +499,28 @@ export default function BacktestDashboard() {
                             <td className="num px-3 py-1.5 text-right text-muted-foreground">
                               {formatNumber(trade.shares, 2)}
                             </td>
-                            <td className={`num px-3 py-1.5 text-right ${trade.pnl >= 0 ? "text-positive-text" : "text-negative-text"}`}>
+                            <td
+                              className={`num px-3 py-1.5 text-right ${
+                                trade.pnl >= 0 ? "text-positive-text" : "text-negative-text"
+                              }`}
+                            >
                               {formatPrice(trade.pnl, currency)}
                             </td>
-                            <td className={`num px-3 py-1.5 text-right ${trade.pnlPercent >= 0 ? "text-positive-text" : "text-negative-text"}`}>
+                            <td
+                              className={`num px-3 py-1.5 text-right ${
+                                trade.pnlPercent >= 0 ? "text-positive-text" : "text-negative-text"
+                              }`}
+                            >
                               {formatPercent(trade.pnlPercent)}
                             </td>
-                            <td className="num px-3 py-1.5 text-right text-muted-foreground">{trade.days}</td>
-                            <td className="px-3 py-1.5 text-muted-foreground">{t(trade.reason)}</td>
+                            <td className="num px-3 py-1.5 text-right text-muted-foreground">
+                              {trade.days}
+                            </td>
+                            <td className="px-3 py-1.5">
+                              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                {t(trade.reason)}
+                              </span>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
