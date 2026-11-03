@@ -1,8 +1,9 @@
-import type { ChartPoint } from "@/lib/types";
+import type { ChartPoint, IntervalKey } from "@/lib/types";
 
 /** 回测引擎：多策略（见 backtest-catalog）自由组合，全部本地计算。 */
 
 import { STRATEGIES, STRATEGY_MAP, type StrategyMeta } from "@/lib/backtest-catalog";
+import { barsPerYear } from "@/lib/backtest-frame";
 
 export const STRATEGY_KEYS = STRATEGIES.map((item) => item.key);
 export type StrategyKey = string;
@@ -64,7 +65,10 @@ export interface Trade {
   pnl: number;
   /** 百分比 */
   pnlPercent: number;
+  /** 持有天数（自然日，与所选 K 线周期无关） */
   days: number;
+  /** 持有多少根 K 线 */
+  bars: number;
   reason: string;
 }
 
@@ -135,8 +139,6 @@ function strategyExitReason(params: BacktestParams): string {
   return `${strategyLabel(first)} · 离场`;
 }
 
-const TRADING_DAYS = 252;
-
 function drawdownOf(values: number[]): number | null {
   if (values.length < 2) return null;
   let peak = values[0];
@@ -148,8 +150,16 @@ function drawdownOf(values: number[]): number | null {
   return worst;
 }
 
-/** 执行回测：全仓进出，按收盘价成交，买卖各收一次手续费 */
-export function runBacktest(points: ChartPoint[], params: BacktestParams): BacktestResult {
+/**
+ * 执行回测：全仓进出，按收盘价成交，买卖各收一次手续费。
+ * `interval` 决定年化 / 夏普的换算口径（默认日线）。
+ */
+export function runBacktest(
+  points: ChartPoint[],
+  params: BacktestParams,
+  interval: IntervalKey = "1d",
+): BacktestResult {
+  const periodsPerYear = barsPerYear(interval);
   const initial = Math.max(100, params.initialCapital || 10_000);
   const empty: BacktestResult = {
     equity: [],
@@ -214,7 +224,8 @@ export function runBacktest(points: ChartPoint[], params: BacktestParams): Backt
         shares: Number(shares.toFixed(4)),
         pnl: Number(pnl.toFixed(2)),
         pnlPercent: cost > 0 ? (pnl / cost) * 100 : 0,
-        days: index - entryIndex,
+        days: Math.max(1, Math.round((point.t - entryDate) / 86_400)),
+        bars: index - entryIndex,
         reason: exitReason,
       });
       shares = 0;
@@ -237,7 +248,7 @@ export function runBacktest(points: ChartPoint[], params: BacktestParams): Backt
   const profit = finalValue - initial;
   const totalReturn = (finalValue / initial - 1) * 100;
   const benchmarkReturn = (points[points.length - 1].close / points[0].close - 1) * 100;
-  const years = points.length / TRADING_DAYS;
+  const years = points.length / periodsPerYear;
   const cagr = years > 0 && finalValue > 0 ? ((finalValue / initial) ** (1 / years) - 1) * 100 : null;
 
   const mean = dailyReturns.reduce((sum, value) => sum + value, 0) / Math.max(1, dailyReturns.length);
@@ -245,7 +256,7 @@ export function runBacktest(points: ChartPoint[], params: BacktestParams): Backt
     dailyReturns.reduce((sum, value) => sum + (value - mean) ** 2, 0) /
     Math.max(1, dailyReturns.length - 1);
   const std = Math.sqrt(variance);
-  const sharpe = std > 0 ? (mean / std) * Math.sqrt(TRADING_DAYS) : null;
+  const sharpe = std > 0 ? (mean / std) * Math.sqrt(periodsPerYear) : null;
   const wins = trades.filter((trade) => trade.pnl > 0).length;
 
   return {
