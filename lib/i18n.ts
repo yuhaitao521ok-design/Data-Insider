@@ -452,6 +452,8 @@ const ZH_HANT: Record<string, string> = {
   "搜索持仓（名称或代码）": "搜尋持倉（名稱或代碼）",
   "没有匹配的持仓": "沒有匹配的持倉",
   "常用标的": "常用標的",
+  "搜索投资人": "搜尋投資人",
+  "没有匹配的投资人": "沒有匹配的投資人",
 
 };
 
@@ -877,6 +879,8 @@ const EN: Record<string, string> = {
   "搜索持仓（名称或代码）": "Filter holdings (name or CUSIP)",
   "没有匹配的持仓": "No matching holdings",
   "常用标的": "Quick picks",
+  "搜索投资人": "Search investors",
+  "没有匹配的投资人": "No matching investors",
 
 };
 

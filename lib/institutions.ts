@@ -120,6 +120,26 @@ export const SUPER_INVESTORS: SuperInvestor[] = [
   { id: "thirdpoint", name: "Third Point LLC", nameZh: "Third Point · 勒布", cik: "0001040273", fund: "Third Point LLC" },
   { id: "himalaya", name: "Himalaya Capital", nameZh: "喜马拉雅资本 · 李录", cik: "0001709323", fund: "Himalaya Capital Management LLC" },
   { id: "duanyongping", name: "Duanyongping", nameZh: "段永平", cik: "0001759760", fund: "Duanyongping" },
+  // —— 以下为扩充名单（CIK 均已在 SEC EDGAR 校验，且近期有 13F-HR 申报）——
+  { id: "soros", name: "Soros Fund Management", nameZh: "索罗斯基金 · 索罗斯", cik: "0001029160", fund: "Soros Fund Management LLC" },
+  { id: "citadel", name: "Citadel Advisors", nameZh: "城堡投资 · 格里芬", cik: "0001423053", fund: "Citadel Advisors LLC" },
+  { id: "point72", name: "Point72 Asset Management", nameZh: "Point72 · 科恩", cik: "0001603466", fund: "Point72 Asset Management, L.P." },
+  { id: "renaissance", name: "Renaissance Technologies", nameZh: "文艺复兴 · 西蒙斯", cik: "0001037389", fund: "Renaissance Technologies LLC" },
+  { id: "duquesne", name: "Duquesne Family Office", nameZh: "杜肯家族办公室 · 德鲁肯米勒", cik: "0001536411", fund: "Duquesne Family Office LLC" },
+  { id: "appaloosa", name: "Appaloosa LP", nameZh: "Appaloosa · 泰珀", cik: "0001656456", fund: "Appaloosa LP" },
+  { id: "oaktree", name: "Oaktree Capital Management", nameZh: "橡树资本 · 霍华德·马克斯", cik: "0000949509", fund: "Oaktree Capital Management LP" },
+  { id: "tci", name: "TCI Fund Management", nameZh: "TCI · 克里斯·霍恩", cik: "0001647251", fund: "TCI Fund Management Ltd" },
+  { id: "hhlr", name: "HHLR Advisors", nameZh: "高瓴 HHLR · 张磊", cik: "0001762304", fund: "HHLR Advisors, Ltd." },
+  { id: "fairfax", name: "Fairfax Financial", nameZh: "费尔法克斯 · 瓦萨", cik: "0000915191", fund: "Fairfax Financial Holdings Ltd" },
+  { id: "fundsmith", name: "Fundsmith LLP", nameZh: "Fundsmith · 特里·史密斯", cik: "0001569205", fund: "Fundsmith LLP" },
+  { id: "tiger", name: "Tiger Global Management", nameZh: "老虎环球 · 科尔曼", cik: "0001167483", fund: "Tiger Global Management LLC" },
+  { id: "coatue", name: "Coatue Management", nameZh: "Coatue · 拉方", cik: "0001135730", fund: "Coatue Management LLC" },
+  { id: "elliott", name: "Elliott Investment Management", nameZh: "埃利奥特 · 辛格", cik: "0001791786", fund: "Elliott Investment Management L.P." },
+  { id: "icahn", name: "Icahn Carl C", nameZh: "伊坎 · 卡尔·伊坎", cik: "0000921669", fund: "Icahn Capital" },
+  { id: "gates", name: "Gates Foundation Trust", nameZh: "盖茨基金会信托", cik: "0001166559", fund: "Bill & Melinda Gates Foundation Trust" },
+  { id: "gmo", name: "Grantham Mayo Van Otterloo", nameZh: "GMO · 格兰瑟姆", cik: "0001352662", fund: "Grantham, Mayo, Van Otterloo & Co. LLC" },
+  { id: "akre", name: "Akre Capital Management", nameZh: "Akre 资本 · 阿克雷", cik: "0001112520", fund: "Akre Capital Management LLC" },
+  { id: "gotham", name: "Gotham Asset Management", nameZh: "Gotham · 格林布拉特", cik: "0001510387", fund: "Gotham Asset Management, LLC" },
 ];
 
 export function findInvestor(id: string): SuperInvestor | null {
