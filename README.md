@@ -1,6 +1,6 @@
 # Data Insider · 美股多周期行情
 
-一个开箱即用的美股行情看板：从 **Yahoo Finance** 获取多周期报价与走势，失败时自动降级到 **Nasdaq** 官方接口，并可选用 **Perplexity** 生成带引用来源的 AI 解读。
+一个开箱即用的美股行情看板：从 **Yahoo Finance** 获取多周期报价与走势，失败时自动降级到 **Nasdaq** 官方接口，并可选用大模型（**Perplexity / DeepSeek / 任意 OpenAI 兼容服务**）生成带引用来源的 AI 解读。
 
 > 纯前后端一体项目（Next.js App Router），无需数据库，无需 API Key 即可运行。
 
@@ -24,8 +24,8 @@
 - **关键指标**：昨收、今日高低、成交量、区间涨跌 / 高低、52 周区间
 - **自选股概览**：一键查看自选股的上涨/下跌家数、平均涨跌幅、最强与最弱标的
 - **CSV 导出**：把当前周期 + 间隔的 OHLCV 数据导出为 CSV（含交易所当地时间与 UTC，方便 Excel / Python 分析）
-- **多数据源自动降级**：Yahoo → Nasdaq →（可选）Perplexity，页面明确标注来源
-- **AI 解读（可选）**：配置 `PERPLEXITY_API_KEY` 后才会显示入口与面板；Perplexity `sonar` 结合最新新闻生成中文解读、要点、风险与引用链接
+- **多数据源自动降级**：Yahoo → Nasdaq →（可选）大模型兜底报价，页面明确标注来源
+- **AI 解读（可选）**：配置 `LLM_API_KEY`（或 `PERPLEXITY_API_KEY` / `DEEPSEEK_API_KEY`）后才会显示入口与面板；默认 Perplexity `sonar` 联网检索生成中文解读、要点、风险与引用链接。provider 可配：`LLM_PROVIDER`（AI 解读，默认 perplexity）、`QUOTE_LLM_PROVIDER`（报价兜底，默认 deepseek），也支持任意 OpenAI 兼容服务（如小米 MiMo，配 `LLM_BASE_URL`）
 - **深色行情终端风格**，移动端 / 桌面端自适应
 - **亮 / 暗双主题**：跟随系统并可手动切换，选择持久化到 localStorage
 - **界面风格参考 [OpenRouter](https://openrouter.ai)**：Roboto / Roboto Mono 字体、细边框卡片、靛紫强调色、克制的留白与字号层级
@@ -34,7 +34,7 @@
 
 ```bash
 npm install
-cp .env.example .env.local   # 可选：填入 Perplexity Key
+cp .env.example .env.local   # 可选：填入 AI 服务 Key
 npm run dev
 ```
 
@@ -53,7 +53,7 @@ npm run build && npm start
 | `PERPLEXITY_API_KEY` | 否 | 配置后启用「AI 解读」，并在所有行情源失败时作为兜底报价 |
 | `PERPLEXITY_MODEL` | 否 | 默认 `sonar` |
 
-不配置 Perplexity 时，行情功能完全可用，页面不会显示 AI 入口与面板，主界面更简洁。
+不配置 AI Key 时，行情功能完全可用，页面不会显示 AI 入口与面板，主界面更简洁。
 
 ## API
 
@@ -65,7 +65,7 @@ npm run build && npm start
 | `GET /api/indices` | 全球指数概览（美股 4 + 亚太 6），Yahoo → Nasdaq（美股）/ Sina（亚太与美股备用）多级兜底，缓存 30s |
 | `GET /api/search?q=英伟达` | 代码 / 公司名搜索（Yahoo 不可用时回退到内置热门列表） |
 | `GET /api/fundamentals?symbol=AAPL` | 基本面指标（Yahoo `quoteSummary`，失败时退到 Nasdaq summary + dividends；缓存 10 分钟） |
-| `GET /api/insight?symbol=AAPL&range=1M` | Perplexity AI 解读（未配置 Key 返回 501） |
+| `GET /api/insight?symbol=AAPL&range=1M` | AI 解读（默认 Perplexity，provider 可切换；未配置 Key 返回 501） |
 | `GET /api/config` | 前端探测 AI 功能是否可用 |
 
 示例：
@@ -84,7 +84,7 @@ curl 'http://localhost:3000/api/chart?symbol=NVDA&range=1Y&interval=1wk' | jq '.
                  Nasdaq info（4 并发，逐个代码）
                     │ 全部失败
                     ▼
-                 Perplexity（可选，标注为「估算」）
+                 大模型兜底（可选，标注为「估算」）
 
 /api/chart   ──▶ Yahoo v8/chart（支持分时）
                     │ 429 / 5xx
@@ -402,7 +402,7 @@ app/
     chart/route.ts      周期走势
     search/route.ts     代码搜索
     fundamentals/route.ts 基本面（市值 / 估值 / 分红）
-    insight/route.ts    Perplexity AI 解读
+    insight/route.ts    AI 解读（provider 可切换）
     config/route.ts     功能开关探测
 components/
   Dashboard.tsx         主面板（状态、轮询、自选股、导航）
@@ -440,7 +440,8 @@ lib/
   indicators.ts         MACD / RSI / BOLL 计算与校验
   yahoo.ts              Yahoo Finance 适配器
   nasdaq.ts             Nasdaq 兜底适配器
-  perplexity.ts         Perplexity 适配器
+  llm.ts                大模型接入层（Perplexity + OpenAI 兼容）
+  ai.ts                 AI 业务层：AI 解读 / 兜底报价
   market.ts             数据源编排 + 冷却
   cache.ts              LRU 缓存 / 去重 / SWR
   format.ts             数字与时间格式化
@@ -475,7 +476,7 @@ open-next.config.ts     OpenNext 适配器配置
 - 界面文案一律走 `t()`（`const { t } = useI18n()`），不要硬编码中文，包括 `aria-label` / `title` / `placeholder`
 - 同一个改动里把中文原文作为 key 补进 `lib/i18n.ts` 的 `ZH_HANT` 与 `EN` 两本词典（缺词条会静默回退中文，视为 bug）
 - 来自配置/数据的标签（周期、间隔、指标名、板块与指数名、交易时段）在渲染处包一层 `t()`
-- 提交前运行 `npm run check:i18n`，要求 **0 缺失 + 覆盖率 100%**；CI 可用 `npm run check:i18n -- --strict`（有缺失直接失败）
+- 提交前运行 `npm test`（单元测试：AI 解析 / 回测引擎 / 13F 解析等）与 `npm run check:i18n`，要求 **0 缺失 + 覆盖率 100%**；CI 可用 `npm run check:i18n -- --strict`（有缺失直接失败）
 - 这条约定同时写在 `.github/copilot-instructions.md` 里，后续开发（包括 AI 助手）会默认遵守
 
 ## 界面与主题

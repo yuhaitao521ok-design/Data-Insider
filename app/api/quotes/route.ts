@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loadQuotes } from "@/lib/market";
-import { hasPerplexityKey, perplexityQuote } from "@/lib/perplexity";
+import { hasQuoteLlm, llmQuote, quoteProvider } from "@/lib/ai";
 import { cacheHeaders, errorStatus, jsonError, parseSymbols } from "@/lib/http";
 import { MAX_QUOTE_SYMBOLS, type Quote, type QuotesResponse } from "@/lib/types";
 
@@ -9,10 +9,10 @@ export const dynamic = "force-dynamic";
 
 const MAX_FALLBACK_SYMBOLS = 6;
 
-/** Yahoo 完全不可用时，用 Perplexity 兜底（最多 6 个代码，并行请求） */
-async function perplexityFallback(symbols: string[]) {
+/** Yahoo 完全不可用时，用大模型兜底（最多 6 个代码，并行请求，默认 DeepSeek） */
+async function llmFallback(symbols: string[]) {
   const targets = symbols.slice(0, MAX_FALLBACK_SYMBOLS);
-  const settled = await Promise.allSettled(targets.map((symbol) => perplexityQuote(symbol)));
+  const settled = await Promise.allSettled(targets.map((symbol) => llmQuote(symbol)));
 
   const quotes: Quote[] = [];
   const errors: { symbol: string; message: string }[] = [];
@@ -24,7 +24,7 @@ async function perplexityFallback(symbols: string[]) {
       errors.push({
         symbol: targets[index],
         message:
-          result.reason instanceof Error ? result.reason.message : "Perplexity 兜底报价失败",
+          result.reason instanceof Error ? result.reason.message : "AI 兜底报价失败",
       });
     }
   });
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
   try {
     const data = await loadQuotes(symbols);
 
-    // 部分代码缺失（例如拼写错误 / 数据源漏数据）时不主动走 Perplexity，
+    // 部分代码缺失（例如拼写错误 / 数据源漏数据）时不主动走大模型兜底，
     // 让前端展示具体错误即可，避免无谓的模型调用费用。
     const headers = {
       ...cacheHeaders(data.stale ? 5 : 15, 60),
@@ -62,9 +62,9 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     const { status, message, code } = errorStatus(error);
 
-    if (hasPerplexityKey()) {
+    if (hasQuoteLlm()) {
       try {
-        const fallback = await perplexityFallback(symbols);
+        const fallback = await llmFallback(symbols);
         if (fallback.quotes.length > 0) {
           return NextResponse.json<QuotesResponse>(
             {
@@ -73,9 +73,14 @@ export async function GET(request: NextRequest) {
               fetchedAt: new Date().toISOString(),
               cached: false,
               stale: false,
-              provider: "perplexity",
+              provider: "llm",
             },
-            { headers: { ...cacheHeaders(10, 30), "X-Data-Source": "perplexity-fallback" } },
+            {
+              headers: {
+                ...cacheHeaders(10, 30),
+                "X-Data-Source": `llm-fallback:${quoteProvider()}`,
+              },
+            },
           );
         }
       } catch {
