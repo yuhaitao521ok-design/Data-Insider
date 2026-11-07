@@ -210,8 +210,11 @@ body {
   outline-offset: 2px;
 }
 
-a {
-  color: inherit;
+/* 放进 base layer：否则无层级的 a 规则会盖掉 text-* 工具类（例如导航选中色） */
+@layer base {
+  a {
+    color: inherit;
+  }
 }
 
 /* 等宽数字：价格、涨跌幅、指标统一用 Roboto Mono */
@@ -299,3 +302,81 @@ a {
   animation: skeleton-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
+
+/* -------------------------------------------------------------------------- */
+/*  移动端底部导航：水晶 / 毛玻璃质感 + 点击反馈                                 */
+/* -------------------------------------------------------------------------- */
+
+.tab-glass {
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.9),
+    rgba(255, 255, 255, 0.78)
+  );
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
+  border-top: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow:
+    0 -10px 30px -18px rgba(9, 9, 11, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.dark .tab-glass {
+  background: linear-gradient(
+    to bottom,
+    rgba(20, 20, 23, 0.88),
+    rgba(12, 12, 15, 0.8)
+  );
+  border-top-color: rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 -10px 30px -14px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+/* 选中 / 按下时的水晶光晕 */
+.tab-glow {
+  background: radial-gradient(
+    120% 120% at 50% 0%,
+    rgba(99, 102, 241, 0.3),
+    rgba(99, 102, 241, 0.12) 55%,
+    rgba(99, 102, 241, 0) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    0 6px 14px -8px rgba(99, 102, 241, 0.55);
+}
+
+.dark .tab-glow {
+  background: radial-gradient(
+    120% 120% at 50% 0%,
+    rgba(129, 140, 248, 0.38),
+    rgba(129, 140, 248, 0.16) 55%,
+    rgba(129, 140, 248, 0) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 6px 16px -8px rgba(99, 102, 241, 0.6);
+}
+
+/* 按下 → 松开的水波纹 */
+@keyframes tab-ripple {
+  from {
+    opacity: 0.55;
+    transform: translate(-50%, -50%) scale(0.3);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.7);
+  }
+}
+
+.tab-ripple {
+  animation: tab-ripple 0.62s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-ripple {
+    animation: none;
+    opacity: 0;
+  }
+}
