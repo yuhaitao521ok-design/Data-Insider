@@ -82,12 +82,24 @@ If you need to validate a focused change without a full suite, prefer `npm run t
 
 - Prefer single-file, focused edits in the existing module layout instead of introducing new architectural layers.
 - When changing data-source logic, verify both the fallback path and the request error path; this app is sensitive to rate limiting and upstream outages.
-- Keep the stock feature behavior aligned with README expectations: Yahoo first, Nasdaq fallback, optional Perplexity AI insight.
+- Keep the stock feature behavior aligned with README expectations: Yahoo first, Nasdaq fallback, optional AI insight (Perplexity / DeepSeek / any OpenAI-compatible provider).
 - If a new route is added, keep the file under `app/api/` and reuse `jsonError()` / `errorStatus()` from `lib/http.ts` instead of custom ad hoc error responses.
 - Stay consistent with the naming and semantics already in `lib/types.ts` for `RangeKey`, `Quote`, `ChartResponse`, and `InsightResponse`.
 
+## Workflow (mandatory)
+
+**Every change must have both an issue and a pull request record.** Never push code without them.
+
+1. Open an issue first (title prefix `bug(...)` / `feat(...)` / `docs(...)`), describing problem and acceptance criteria.
+2. Branch from `main` as `cline/<short-description>`.
+3. Open a PR whose body lists the change and the verification evidence (`npm test`, `npm run build`, `npm run check:i18n`), and link the issue with `Closes #N`.
+4. After merge the branch is deleted automatically; Cloudflare / Vercel build and deploy `main`.
+5. Finish by `git pull` and confirming `HEAD == origin/main` with a clean worktree.
+
 ## Repo-specific notes
 
-- `PERPLEXITY_API_KEY` is optional. The app should remain fully usable without it.
+- LLM keys are optional. The app must stay fully usable without them; AI features degrade gracefully.
+  Providers are configured through `LLM_PROVIDER` / `LLM_MODEL` / `LLM_BASE_URL` (insight) and `QUOTE_LLM_*` (quote fallback),
+  with legacy `PERPLEXITY_API_KEY` / `PERPLEXITY_MODEL` still honored (see `lib/llm.ts`).
 - `README.md` is the source of truth for the product behavior and environment variable contract.
-- There are no linting rules or test suites configured in the package manifest as of now, so `npm run typecheck` and a production `npm run build` are the main validation signals.
+- Validation signals: `npm test` (unit tests in `tests/`), `npm run typecheck`, `npm run build`, `npm run check:i18n`.
