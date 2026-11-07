@@ -188,7 +188,7 @@ export default function MobileTabBar() {
                     )}
                   </svg>
                 </span>
-                <span className="relative">{t(tab.label)}</span>
+                <span className="relative w-full truncate text-center whitespace-nowrap">{t(tab.label)}</span>
               </Link>
             );
           })}
