@@ -405,3 +405,70 @@ body {
     transition: none;
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/*  底部导航风格 B：胶囊徽标                                                     */
+/*  悬浮胶囊容器 + 圆角方形图标徽标 + 渐变高亮                                   */
+/* -------------------------------------------------------------------------- */
+
+.tab-capsule {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.78),
+    rgba(255, 255, 255, 0.62)
+  );
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow:
+    0 12px 32px -14px rgba(9, 9, 11, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+.dark .tab-capsule {
+  background: linear-gradient(
+    180deg,
+    rgba(34, 34, 40, 0.92),
+    rgba(22, 22, 27, 0.92)
+  );
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 14px 36px -14px rgba(0, 0, 0, 0.72),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* 选中项的大圆角高亮 */
+.tab-pill-active {
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.dark .tab-pill-active {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* 图标徽标：默认磨砂方块 */
+.tab-badge {
+  background: rgba(99, 102, 241, 0.07);
+  border: 1px solid rgba(99, 102, 241, 0.14);
+}
+
+.dark .tab-badge {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 选中：渐变徽标 + 白色图标 */
+.tab-badge-active {
+  background: linear-gradient(150deg, var(--accent) 0%, #4f46e5 100%);
+  border-color: transparent;
+  box-shadow:
+    0 6px 14px -6px rgba(99, 102, 241, 0.75),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.dark .tab-badge-active {
+  background: linear-gradient(150deg, #818cf8 0%, #6366f1 100%);
+  box-shadow:
+    0 8px 18px -6px rgba(99, 102, 241, 0.8),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}

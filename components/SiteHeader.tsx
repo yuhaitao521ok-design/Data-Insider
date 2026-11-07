@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import SearchBox from "@/components/SearchBox";
 import ThemeToggle from "@/components/ThemeToggle";
+import NavStyleSwitcher from "@/components/NavStyleSwitcher";
 import LocaleSwitcher from "@/components/LocaleSwitcher";
 import { useI18n } from "@/lib/i18n";
 import { scrollToSectionWithRetry } from "@/lib/scroll";
@@ -169,6 +170,7 @@ export default function SiteHeader({ onPickSymbol }: SiteHeaderProps) {
 
         <div className="ml-auto flex items-center gap-0.5 sm:ml-0">
           <LocaleSwitcher />
+          <NavStyleSwitcher />
           <ThemeToggle />
 
           <a
