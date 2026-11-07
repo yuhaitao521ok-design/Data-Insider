@@ -167,3 +167,91 @@ export function returnHistogram(
 
   return bins;
 }
+
+/* -------------------------------------------------------------------------- */
+/*                          相对基准：alpha / beta                              */
+/* -------------------------------------------------------------------------- */
+
+export interface TimedReturn {
+  /** 秒级时间戳（对齐用） */
+  t: number;
+  /** 日收益率（小数） */
+  r: number;
+}
+
+export interface AlphaBeta {
+  /** OLS 斜率：标的对基准的敏感度 */
+  beta: number | null;
+  /** 年化 alpha（%）：剥离基准收益后的超额 */
+  alphaAnnualized: number | null;
+  /** 样本对齐后的相关系数 */
+  correlation: number | null;
+  /** 对齐后样本数 */
+  samples: number;
+}
+
+/** 带时间戳的日收益率序列（用于跨标的对齐） */
+export function timedReturns(points: ChartPoint[]): TimedReturn[] {
+  const output: TimedReturn[] = [];
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1].close;
+    const current = points[index].close;
+    // 价格缺失（0 / 负数）会产生假收益率，直接跳过
+    if (previous <= 0 || current <= 0) continue;
+    output.push({ t: points[index].t, r: current / previous - 1 });
+  }
+  return output;
+}
+
+/** 按时间戳取两条收益序列的交集（不同市场交易日不同，不能按下标硬对齐） */
+export function alignReturns(a: TimedReturn[], b: TimedReturn[]): { a: number[]; b: number[] } {
+  const map = new Map<number, number>();
+  for (const item of b) map.set(item.t, item.r);
+  const left: number[] = [];
+  const right: number[] = [];
+  for (const item of a) {
+    const match = map.get(item.t);
+    if (match === undefined) continue;
+    left.push(item.r);
+    right.push(match);
+  }
+  return { a: left, b: right };
+}
+
+/**
+ * 简单 OLS 回归：stock ~ alpha + beta * benchmark。
+ * alpha 为日均超额，按 252 个交易日年化；样本过少或基准无波动时返回 null。
+ */
+export function alphaBeta(stock: TimedReturn[], benchmark: TimedReturn[]): AlphaBeta {
+  const aligned = alignReturns(stock, benchmark);
+  const n = aligned.a.length;
+  if (n < 20) return { beta: null, alphaAnnualized: null, correlation: null, samples: n };
+
+  const meanA = aligned.a.reduce((sum, value) => sum + value, 0) / n;
+  const meanB = aligned.b.reduce((sum, value) => sum + value, 0) / n;
+
+  let covariance = 0;
+  let varianceB = 0;
+  let varianceA = 0;
+  for (let index = 0; index < n; index += 1) {
+    const da = aligned.a[index] - meanA;
+    const db = aligned.b[index] - meanB;
+    covariance += da * db;
+    varianceB += db * db;
+    varianceA += da * da;
+  }
+  if (varianceB <= 0 || varianceA <= 0) {
+    return { beta: null, alphaAnnualized: null, correlation: null, samples: n };
+  }
+
+  const beta = covariance / varianceB;
+  const alphaDaily = meanA - beta * meanB;
+  const corr = covariance / Math.sqrt(varianceA * varianceB);
+
+  return {
+    beta: Number(beta.toFixed(3)),
+    alphaAnnualized: Number((alphaDaily * TRADING_DAYS * 100).toFixed(2)),
+    correlation: Number(corr.toFixed(3)),
+    samples: n,
+  };
+}
