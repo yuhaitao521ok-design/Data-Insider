@@ -28,9 +28,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body>
-        <LocaleProvider>{children}</LocaleProvider>
-        {/* 全局常驻：路由切换不卸载，指示块才能平滑滑动 */}
-        <MobileTabBar />
+        {/* MobileTabBar 必须在 LocaleProvider 内部，否则拿不到语言上下文（文案不随语言切换） */}
+        <LocaleProvider>
+          {children}
+          {/* 全局常驻：路由切换不卸载，指示块才能平滑滑动 */}
+          <MobileTabBar />
+        </LocaleProvider>
       </body>
     </html>
   );
