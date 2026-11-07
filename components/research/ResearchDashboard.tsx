@@ -2,9 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import PageShell from "@/components/PageShell";
+import MomentumHeatmap from "@/components/research/MomentumHeatmap";
 import { useI18n } from "@/lib/i18n";
 import { formatNumber, formatPercent } from "@/lib/format";
-import { correlation, dailyReturns, returnHistogram, riskMetrics } from "@/lib/quant";
+import {
+  alphaBeta,
+  correlation,
+  dailyReturns,
+  returnHistogram,
+  riskMetrics,
+  timedReturns,
+} from "@/lib/quant";
 import { DEFAULT_WATCHLIST, RANGE_CONFIG, type RangeKey } from "@/lib/types";
 
 const WATCHLIST_KEY = "data-insider:watchlist:v1";
@@ -15,7 +23,7 @@ interface Series {
   points: { t: number; close: number }[];
 }
 
-type SortKey = "symbol" | "d20" | "d60" | "d120" | "vol" | "sharpe" | "dd" | "win";
+type SortKey = "symbol" | "d20" | "d60" | "d120" | "vol" | "sharpe" | "dd" | "win" | "beta" | "alpha";
 
 export default function ResearchDashboard() {
   const { t } = useI18n();
@@ -48,8 +56,10 @@ export default function ResearchDashboard() {
     setLoading(true);
     setError(null);
     try {
+      // 顺带拉取 SPY 作为基准（已包含时不重复），用于 alpha / beta
+      const requestSymbols = symbols.includes("SPY") ? symbols : [...symbols, "SPY"];
       const response = await fetch(
-        `/api/batch-chart?symbols=${encodeURIComponent(symbols.join(","))}&range=${range}`,
+        `/api/batch-chart?symbols=${encodeURIComponent(requestSymbols.join(","))}&range=${range}`,
         { cache: "no-store" },
       );
       if (!response.ok) throw new Error(`加载失败（${response.status}）`);
@@ -67,22 +77,34 @@ export default function ResearchDashboard() {
     void load();
   }, [load]);
 
-  const rows = useMemo(
-    () =>
-      series.map((item) => {
-        const points = item.points.map((point) => ({
-          t: point.t,
-          open: point.close,
-          high: point.close,
-          low: point.close,
-          close: point.close,
-          volume: null,
-        }));
+  const rows = useMemo(() => {
+    const toPoints = (item: Series) =>
+      item.points.map((point) => ({
+        t: point.t,
+        open: point.close,
+        high: point.close,
+        low: point.close,
+        close: point.close,
+        volume: null,
+      }));
+    const bench = series.find((item) => item.symbol === "SPY");
+    const benchReturns = bench ? timedReturns(toPoints(bench)) : [];
+    return series
+      // SPY 只作基准；除非它本身就在自选里
+      .filter((item) => item.symbol !== "SPY" || symbols.includes("SPY"))
+      .map((item) => {
+        const points = toPoints(item);
         const metrics = riskMetrics(points);
-        return { symbol: item.symbol, metrics, returns: dailyReturns(points), points };
-      }),
-    [series],
-  );
+        const ab = benchReturns.length > 0 ? alphaBeta(timedReturns(points), benchReturns) : null;
+        return {
+          symbol: item.symbol,
+          metrics,
+          returns: dailyReturns(points),
+          points,
+          alphaBeta: ab,
+        };
+      });
+  }, [series, symbols]);
 
   const sorted = useMemo(() => {
     const copy = [...rows];
@@ -104,6 +126,10 @@ export default function ResearchDashboard() {
           return row.metrics.maxDrawdown ?? Number.NEGATIVE_INFINITY;
         case "win":
           return row.metrics.winRate ?? Number.NEGATIVE_INFINITY;
+        case "beta":
+          return row.alphaBeta?.beta ?? Number.NEGATIVE_INFINITY;
+        case "alpha":
+          return row.alphaBeta?.alphaAnnualized ?? Number.NEGATIVE_INFINITY;
       }
     };
 
@@ -228,6 +254,8 @@ export default function ResearchDashboard() {
                       {headerCell("sharpe", t("夏普"))}
                       {headerCell("dd", t("最大回撤"))}
                       {headerCell("win", t("胜率"))}
+                      {headerCell("beta", t("Beta"))}
+                      {headerCell("alpha", t("年化 Alpha"))}
                       <th className="px-2.5 py-2 text-right font-medium">{t("区间收益")}</th>
                     </tr>
                   </thead>
@@ -262,6 +290,20 @@ export default function ResearchDashboard() {
                         <td className="num px-2.5 py-1.5 text-right text-muted-foreground">
                           {formatPercent(row.metrics.winRate, 1).replace("+", "")}
                         </td>
+                        <td className="num px-2.5 py-1.5 text-right">
+                          {row.alphaBeta?.beta === null || row.alphaBeta === null
+                            ? "--"
+                            : formatNumber(row.alphaBeta.beta, 2)}
+                        </td>
+                        <td
+                          className={`num px-2.5 py-1.5 text-right ${tone(
+                            row.alphaBeta?.alphaAnnualized ?? null,
+                          )}`}
+                        >
+                          {row.alphaBeta?.alphaAnnualized === null || row.alphaBeta === null
+                            ? "--"
+                            : formatPercent(row.alphaBeta.alphaAnnualized)}
+                        </td>
                         <td className={`num px-2.5 py-1.5 text-right ${tone(row.metrics.totalReturn)}`}>
                           {formatPercent(row.metrics.totalReturn)}
                         </td>
@@ -269,6 +311,30 @@ export default function ResearchDashboard() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+          </section>
+
+          <section className="overflow-hidden rounded-xl border border-border bg-card">
+            <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+              <h2 className="text-[13px] font-medium">{t("动量热力图")}</h2>
+              <span className="text-[10px] text-muted-foreground">
+                {t("颜色深浅代表动量强弱，绿强红弱")}
+              </span>
+            </div>
+            {loading || sorted.length === 0 ? (
+              <div className="skeleton m-4 h-40 rounded-lg" />
+            ) : (
+              <div className="p-2">
+                <MomentumHeatmap
+                  rows={sorted.map((row) => ({ symbol: row.symbol, momentum: row.metrics.momentum }))}
+                  labels={{
+                    symbol: t("代码"),
+                    m1: t("动量 1M"),
+                    m3: t("动量 3M"),
+                    m6: t("动量 6M"),
+                  }}
+                />
               </div>
             )}
           </section>
@@ -342,6 +408,20 @@ export default function ResearchDashboard() {
                       { label: t("最好单日"), value: formatPercent(focusRow.metrics.bestDay) },
                       { label: t("最差单日"), value: formatPercent(focusRow.metrics.worstDay) },
                       { label: t("样本数"), value: String(focusRow.returns.length) },
+                      {
+                        label: t("Beta"),
+                        value:
+                          focusRow.alphaBeta?.beta == null
+                            ? "--"
+                            : formatNumber(focusRow.alphaBeta.beta, 2),
+                      },
+                      {
+                        label: t("年化 Alpha"),
+                        value:
+                          focusRow.alphaBeta?.alphaAnnualized == null
+                            ? "--"
+                            : formatPercent(focusRow.alphaBeta.alphaAnnualized),
+                      },
                     ].map((item) => (
                       <div key={item.label} className="flex items-baseline justify-between gap-2">
                         <span className="text-[10.5px] text-muted-foreground">{item.label}</span>
