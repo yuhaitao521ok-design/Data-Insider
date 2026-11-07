@@ -9,7 +9,6 @@ import PriceChart from "@/components/PriceChart";
 import InsightPanel from "@/components/InsightPanel";
 import ThemeToggle from "@/components/ThemeToggle";
 import LocaleSwitcher from "@/components/LocaleSwitcher";
-import MobileTabBar from "@/components/MobileTabBar";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import IndicatorControls from "@/components/IndicatorControls";
@@ -2480,8 +2479,6 @@ export default function Dashboard() {
       </main>
 
       <SiteFooter />
-
-      <MobileTabBar />
 
       <AlertToasts items={toasts} onDismiss={dismissToast} />
 
