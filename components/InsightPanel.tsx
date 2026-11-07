@@ -55,7 +55,7 @@ export default function InsightPanel({
           <div>
             <h2 className="text-[13px] font-medium">{t("AI 解读")}</h2>
             <p className="text-[11px] text-muted-foreground">
-              {symbol} · 由 Perplexity 联网检索生成，仅供参考
+              {symbol} · {t("由 AI 生成，仅供参考")}
             </p>
           </div>
         </div>
@@ -122,8 +122,8 @@ export default function InsightPanel({
 
       {enabled && !loading && !data && !error && (
         <p className="mt-4 text-[12px] leading-relaxed text-muted-foreground">
-          点击「生成解读」，让 Perplexity 结合最新新闻分析 {symbol} 当前 {range}{" "}
-          周期的价格表现、关键观察与潜在风险。每次生成约需 5–15 秒。
+          {t("点击「生成解读」，让 AI 分析")} {symbol} {t("当前")} {range}{" "}
+          {t("周期的价格表现、关键观察与潜在风险。每次生成约需 5–15 秒。")}
         </p>
       )}
 

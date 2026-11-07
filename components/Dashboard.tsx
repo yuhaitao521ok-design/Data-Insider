@@ -114,6 +114,7 @@ const SOURCE_LABEL: Record<Quote["source"], string> = {
   yahoo: "Yahoo Finance",
   nasdaq: "Nasdaq",
   perplexity: "Perplexity 估算",
+  llm: "AI 估算",
   sina: "Sina",
 };
 
@@ -234,6 +235,7 @@ export default function Dashboard() {
   const [chartError, setChartError] = useState<string | null>(null);
 
   const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiModel, setAiModel] = useState<string | null>(null);
   const [insight, setInsight] = useState<InsightData>(null);
   const [insightLoading, setInsightLoading] = useState(false);
   const [insightError, setInsightError] = useState<string | null>(null);
@@ -610,7 +612,10 @@ export default function Dashboard() {
   useEffect(() => {
     fetch("/api/config", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
-      .then((data: { perplexity?: boolean } | null) => setAiEnabled(Boolean(data?.perplexity)))
+      .then((data: { ai?: boolean; perplexity?: boolean; model?: string | null } | null) => {
+        setAiEnabled(Boolean(data?.ai ?? data?.perplexity));
+        setAiModel(data?.model ?? null);
+      })
       .catch(() => setAiEnabled(false));
   }, []);
 
@@ -1367,7 +1372,7 @@ export default function Dashboard() {
           <div>
             <p className="text-[12px] text-muted-foreground">
               {t("多周期报价与走势")} · Yahoo Finance / Nasdaq
-              {aiEnabled ? " · Perplexity AI" : ""}
+              {aiEnabled ? ` · AI ${aiModel ?? ""}` : ""}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
@@ -1380,7 +1385,7 @@ export default function Dashboard() {
             <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2 py-0.5 text-[10.5px]">
               <span
                 className={`h-1.5 w-1.5 rounded-full ${
-                  quote?.source === "perplexity" ? "bg-amber-500" : "bg-positive"
+                  quote?.estimated ? "bg-amber-500" : "bg-positive"
                 }`}
               />
               {quote ? t(SOURCE_LABEL[quote.source]) : t("连接中")}
@@ -1994,7 +1999,7 @@ export default function Dashboard() {
                                       </svg>
                                     )}
                                   </button>
-                                  {item?.source === "perplexity" && (
+                                  {item?.estimated && (
                                     <span
                                       className="h-1 w-1 rounded-full bg-amber-500"
                                       title={t("AI 估算报价")}
@@ -2122,10 +2127,10 @@ export default function Dashboard() {
                         detailed
                         size="xs"
                       />
-                      {quote?.source === "perplexity" && (
+                      {quote?.estimated && (
                         <span
                           className="rounded-md border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] leading-4 text-amber-600 dark:text-amber-400"
-                          title={t("Yahoo / Nasdaq 暂不可用，此报价由 Perplexity 联网检索估算，仅供参考")}
+                          title={t("Yahoo / Nasdaq 暂不可用，此报价由 AI 估算，仅供参考")}
                         >
                           {t("AI 估算")}
                         </span>

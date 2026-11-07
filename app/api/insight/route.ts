@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { loadChart } from "@/lib/market";
 import { cached } from "@/lib/cache";
-import { hasPerplexityKey, perplexityInsight } from "@/lib/perplexity";
+import { hasInsightLlm, insightModel, insightProvider, llmInsight } from "@/lib/ai";
 import { errorStatus, jsonError } from "@/lib/http";
 import { RANGE_CONFIG, isRangeKey, isValidSymbol, normalizeSymbol } from "@/lib/types";
 
@@ -22,9 +22,9 @@ export async function GET(request: NextRequest) {
     return jsonError("不支持的周期参数", 400, "invalid_request");
   }
 
-  if (!hasPerplexityKey()) {
+  if (!hasInsightLlm()) {
     return jsonError(
-      "未配置 PERPLEXITY_API_KEY，AI 解读不可用。请在环境变量中配置后重启服务。",
+      "未配置 AI 服务密钥，AI 解读不可用。请在环境变量中配置 LLM_API_KEY（或对应 provider 的密钥）后重启服务。",
       501,
       "missing_perplexity_key",
     );
@@ -57,12 +57,9 @@ export async function GET(request: NextRequest) {
       volume: chart.meta.volume,
     };
 
-    const result = await cached(
-      `insight:${symbol}:${range}`,
-      600,
-      3600,
-      () => perplexityInsight(context),
-    );
+    // 缓存 key 带上 provider/model，切换模型后不会命中旧缓存
+    const cacheKey = `insight:${symbol}:${range}:${insightProvider()}:${insightModel()}`;
+    const result = await cached(cacheKey, 600, 3600, () => llmInsight(context));
 
     return Response.json(
       { ...result.value, cached: result.cached },

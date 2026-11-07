@@ -74,7 +74,7 @@ export const RANGE_INTERVALS: Record<RangeKey, IntervalKey[]> = {
 };
 
 
-export type QuoteSource = "yahoo" | "nasdaq" | "perplexity" | "sina";
+export type QuoteSource = "yahoo" | "nasdaq" | "perplexity" | "sina" | "llm";
 
 export interface Quote {
   symbol: string;
@@ -213,7 +213,9 @@ export interface InsightResponse {
   sentiment: "bullish" | "neutral" | "bearish";
   risks: string[];
   citations: { title: string; url: string }[];
+  /** 生成该解读的模型与 provider */
   model: string;
+  provider?: string;
   generatedAt: string;
 }
 

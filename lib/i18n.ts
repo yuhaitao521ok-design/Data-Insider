@@ -454,6 +454,13 @@ const ZH_HANT: Record<string, string> = {
   "常用标的": "常用標的",
   "搜索投资人": "搜尋投資人",
   "没有匹配的投资人": "沒有匹配的投資人",
+  "当前": "當前",
+  "由 AI 生成，仅供参考": "由 AI 生成，僅供參考",
+  "点击「生成解读」，让 AI 分析": "點擊「生成解讀」，讓 AI 分析",
+  "Yahoo / Nasdaq 暂不可用，此报价由 AI 估算，仅供参考":
+    "Yahoo / Nasdaq 暫不可用，此報價由 AI 估算，僅供參考",
+  "周期的价格表现、关键观察与潜在风险。每次生成约需 5–15 秒。":
+    "週期的價格表現、關鍵觀察與潛在風險。每次生成約需 5–15 秒。",
 
 };
 
@@ -881,6 +888,13 @@ const EN: Record<string, string> = {
   "常用标的": "Quick picks",
   "搜索投资人": "Search investors",
   "没有匹配的投资人": "No matching investors",
+  "当前": "Current",
+  "由 AI 生成，仅供参考": "AI generated, for reference only",
+  "点击「生成解读」，让 AI 分析": "Click Generate to let AI analyze",
+  "Yahoo / Nasdaq 暂不可用，此报价由 AI 估算，仅供参考":
+    "Yahoo / Nasdaq unavailable; this AI-estimated quote is for reference only",
+  "周期的价格表现、关键观察与潜在风险。每次生成约需 5–15 秒。":
+    " price action, key observations and potential risks. Takes about 5-15 seconds.",
 
 };
 
