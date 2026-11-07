@@ -2,7 +2,6 @@
 
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
-import MobileTabBar from "@/components/MobileTabBar";
 
 /** 功能页外壳：共用头部 / 页脚 / 容器宽度 */
 export default function PageShell({
@@ -32,7 +31,6 @@ export default function PageShell({
         {children}
       </main>
       <SiteFooter />
-      <MobileTabBar />
     </div>
   );
 }

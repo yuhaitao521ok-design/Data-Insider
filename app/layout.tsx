@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import LocaleProvider from "@/components/LocaleProvider";
+import MobileTabBar from "@/components/MobileTabBar";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -28,6 +29,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <LocaleProvider>{children}</LocaleProvider>
+        {/* 全局常驻：路由切换不卸载，指示块才能平滑滑动 */}
+        <MobileTabBar />
       </body>
     </html>
   );
