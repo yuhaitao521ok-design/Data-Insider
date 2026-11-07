@@ -479,6 +479,16 @@ open-next.config.ts     OpenNext 适配器配置
 - 提交前运行 `npm test`（单元测试：AI 解析 / 回测引擎 / 13F 解析等）与 `npm run check:i18n`，要求 **0 缺失 + 覆盖率 100%**；CI 可用 `npm run check:i18n -- --strict`（有缺失直接失败）
 - 这条约定同时写在 `.github/copilot-instructions.md` 里，后续开发（包括 AI 助手）会默认遵守
 
+### 协作流程（每次改动必须遵守）
+
+**每一次修改都必须有 issue 与 pull request 记录**，不允许只推送代码没有留痕：
+
+1. **先建 issue**：描述问题 / 需求与验收标准（bug 用 `bug(...)`、功能用 `feat(...)`、文档用 `docs(...)` 前缀）
+2. **从 `main` 开分支**：命名 `cline/<简短描述>`（如 `cline/llm-provider`）
+3. **提交 PR**：正文写清变更点与验证证据（`npm test` / `npm run build` / `npm run check:i18n` 的结果），并用 `Closes #N` 关联 issue
+4. **合并后删除分支**（仓库已开启自动删除），Cloudflare / Vercel 会自动构建并部署 `main`
+5. **收尾核对**：`git pull` 后确认 `HEAD == origin/main` 且工作区干净
+
 ## 界面与主题
 
 顶部导航（桌面端）只有 **行情** 一项（配 AI Key 时多一个「AI 解读」），按 OpenRouter 风格：14px 中等字重 + 图标，hover 浅底 + 底部强调色下划线。**hover / 点击「行情」展开下拉**，包含：
