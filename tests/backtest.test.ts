@@ -3,6 +3,14 @@ import assert from "node:assert/strict";
 
 import { DEFAULT_PARAMS, runBacktest } from "@/lib/backtest";
 import {
+  addSnapshot,
+  buildSnapshot,
+  downsample,
+  removeSnapshot,
+  MAX_SNAPSHOTS,
+  type BacktestSnapshot,
+} from "@/lib/backtest-snapshot";
+import {
   barsPerYear,
   defaultBacktestInterval,
   estimateBars,
@@ -73,4 +81,66 @@ test("数据不足时返回空结果而不是报错", () => {
   assert.equal(result.stats.finalValue, null);
   assert.equal(result.equity.length, 0);
   assert.equal(result.trades.length, 0);
+});
+
+test("回撤水下图：序列全为负值且最长回撤天数按自然日统计", () => {
+  const daily = makeSeries(300, 86_400);
+  const result = runBacktest(daily, params, "1d");
+
+  assert.equal(result.drawdown.length, daily.length);
+  assert.ok(result.drawdown.every((item) => item.value <= 0));
+  assert.equal(result.drawdown[0].value, 0);
+
+  const worst = Math.min(...result.drawdown.map((item) => item.value));
+  assert.ok(Math.abs(worst - (result.stats.maxDrawdown ?? 0)) < 0.05);
+
+  assert.ok(result.stats.maxDrawdownDays !== null);
+  assert.ok(result.stats.maxDrawdownDays! > 0);
+});
+
+test("快照：降采样保留首尾且不超上限", () => {
+  const items = Array.from({ length: 1000 }, (_, index) => index);
+  const sampled = downsample(items, 400);
+  assert.equal(sampled.length, 400);
+  assert.equal(sampled[0], 0);
+  assert.equal(sampled[sampled.length - 1], 999);
+  assert.deepEqual(downsample([1, 2, 3]), [1, 2, 3]);
+});
+
+test("快照：新增置顶、超限丢最旧、删除生效", () => {
+  const build = (id: string): BacktestSnapshot =>
+    buildSnapshot({
+      id,
+      label: `LBL-${id}`,
+      symbol: "AAPL",
+      range: "1Y",
+      interval: "1d",
+      params: DEFAULT_PARAMS,
+      equity: [
+        { t: 0, value: 100 },
+        { t: 86_400, value: 110 },
+      ],
+      stats: {
+        initialCapital: 100,
+        totalReturn: 10,
+        benchmarkReturn: 5,
+        cagr: 8,
+        maxDrawdown: -3,
+        maxDrawdownDays: 12,
+        sharpe: 1.2,
+        tradeCount: 4,
+      },
+    });
+
+  let list: BacktestSnapshot[] = [];
+  for (let index = 0; index < MAX_SNAPSHOTS + 2; index += 1) {
+    list = addSnapshot(list, build(`s${index}`));
+  }
+  assert.equal(list.length, MAX_SNAPSHOTS);
+  assert.equal(list[0].id, `s${MAX_SNAPSHOTS + 1}`);
+  assert.ok(!list.some((item) => item.id === "s0"));
+
+  const afterRemove = removeSnapshot(list, list[0].id);
+  assert.equal(afterRemove.length, MAX_SNAPSHOTS - 1);
+  assert.ok(!afterRemove.some((item) => item.id === list[0].id));
 });

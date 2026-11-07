@@ -23,6 +23,8 @@ interface EquityChartProps {
     sell: string;
     initial: string;
   };
+  /** 对比曲线（历史快照），叠加在同一坐标系 */
+  overlays?: { label: string; equity: Point[]; color: string }[];
 }
 
 const PAD = { top: 18, right: 62, bottom: 28, left: 60 };
@@ -46,6 +48,7 @@ export default function EquityChart({
   trades,
   currency,
   labels,
+  overlays = [],
 }: EquityChartProps) {
   const [showPrice, setShowPrice] = useState(true);
   const [hover, setHover] = useState<number | null>(null);
@@ -73,6 +76,7 @@ export default function EquityChart({
     const moneyValues = [
       ...equity.map((item) => item.value),
       ...benchmark.map((item) => item.value),
+      ...overlays.flatMap((item) => item.equity.map((point) => point.value)),
     ];
     const minMoney = Math.min(...moneyValues);
     const maxMoney = Math.max(...moneyValues);
@@ -160,10 +164,25 @@ export default function EquityChart({
 
     const initialValue = benchmark[0]?.value ?? equity[0]?.value ?? 0;
 
+    const overlayPaths = overlays.map((item) => ({
+      label: item.label,
+      color: item.color,
+      path: item.equity
+        .map(
+          (point, index) =>
+            `${index === 0 ? "M" : "L"}${(
+              PAD.left +
+              (index / Math.max(item.equity.length - 1, 1)) * innerWidth
+            ).toFixed(1)} ${yMoney(point.value).toFixed(1)}`,
+        )
+        .join(" "),
+    }));
+
     return {
       innerHeight,
       xFor,
       yMoney,
+      overlayPaths,
       strategyPath,
       areaPath,
       benchmarkPath: toPath(benchmark),
@@ -174,7 +193,7 @@ export default function EquityChart({
       markers,
       initial: initialValue >= lo && initialValue <= hi ? yMoney(initialValue) : null,
     };
-  }, [equity, benchmark, price, trades, width, height]);
+  }, [equity, benchmark, price, trades, overlays, width, height]);
 
   if (!geometry) {
     return (
@@ -201,6 +220,12 @@ export default function EquityChart({
           <span className="h-0.5 w-3.5 rounded" style={{ background: "var(--bt-benchmark)" }} />
           {labels.benchmark}
         </span>
+        {geometry.overlayPaths.map((item) => (
+          <span key={`legend-${item.label}`} className="inline-flex items-center gap-1.5">
+            <span className="h-0.5 w-3.5 rounded" style={{ background: item.color }} />
+            {item.label}
+          </span>
+        ))}
         <button
           type="button"
           onClick={() => setShowPrice((prev) => !prev)}
@@ -326,6 +351,17 @@ export default function EquityChart({
           style={{ stroke: "var(--bt-benchmark)", opacity: 0.7 }}
           vectorEffect="non-scaling-stroke"
         />
+        {geometry.overlayPaths.map((item) => (
+          <path
+            key={item.label}
+            d={item.path}
+            fill="none"
+            strokeWidth="1.4"
+            strokeLinejoin="round"
+            style={{ stroke: item.color, opacity: 0.92 }}
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
         <path
           d={geometry.strategyPath}
           fill="none"

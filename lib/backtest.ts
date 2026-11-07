@@ -79,6 +79,8 @@ export interface BacktestResult {
   benchmark: { t: number; value: number }[];
   /** 标的收盘价（用于叠加价格轴） */
   price: { t: number; value: number }[];
+  /** 回撤序列（百分比，<= 0），与净值同长，用于水下图 */
+  drawdown: { t: number; value: number }[];
   trades: Trade[];
   stats: {
     initialCapital: number;
@@ -88,6 +90,8 @@ export interface BacktestResult {
     benchmarkReturn: number | null;
     cagr: number | null;
     maxDrawdown: number | null;
+    /** 最长回撤持续天数（峰值到收复，自然日） */
+    maxDrawdownDays: number | null;
     sharpe: number | null;
     winRate: number | null;
     tradeCount: number;
@@ -139,6 +143,35 @@ function strategyExitReason(params: BacktestParams): string {
   return `${strategyLabel(first)} · 离场`;
 }
 
+interface DrawdownInfo {
+  /** 回撤百分比序列（<= 0） */
+  series: { t: number; value: number }[];
+  /** 最长回撤持续天数（峰值 → 收复，自然日；未收复算到最后一根） */
+  longestDays: number | null;
+}
+
+function drawdownInfo(points: { t: number; value: number }[]): DrawdownInfo {
+  if (points.length < 2) return { series: [], longestDays: null };
+  let peak = points[0].value;
+  let peakTime = points[0].t;
+  let longest = 0;
+  const series = points.map((point) => {
+    if (point.value > peak) {
+      peak = point.value;
+      peakTime = point.t;
+    }
+    const dd = peak > 0 ? (point.value / peak - 1) * 100 : 0;
+    if (dd < 0) {
+      longest = Math.max(longest, Math.round((point.t - peakTime) / 86_400));
+    } else {
+      // 收复新高：上一段回撤结束，从当前点起算下一段
+      peakTime = point.t;
+    }
+    return { t: point.t, value: Number(dd.toFixed(3)) };
+  });
+  return { series, longestDays: longest > 0 ? longest : null };
+}
+
 function drawdownOf(values: number[]): number | null {
   if (values.length < 2) return null;
   let peak = values[0];
@@ -165,6 +198,7 @@ export function runBacktest(
     equity: [],
     benchmark: [],
     price: [],
+    drawdown: [],
     trades: [],
     stats: {
       initialCapital: initial,
@@ -174,6 +208,7 @@ export function runBacktest(
       benchmarkReturn: null,
       cagr: null,
       maxDrawdown: null,
+      maxDrawdownDays: null,
       sharpe: null,
       winRate: null,
       tradeCount: 0,
@@ -258,11 +293,13 @@ export function runBacktest(
   const std = Math.sqrt(variance);
   const sharpe = std > 0 ? (mean / std) * Math.sqrt(periodsPerYear) : null;
   const wins = trades.filter((trade) => trade.pnl > 0).length;
+  const dd = drawdownInfo(equitySeries);
 
   return {
     equity: equitySeries,
     benchmark,
     price: priceSeries,
+    drawdown: dd.series,
     trades,
     stats: {
       initialCapital: initial,
@@ -272,6 +309,7 @@ export function runBacktest(
       benchmarkReturn,
       cagr,
       maxDrawdown: drawdownOf(equitySeries.map((item) => item.value)),
+      maxDrawdownDays: dd.longestDays,
       sharpe,
       winRate: trades.length > 0 ? (wins / trades.length) * 100 : null,
       tradeCount: trades.length,
