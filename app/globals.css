@@ -304,61 +304,32 @@ body {
 
 
 /* -------------------------------------------------------------------------- */
-/*  移动端底部导航：水晶玻璃质感                                                */
-/*  分层：底部毛玻璃 → 顶部折射棱线 → 滑动的水晶指示块 → 按压内阴影 + 水波纹    */
+/*  移动端底部导航：按钮与页面融为一体                                          */
+/*  不画框：无边框 / 无棱线 / 无投影，只有渐隐的毛玻璃蒙版 + 水晶按钮            */
 /* -------------------------------------------------------------------------- */
 
+/* 渐隐蒙版：顶部完全透明，mask 让背景与毛玻璃一起淡出，和页面无缝衔接 */
 .tab-glass {
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.62),
-    rgba(255, 255, 255, 0.88) 38%,
-    rgba(255, 255, 255, 0.96)
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.35) 34%,
+    rgba(255, 255, 255, 0.72) 100%
   );
-  -webkit-backdrop-filter: blur(28px) saturate(200%);
-  backdrop-filter: blur(28px) saturate(200%);
-  box-shadow:
-    0 -14px 34px -22px rgba(9, 9, 11, 0.38),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 30%, #000 100%);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 30%, #000 100%);
 }
 
 .dark .tab-glass {
   background: linear-gradient(
     180deg,
-    rgba(18, 18, 22, 0.62),
-    rgba(12, 12, 16, 0.88) 38%,
-    rgba(10, 10, 13, 0.96)
-  );
-  box-shadow:
-    0 -14px 34px -18px rgba(0, 0, 0, 0.75),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
-}
-
-/* 顶部折射棱线：中间亮、两端收，像玻璃边缘的高光 */
-.tab-glass::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.98) 16%,
-    rgba(255, 255, 255, 0.98) 84%,
-    transparent
+    rgba(12, 12, 16, 0) 0%,
+    rgba(12, 12, 16, 0.45) 34%,
+    rgba(10, 10, 13, 0.82) 100%
   );
 }
-
-.dark .tab-glass::before {
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.18) 16%,
-    rgba(255, 255, 255, 0.18) 84%,
-    transparent
-  );
-}
-
 /* 滑动的水晶指示块：白色玻璃 + 主题色折射 + 双层内高光 */
 .tab-tile {
   background:
