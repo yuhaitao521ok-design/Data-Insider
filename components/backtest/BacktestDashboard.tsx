@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PageShell from "@/components/PageShell";
+import DrawdownChart from "@/components/backtest/DrawdownChart";
 import EquityChart from "@/components/backtest/EquityChart";
 import StrategyPicker from "@/components/backtest/StrategyPicker";
 import SymbolPicker from "@/components/backtest/SymbolPicker";
@@ -9,6 +10,14 @@ import { useI18n } from "@/lib/i18n";
 import { formatNumber, formatPercent, formatPrice } from "@/lib/format";
 import { DEFAULT_PARAMS, runBacktest, type BacktestParams } from "@/lib/backtest";
 import { STRATEGY_MAP } from "@/lib/backtest-catalog";
+import {
+  addSnapshot,
+  buildSnapshot,
+  loadSnapshots,
+  removeSnapshot,
+  MAX_COMPARE,
+  type BacktestSnapshot,
+} from "@/lib/backtest-snapshot";
 import {
   BACKTEST_RANGES,
   defaultBacktestInterval,
@@ -42,6 +51,10 @@ export default function BacktestDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const requestRef = useRef(0);
+  const [snapshots, setSnapshots] = useState<BacktestSnapshot[]>([]);
+  const [compareIds, setCompareIds] = useState<string[]>([]);
+  const [copied, setCopied] = useState(false);
+  const urlSyncedRef = useRef(false);
 
   // 读取历史列表
   useEffect(() => {
@@ -104,6 +117,152 @@ export default function BacktestDashboard() {
     () => (points.length > 0 ? runBacktest(points, params, interval) : null),
     [points, params, interval],
   );
+
+  // —— 快照：读取本地保存的对比记录 ——
+  useEffect(() => {
+    setSnapshots(loadSnapshots());
+  }, []);
+
+  // —— URL 同步：首次用 URL 里的配置覆盖默认值，之后把配置写回 query（可分享 / 收藏）——
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    const readNumber = (key: string, min: number, max: number): number | null => {
+      const raw = Number.parseFloat(query.get(key) ?? "");
+      return Number.isFinite(raw) ? Math.min(max, Math.max(min, raw)) : null;
+    };
+
+    const urlSymbol = (query.get("symbol") ?? "").toUpperCase();
+    if (SYMBOL_RE.test(urlSymbol)) {
+      setSymbol(urlSymbol);
+      setDraft(urlSymbol);
+    }
+
+    const validRange = BACKTEST_RANGES.find((item) => item === query.get("range"));
+    const nextRange = validRange ?? null;
+    if (validRange) setRange(validRange);
+
+    const allowed = intervalsForBacktest(validRange ?? "5Y");
+    const validInterval = allowed.find((item) => item === query.get("interval"));
+    if (validInterval) setIntervalKey(validInterval);
+
+    const strategies = (query.get("strategies") ?? "")
+      .split(",")
+      .filter((item) => item in STRATEGY_MAP);
+    const combine = query.get("combine");
+
+    const patch: Partial<BacktestParams> = {};
+    const mapping: Array<[string, keyof BacktestParams, number, number]> = [
+      ["capital", "initialCapital", 100, 100_000_000],
+      ["fast", "fast", 2, 100],
+      ["slow", "slow", 2, 200],
+      ["oversold", "oversold", 5, 45],
+      ["overbought", "overbought", 55, 95],
+      ["multiplier", "multiplier", 1, 4],
+      ["signal", "signal", 2, 50],
+      ["exitLookback", "exitLookback", 2, 60],
+      ["threshold", "threshold", 1, 60],
+      ["feeBps", "feeBps", 0, 50],
+    ];
+    for (const [queryKey, paramKey, min, max] of mapping) {
+      const value = readNumber(queryKey, min, max);
+      if (value !== null) (patch as Record<string, number>)[paramKey] = value;
+    }
+    setParams((prev) => ({
+      ...prev,
+      ...patch,
+      ...(strategies.length > 0 ? { strategies } : {}),
+      ...(combine === "all" || combine === "any" ? { combineMode: combine } : {}),
+    }));
+
+    urlSyncedRef.current = true;
+  }, []);
+
+  // 配置变化 → 写回 URL（replaceState 不污染历史记录）
+  useEffect(() => {
+    if (!urlSyncedRef.current) return;
+    const query = new URLSearchParams();
+    query.set("symbol", symbol);
+    query.set("range", range);
+    query.set("interval", interval);
+    query.set("strategies", params.strategies.join(","));
+    query.set("combine", params.combineMode);
+    query.set("capital", String(params.initialCapital));
+    for (const key of [
+      "fast",
+      "slow",
+      "oversold",
+      "overbought",
+      "multiplier",
+      "signal",
+      "exitLookback",
+      "threshold",
+      "feeBps",
+    ] as const) {
+      query.set(key, String(params[key]));
+    }
+    window.history.replaceState(null, "", `${window.location.pathname}?${query.toString()}`);
+  }, [symbol, range, interval, params]);
+
+  /** 叠加对比的快照（最多 MAX_COMPARE 条） */
+  const compareOverlays = useMemo(() => {
+    const colors = ["var(--chart-series-2)", "var(--chart-series-3)", "var(--chart-series-4)"];
+    return compareIds
+      .map((id) => snapshots.find((item) => item.id === id))
+      .filter((item): item is BacktestSnapshot => Boolean(item))
+      .map((item, index) => ({
+        label: item.label,
+        equity: item.equity,
+        color: colors[index % colors.length],
+      }));
+  }, [compareIds, snapshots]);
+
+  function toggleCompare(id: string) {
+    setCompareIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id].slice(-MAX_COMPARE),
+    );
+  }
+
+  function deleteSnapshot(id: string) {
+    setSnapshots((prev) => removeSnapshot(prev, id));
+    setCompareIds((prev) => prev.filter((item) => item !== id));
+  }
+
+  function saveCurrentSnapshot() {
+    if (!result) return;
+    const label = `${symbol} · ${selectedStrategies[0] ?? ""}${
+      selectedStrategies.length > 1 ? ` +${selectedStrategies.length - 1}` : ""
+    }`;
+    const snapshot = buildSnapshot({
+      id: `${Date.now()}-${symbol}`,
+      label,
+      symbol,
+      range,
+      interval,
+      params,
+      equity: result.equity,
+      stats: {
+        initialCapital: result.stats.initialCapital,
+        totalReturn: result.stats.totalReturn,
+        benchmarkReturn: result.stats.benchmarkReturn,
+        cagr: result.stats.cagr,
+        maxDrawdown: result.stats.maxDrawdown,
+        maxDrawdownDays: result.stats.maxDrawdownDays,
+        sharpe: result.stats.sharpe,
+        tradeCount: result.stats.tradeCount,
+      },
+    });
+    setSnapshots((prev) => addSnapshot(prev, snapshot));
+  }
+
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      // 剪贴板不可用时忽略
+    }
+  }
 
   function commitSymbol(next: string) {
     if (!SYMBOL_RE.test(next)) return;
@@ -195,11 +354,19 @@ export default function BacktestDashboard() {
       title={t("策略回测")}
       description={t("多策略自由组合 · 日线 / 周线 / 月线可选 · 本地回测，含手续费")}
       actions={
-        <button
-          type="button"
-          onClick={() => void load(symbol, range, interval)}
-          className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-[11px] text-muted-foreground transition-colors hover:border-accent/40 hover:bg-hover hover:text-foreground"
-        >
+        <>
+          <button
+            type="button"
+            onClick={copyLink}
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-[11px] text-muted-foreground transition-colors hover:border-accent/40 hover:bg-hover hover:text-foreground"
+          >
+            {copied ? t("已复制") : t("复制链接")}
+          </button>
+          <button
+            type="button"
+            onClick={() => void load(symbol, range, interval)}
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-[11px] text-muted-foreground transition-colors hover:border-accent/40 hover:bg-hover hover:text-foreground"
+          >
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path
               d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4"
@@ -211,6 +378,7 @@ export default function BacktestDashboard() {
           </svg>
           {t("刷新")}
         </button>
+        </>
       }
     >
       <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)]">
@@ -432,16 +600,67 @@ export default function BacktestDashboard() {
               <section className="overflow-hidden rounded-xl border border-border bg-card">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
                   <h2 className="text-[13px] font-medium">{t("净值曲线")}</h2>
-                  <span className="num text-[10px] text-muted-foreground">
-                    {symbol} · {frameLabel}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={saveCurrentSnapshot}
+                      className="inline-flex h-6 items-center gap-1 rounded-md border border-border px-2 text-[10px] text-muted-foreground transition-colors hover:border-accent/40 hover:bg-hover hover:text-foreground"
+                    >
+                      ＋ {t("保存快照")}
+                    </button>
+                    <span className="num text-[10px] text-muted-foreground">
+                      {symbol} · {frameLabel}
+                    </span>
+                  </div>
                 </div>
+
+                {snapshots.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 border-b border-border bg-muted/30 px-4 py-2">
+                    <span className="text-[10px] text-muted-foreground">{t("对比快照")}</span>
+                    {snapshots.map((item) => {
+                      const active = compareIds.includes(item.id);
+                      return (
+                        <span
+                          key={item.id}
+                          className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] transition-colors ${
+                            active
+                              ? "border-accent/50 bg-accent-soft text-accent"
+                              : "border-border text-muted-foreground hover:bg-hover"
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => toggleCompare(item.id)}
+                            aria-pressed={active}
+                            className="num"
+                          >
+                            {item.label}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteSnapshot(item.id)}
+                            aria-label={t("删除")}
+                            title={t("删除")}
+                            className="text-muted-foreground transition-colors hover:text-negative-text"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      );
+                    })}
+                    <span className="ml-auto text-[9.5px] text-muted-foreground/70">
+                      {t("最多同时对比 3 组")}
+                    </span>
+                  </div>
+                )}
+
                 <EquityChart
                   equity={result.equity}
                   benchmark={result.benchmark}
                   price={result.price}
                   trades={result.trades}
                   currency={currency}
+                  overlays={compareOverlays}
                   labels={{
                     strategy: t("策略净值"),
                     benchmark: t("买入持有"),
@@ -451,6 +670,23 @@ export default function BacktestDashboard() {
                     sell: t("卖出"),
                     initial: t("初始资金"),
                   }}
+                />
+              </section>
+
+              <section className="overflow-hidden rounded-xl border border-border bg-card">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
+                  <h2 className="text-[13px] font-medium">{t("回撤水下图")}</h2>
+                  <span className="num text-[10px] text-muted-foreground">
+                    {t("最长回撤")}{" "}
+                    {result.stats.maxDrawdownDays === null
+                      ? "--"
+                      : `${formatNumber(result.stats.maxDrawdownDays, 0)} ${t("天")}`}
+                  </span>
+                </div>
+                <DrawdownChart
+                  drawdown={result.drawdown}
+                  label={t("回撤")}
+                  empty={t("暂无数据")}
                 />
               </section>
 
