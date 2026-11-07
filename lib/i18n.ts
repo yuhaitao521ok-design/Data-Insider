@@ -750,7 +750,7 @@ const EN: Record<string, string> = {
   "现金流": "Cash flow",
   "科目": "Item",
   "股票代码": "Symbol",
-  "量化研究": "Quant research",
+  "量化研究": "Research",
   "回测": "Backtest",
   "机构持仓": "Institutions",
   "因子表 · 相关性 · 风险统计（本地计算，不新增请求）": "Factors, correlations and risk stats (computed locally)",
