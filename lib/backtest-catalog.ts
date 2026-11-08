@@ -58,19 +58,43 @@ function crossHold(a: (number | null)[], b: (number | null)[]): number[] {
   });
 }
 
-/** 阈值穿越（进入看多后保持，直到反向越界） */
+/** 阈值穿越（进入看多后保持，直到反向越界）；指标缺失时保持原状态，避免状态与输出不一致 */
 function bandHold(
   values: (number | null)[],
   enterBelow: number,
   exitAbove: number,
 ): number[] {
+  const low = Number.isFinite(enterBelow) ? enterBelow : 0;
+  const high = Number.isFinite(exitAbove) ? exitAbove : 100;
   let holding = 0;
   return values.map((value) => {
-    if (value === null) return 0;
-    if (!holding && value <= enterBelow) holding = 1;
-    else if (holding && value >= exitAbove) holding = 0;
+    if (value === null || !Number.isFinite(value)) return holding;
+    if (!holding && value <= low) holding = 1;
+    else if (holding && value >= high) holding = 0;
     return holding;
   });
+}
+
+/** 窗口最大值：越界/空窗口/非有限值都安全，返回 null 表示数据不足 */
+function windowMax(values: number[], from: number, to: number): number | null {
+  let result: number | null = null;
+  for (let index = Math.max(0, from); index < Math.min(to, values.length); index += 1) {
+    const value = values[index];
+    if (!Number.isFinite(value)) continue;
+    result = result === null ? value : Math.max(result, value);
+  }
+  return result;
+}
+
+/** 窗口最小值（同上） */
+function windowMin(values: number[], from: number, to: number): number | null {
+  let result: number | null = null;
+  for (let index = Math.max(0, from); index < Math.min(to, values.length); index += 1) {
+    const value = values[index];
+    if (!Number.isFinite(value)) continue;
+    result = result === null ? value : Math.min(result, value);
+  }
+  return result;
 }
 
 const closes = priceCloses;
@@ -226,7 +250,7 @@ export const STRATEGIES: StrategyMeta[] = [
       return c.map((close, index) => {
         const upperBand = bands.upper[index];
         const middle = bands.middle[index];
-        if (upperBand === null || middle === null) return 0;
+        if (upperBand === null || middle === null) return holding;
         if (!holding && close > upperBand) holding = 1;
         else if (holding && close < middle) holding = 0;
         return holding;
@@ -249,7 +273,7 @@ export const STRATEGIES: StrategyMeta[] = [
       return c.map((close, index) => {
         const lowerBand = bands.lower[index];
         const middle = bands.middle[index];
-        if (lowerBand === null || middle === null) return 0;
+        if (lowerBand === null || middle === null) return holding;
         if (!holding && close < lowerBand) holding = 1;
         else if (holding && close > middle) holding = 0;
         return holding;
@@ -274,8 +298,9 @@ export const STRATEGIES: StrategyMeta[] = [
       return c.map((close, index) => {
         const middle = basis[index];
         const range = atr[index];
-        if (middle === null || range === null) return 0;
-        const upperBand = middle + range * params.multiplier;
+        if (middle === null || range === null) return holding;
+        const multiplier = Number.isFinite(params.multiplier) ? Math.max(0.5, params.multiplier) : 2;
+        const upperBand = middle + range * multiplier;
         if (!holding && close > upperBand) holding = 1;
         else if (holding && close < middle) holding = 0;
         return holding;
@@ -299,8 +324,9 @@ export const STRATEGIES: StrategyMeta[] = [
       let holding = 0;
       return points.map((point, index) => {
         if (index < lookback) return 0;
-        const windowHigh = Math.max(...h.slice(index - lookback, index));
-        const exitLow = Math.min(...l.slice(Math.max(0, index - exitLookback), index));
+        const windowHigh = windowMax(h, index - lookback, index);
+        const exitLow = windowMin(l, index - exitLookback, index);
+        if (windowHigh === null || exitLow === null) return holding;
         if (!holding && point.close >= windowHigh) holding = 1;
         else if (holding && point.close <= exitLow) holding = 0;
         return holding;
@@ -411,7 +437,7 @@ export const STRATEGIES: StrategyMeta[] = [
     signal: (points, params) => {
       const c = closes(points);
       const streakNeeded = Math.max(2, Math.round(params.slow));
-      const target = params.threshold / 100;
+      const target = Number.isFinite(params.threshold) ? Math.max(0.005, params.threshold / 100) : 0.04;
       let holding = 0;
       let entryPrice = 0;
       return c.map((close, index) => {
@@ -453,7 +479,8 @@ export const STRATEGIES: StrategyMeta[] = [
       return points.map((point, index) => {
         if (index < Math.max(lookback, volumeWindow)) return 0;
         const avg = average[index];
-        const windowHigh = Math.max(...h.slice(index - lookback, index));
+        const windowHigh = windowMax(h, index - lookback, index);
+        if (windowHigh === null) return holding;
         const recentVolumes = volumes.slice(index - volumeWindow, index);
         const avgVolume = recentVolumes.reduce((sum, value) => sum + value, 0) / recentVolumes.length;
         const volumeOk = avgVolume <= 0 || (point.volume ?? 0) >= avgVolume;
@@ -481,8 +508,9 @@ export const STRATEGIES: StrategyMeta[] = [
       let holding = 0;
       return points.map((point, index) => {
         if (index < lookback) return 0;
-        const windowHigh = Math.max(...h.slice(index - lookback, index));
+        const windowHigh = windowMax(h, index - lookback, index);
         const avg = average[index];
+        if (windowHigh === null) return holding;
         if (!holding && point.close >= windowHigh) brokeOut = true;
         if (!holding && brokeOut && avg !== null && point.close <= avg * 1.01) {
           holding = 1;

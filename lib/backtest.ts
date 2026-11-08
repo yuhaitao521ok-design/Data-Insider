@@ -143,7 +143,7 @@ export function computeSignalDuties(
   return enabled.flatMap((key) => {
     const meta = STRATEGY_MAP[key];
     if (!meta || points.length === 0) return [];
-    const signal = meta.signal(points, resolveStrategyParams(meta, params));
+    const signal = safeSignal(points, meta, params);
     const duty = signal.reduce((sum, value) => sum + value, 0) / signal.length;
     return [{ key: meta.key, label: meta.label, duty }];
   });
@@ -153,6 +153,29 @@ export interface SignalSeries {
   key: string;
   label: string;
   series: number[];
+}
+
+/**
+ * 安全包装策略信号：长度对齐 K 线数、取值严格 0/1、异常时退化为全 0。
+ * 以后新增策略即使写错也不会把整个回测拖挂。
+ */
+function safeSignal(
+  points: ChartPoint[],
+  meta: StrategyMeta,
+  params: BacktestParams,
+): number[] {
+  const length = points.length;
+  let raw: number[] = [];
+  try {
+    raw = meta.signal(points, resolveStrategyParams(meta, params));
+  } catch {
+    raw = [];
+  }
+  const output = new Array<number>(length).fill(0);
+  for (let index = 0; index < length; index += 1) {
+    output[index] = raw[index] === 1 ? 1 : 0;
+  }
+  return output;
 }
 
 /** 每个策略各自的信号序列（用于组合 + 出场归因） */
@@ -165,7 +188,7 @@ export function buildSignalMatrix(points: ChartPoint[], params: BacktestParams):
       {
         key: meta.key,
         label: strategyLabel(meta.key),
-        series: meta.signal(points, resolveStrategyParams(meta, params)),
+        series: safeSignal(points, meta, params),
       },
     ];
   });
