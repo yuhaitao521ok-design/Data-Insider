@@ -74,10 +74,12 @@ export interface Trade {
   days: number;
   /** 持有多少根 K 线 */
   bars: number;
-  /** 出场原因（展示用） */
+  /** 进场策略 key（多策略联动时可能多个） */
+  entryKeys: string[];
+  /** 出场策略 key（多策略联动时可能多个） */
+  exitKeys: string[];
+  /** 出场原因（语义化文本，已拼装，兼容旧展示） */
   reason: string;
-  /** 触发离场的策略标签（多策略联动时可能多个） */
-  reasonLabels: string[];
 }
 
 export interface BacktestResult {
@@ -184,30 +186,65 @@ export function buildSignals(points: ChartPoint[], params: BacktestParams): numb
 }
 
 /**
- * 出场归因：在 `index` 这根 K 线离场时，是哪些策略导致的。
+ * 归因：某根 K 线的信号变化由哪些策略造成。返回策略 key 列表。
  *  - 单策略：该策略本身
- *  - all（全部共振）：出场时仍看空的策略 = 破坏共振的人
- *  - any（任一信号）：这一根刚刚由多转空的策略 = 直接触发离场的人
+ *  - 出场 + 全部共振：出场时仍看空的策略 = 破坏共振的人
+ *  - 出场 + 任一信号：这一根刚刚由多转空的策略 = 直接触发离场的人
+ *  - 进场：这一根刚刚由空转多的策略 = 触发进场的人
  */
-export function exitReasonFor(
+function attribution(
+  matrix: SignalSeries[],
+  index: number,
+  combineMode: CombineMode,
+  direction: "entry" | "exit",
+): string[] {
+  if (matrix.length === 0) return [];
+  if (matrix.length === 1) return [matrix[0].key];
+
+  if (direction === "exit" && combineMode === "all") {
+    const bearish = matrix.filter((item) => item.series[index] !== 1).map((item) => item.key);
+    return bearish.length > 0 ? bearish : matrix.map((item) => item.key);
+  }
+
+  // entry：刚由空转多（0 -> 1）；exit：刚由多转空（1 -> 0）
+  const from = direction === "entry" ? 0 : 1;
+  const to = direction === "entry" ? 1 : 0;
+  const flipped = matrix
+    .filter(
+      (item) =>
+        index > 0 && item.series[index - 1] !== to && item.series[index] === to && item.series[index - 1] === from,
+    )
+    .map((item) => item.key);
+  if (flipped.length > 0) return flipped;
+  // 罕见：这一根没有策略翻转（数据缺口 / 首根），退化为全部策略
+  return matrix.map((item) => item.key);
+}
+
+/** 出场归因（策略 key） */
+export function exitAttribution(
   matrix: SignalSeries[],
   index: number,
   combineMode: CombineMode,
 ): string[] {
-  if (matrix.length === 0) return [];
-  if (matrix.length === 1) return [matrix[0].label];
+  return attribution(matrix, index, combineMode, "exit");
+}
 
-  if (combineMode === "all") {
-    const bearish = matrix.filter((item) => item.series[index] !== 1).map((item) => item.label);
-    return bearish.length > 0 ? bearish : matrix.map((item) => item.label);
-  }
+/** 进场归因（策略 key） */
+export function entryAttribution(
+  matrix: SignalSeries[],
+  index: number,
+  combineMode: CombineMode,
+): string[] {
+  return attribution(matrix, index, combineMode, "entry");
+}
 
-  const flipped = matrix
-    .filter((item) => index > 0 && item.series[index - 1] === 1 && item.series[index] === 0)
-    .map((item) => item.label);
-  if (flipped.length > 0) return flipped;
-  // 理论少见：这一根没有策略翻空却离场（数据缺口等），退化为“全部转空”
-  return matrix.map((item) => item.label);
+/** 策略 key → 语义文案（进场 / 出场），未知 key 回退到策略名 */
+export function strategyEntryText(key: string): string {
+  return STRATEGY_MAP[key]?.entryText ?? strategyLabel(key);
+}
+
+export function strategyExitText(key: string): string {
+  return STRATEGY_MAP[key]?.exitText ?? strategyLabel(key);
 }
 
 function toStrategyParams(params: BacktestParams) {
@@ -339,6 +376,7 @@ export function runBacktest(
   let entryPrice = 0;
   let entryDate = 0;
   let entryIndex = 0;
+  let entryAttributionKeys: string[] = [];
   let heldDays = 0;
   const equitySeries: { t: number; value: number }[] = [];
   const priceSeries: { t: number; value: number }[] = [];
@@ -358,12 +396,13 @@ export function runBacktest(
       entryPrice = point.close;
       entryDate = point.t;
       entryIndex = index;
+      entryAttributionKeys = entryAttribution(matrix, index, params.combineMode);
     } else if (signal === 0 && shares > 0) {
       const gross = shares * point.close;
       cash = gross * (1 - fee);
       const cost = shares * entryPrice;
       const pnl = cash - cost;
-      const reasonLabels = exitReasonFor(matrix, index, params.combineMode);
+      const exitKeys = exitAttribution(matrix, index, params.combineMode);
       trades.push({
         entryDate,
         entryPrice,
@@ -374,8 +413,9 @@ export function runBacktest(
         pnlPercent: cost > 0 ? (pnl / cost) * 100 : 0,
         days: Math.max(1, Math.round((point.t - entryDate) / 86_400)),
         bars: index - entryIndex,
-        reason: formatExitReason(reasonLabels),
-        reasonLabels,
+        entryKeys: entryAttributionKeys,
+        exitKeys,
+        reason: formatExitReason(exitKeys.map(strategyExitText)),
       });
       shares = 0;
     }

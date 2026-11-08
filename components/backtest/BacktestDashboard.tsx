@@ -12,6 +12,8 @@ import {
   DEFAULT_PARAMS,
   computeSignalDuties,
   runBacktest,
+  strategyEntryText,
+  strategyExitText,
   type BacktestParams,
 } from "@/lib/backtest";
 import { STRATEGY_MAP } from "@/lib/backtest-catalog";
@@ -738,6 +740,7 @@ export default function BacktestDashboard() {
                           <th className="px-3 py-1.5 text-right font-medium">{t("盈亏")}</th>
                           <th className="px-3 py-1.5 text-right font-medium">{t("收益率")}</th>
                           <th className="px-3 py-1.5 text-right font-medium">{t("持有天数")}</th>
+                          <th className="px-3 py-1.5 text-left font-medium">{t("进场原因")}</th>
                           <th className="px-3 py-1.5 text-left font-medium">{t("出场原因")}</th>
                         </tr>
                       </thead>
@@ -774,21 +777,25 @@ export default function BacktestDashboard() {
                               {trade.days}
                             </td>
                             <td className="px-3 py-1.5">
+                              <span className="rounded bg-accent-soft px-1.5 py-0.5 text-[10px] text-accent">
+                                {trade.entryKeys
+                                  .slice(0, 2)
+                                  .map((key) => t(strategyEntryText(key)))
+                                  .join(" / ")}
+                                {trade.entryKeys.length > 2
+                                  ? ` +${trade.entryKeys.length - 2}`
+                                  : ""}
+                              </span>
+                            </td>
+                            <td className="px-3 py-1.5">
                               <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                                {trade.reasonLabels.length > 0 ? (
-                                  <>
-                                    {trade.reasonLabels
-                                      .slice(0, 2)
-                                      .map((label) => t(label))
-                                      .join(" / ")}
-                                    {trade.reasonLabels.length > 2
-                                      ? ` +${trade.reasonLabels.length - 2}`
-                                      : ""}{" "}
-                                    · {t("离场")}
-                                  </>
-                                ) : (
-                                  t(trade.reason)
-                                )}
+                                {trade.exitKeys
+                                  .slice(0, 2)
+                                  .map((key) => t(strategyExitText(key)))
+                                  .join(" / ")}
+                                {trade.exitKeys.length > 2
+                                  ? ` +${trade.exitKeys.length - 2}`
+                                  : ""}
                               </span>
                             </td>
                           </tr>

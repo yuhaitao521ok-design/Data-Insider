@@ -6,7 +6,8 @@ import {
   buildSignalMatrix,
   buildSignals,
   drawdownInfo,
-  exitReasonFor,
+  entryAttribution,
+  exitAttribution,
   resolveStrategyParams,
   runBacktest,
 } from "@/lib/backtest";
@@ -245,25 +246,37 @@ test("出场归因：任一信号 = 刚翻空的策略，全部共振 = 破坏�
     { key: "c", label: "C 策略", series: [1, 1, 1, 1, 1, 1, 1] },
   ];
 
-  // any：index=2 时 B 刚翻空 → 归因 B；index=3 时 A 刚翻空（B 早已空）→ 归因 A
-  assert.deepEqual(exitReasonFor(matrix, 2, "any"), ["B 策略"]);
-  assert.deepEqual(exitReasonFor(matrix, 3, "any"), ["A 策略"]);
+  // any：index=2 时 B 刚翻空 → 归因 B；index=3 时 A 刚翻空 → 归因 A
+  assert.deepEqual(exitAttribution(matrix, 2, "any"), ["b"]);
+  assert.deepEqual(exitAttribution(matrix, 3, "any"), ["a"]);
 
-  // all：index=2 时 B 看空（破坏共振）→ 归因 B；index=3 时 A、B 都空 → 归因两者
-  assert.deepEqual(exitReasonFor(matrix, 2, "all"), ["B 策略"]);
-  assert.deepEqual(exitReasonFor(matrix, 3, "all"), ["A 策略", "B 策略"]);
+  // all：index=2 时 B 看空（破坏共振）→ B；index=3 时 A、B 都空 → 两者
+  assert.deepEqual(exitAttribution(matrix, 2, "all"), ["b"]);
+  assert.deepEqual(exitAttribution(matrix, 3, "all"), ["a", "b"]);
 });
 
 test("出场归因：单策略返回自身；any 模式无翻空时退化为全部", () => {
   const single = [{ key: "a", label: "A 策略", series: [1, 1, 0] }];
-  assert.deepEqual(exitReasonFor(single, 2, "any"), ["A 策略"]);
+  assert.deepEqual(exitAttribution(single, 2, "any"), ["a"]);
 
   const steady = [
     { key: "a", label: "A 策略", series: [1, 1, 0] },
     { key: "b", label: "B 策略", series: [1, 1, 0] },
   ];
-  // index=1 没人翻空（数据缺口等罕见情形）→ 退化为全部标签
-  assert.deepEqual(exitReasonFor(steady, 1, "any"), ["A 策略", "B 策略"]);
+  // index=1 没人翻空（数据缺口等罕见情形）→ 退化为全部 key
+  assert.deepEqual(exitAttribution(steady, 1, "any"), ["a", "b"]);
+});
+
+test("进场归因：任一信号/全部共振都归因到刚转多的策略", () => {
+  const matrix = [
+    { key: "a", label: "A 策略", series: [0, 0, 1, 1, 1] },
+    { key: "b", label: "B 策略", series: [0, 1, 1, 1, 1] },
+    { key: "c", label: "C 策略", series: [0, 0, 0, 1, 1] },
+  ];
+  assert.deepEqual(entryAttribution(matrix, 1, "any"), ["b"]);
+  assert.deepEqual(entryAttribution(matrix, 2, "any"), ["a"]);
+  // all 模式：共识在 index=3 才形成，这一根刚转多的是 C
+  assert.deepEqual(entryAttribution(matrix, 3, "all"), ["c"]);
 });
 
 test("多策略回测：每笔交易的归因 = 出场那根刚翻空的策略（含一致性校验）", () => {
@@ -276,23 +289,26 @@ test("多策略回测：每笔交易的归因 = 出场那根刚翻空的策略�
   assert.ok(result.trades.length > 0);
 
   for (const trade of result.trades) {
-    assert.ok(trade.reasonLabels.length > 0, "每笔交易都有出场归因");
+    assert.ok(trade.exitKeys.length > 0, "每笔交易都有出场归因");
+    assert.ok(trade.entryKeys.length > 0, "每笔交易都有进场归因");
     assert.ok(trade.reason.includes("离场"));
 
     const exitIndex = points.findIndex((point) => point.t === trade.exitDate);
-    // 归因必须与出场时刻的信号矩阵一致（不再是拍脑袋取第一个策略）
-    assert.deepEqual(trade.reasonLabels, exitReasonFor(matrix, exitIndex, "any"));
+    const entryIndex = points.findIndex((point) => point.t === trade.entryDate);
+    // 归因必须与进出场时刻的信号矩阵一致（不再是拍脑袋取第一个策略）
+    assert.deepEqual(trade.exitKeys, exitAttribution(matrix, exitIndex, "any"));
+    assert.deepEqual(trade.entryKeys, entryAttribution(matrix, entryIndex, "any"));
 
-    // 归因里的策略一定是「这一根刚由多转空」的
-    for (const label of trade.reasonLabels) {
-      const series = matrix.find((item) => item.label === label)!.series;
+    // 出场归因里的策略一定是「这一根刚由多转空」的
+    for (const key of trade.exitKeys) {
+      const series = matrix.find((item) => item.key === key)!.series;
       assert.equal(series[exitIndex], 0);
       assert.equal(series[exitIndex - 1], 1);
     }
-    // 没有翻空的策略不应出现在归因里
+    // 没有翻空的策略不应出现在出场归因里
     for (const item of matrix) {
       const flipped = item.series[exitIndex - 1] === 1 && item.series[exitIndex] === 0;
-      assert.equal(trade.reasonLabels.includes(item.label), flipped);
+      assert.equal(trade.exitKeys.includes(item.key), flipped);
     }
   }
 });
