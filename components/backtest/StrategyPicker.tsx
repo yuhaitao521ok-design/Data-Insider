@@ -8,13 +8,15 @@ import type { BacktestParams, CombineMode, StrategyKey } from "@/lib/backtest";
 interface StrategyPickerProps {
   params: BacktestParams;
   onChange: (next: Partial<BacktestParams>) => void;
+  /** 各策略在当前数据上的看多占比（0~1），让联动效果可见 */
+  duties?: Record<string, number>;
 }
 
 /**
  * 多策略选择（可勾选多个）+ 悬停说明（做什么 / 优点 / 缺点）。
  * 说明卡片高度固定、联动开关常驻占位，悬停或勾选时布局不会跳动。
  */
-export default function StrategyPicker({ params, onChange }: StrategyPickerProps) {
+export default function StrategyPicker({ params, onChange, duties }: StrategyPickerProps) {
   const { t } = useI18n();
   const [peek, setPeek] = useState<string | null>(null);
 
@@ -56,6 +58,14 @@ export default function StrategyPicker({ params, onChange }: StrategyPickerProps
                 aria-label={t(meta.label)}
               />
               <span className="min-w-0 flex-1 truncate leading-6">{t(meta.label)}</span>
+              {duties && duties[meta.key] !== undefined && (
+                <span
+                  className="num shrink-0 text-[9px] text-muted-foreground/80"
+                  title={t("该策略在当前数据上看多的时间占比")}
+                >
+                  {Math.round(duties[meta.key] * 100)}%
+                </span>
+              )}
               <span className="shrink-0 text-[9px] text-muted-foreground/50" aria-hidden="true">
                 ⓘ
               </span>
@@ -87,6 +97,10 @@ export default function StrategyPicker({ params, onChange }: StrategyPickerProps
           </p>
         )}
       </div>
+
+      <p className="mt-1.5 px-1 text-[9.5px] leading-3.5 text-muted-foreground/80">
+        {t("行末百分比 = 该策略看多占比；联动：任一信号 = 任一策略看多即持有，全部共振 = 所有策略同时看多才持有")}
+      </p>
 
       {/* 同样常驻占位：策略数量变化时不会把下面的参数区顶来顶去 */}
       <div className="mt-2 flex h-8 items-center gap-1.5 rounded-md border border-border px-2">

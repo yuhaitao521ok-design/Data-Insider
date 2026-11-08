@@ -8,7 +8,12 @@ import StrategyPicker from "@/components/backtest/StrategyPicker";
 import SymbolPicker from "@/components/backtest/SymbolPicker";
 import { useI18n } from "@/lib/i18n";
 import { formatNumber, formatPercent, formatPrice } from "@/lib/format";
-import { DEFAULT_PARAMS, runBacktest, type BacktestParams } from "@/lib/backtest";
+import {
+  DEFAULT_PARAMS,
+  computeSignalDuties,
+  runBacktest,
+  type BacktestParams,
+} from "@/lib/backtest";
 import { STRATEGY_MAP } from "@/lib/backtest-catalog";
 import {
   addSnapshot,
@@ -117,6 +122,13 @@ export default function BacktestDashboard() {
     () => (points.length > 0 ? runBacktest(points, params, interval) : null),
     [points, params, interval],
   );
+
+  /** 各策略看多占比：让「联动」效果可见，也能看出某策略是不是几乎不触发 */
+  const strategyDuties = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const item of computeSignalDuties(points, params)) map[item.key] = item.duty;
+    return map;
+  }, [points, params]);
 
   // —— 快照：读取本地保存的对比记录 ——
   useEffect(() => {
@@ -491,7 +503,7 @@ export default function BacktestDashboard() {
                 {params.strategies.length} {t("个已选")}
               </span>
             </div>
-            <StrategyPicker params={params} onChange={update} />
+            <StrategyPicker params={params} onChange={update} duties={strategyDuties} />
 
             <div className="mt-3 space-y-1.5 border-t border-border pt-2">
               {activeFields.map((key) => renderField(key))}
@@ -688,6 +700,15 @@ export default function BacktestDashboard() {
                   label={t("回撤")}
                   empty={t("暂无数据")}
                 />
+                <div className="space-y-0.5 border-t border-border/60 px-4 py-2 text-[10px] leading-4 text-muted-foreground">
+                  <p>{t("回撤 = 净值距历史高点的回落幅度，0% 线即历史新高")}</p>
+                  <p>{t("水下越深、停留越久，说明策略的回撤风险越大")}</p>
+                  <p>
+                    {t(
+                      "最长回撤 = 从历史高点回落到重新创新高经历的自然日；未收复则算到今天。深度看风险承受，时长看资金占用",
+                    )}
+                  </p>
+                </div>
               </section>
 
               <section className="overflow-hidden rounded-xl border border-border bg-card">
