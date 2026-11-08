@@ -31,6 +31,10 @@ export interface StrategyMeta {
   >;
   /** 该策略的默认参数覆盖 */
   defaults?: Partial<Record<string, number>>;
+  /** 进场语义（如「MACD 金叉」） */
+  entryText: string;
+  /** 出场语义（如「MACD 死叉」） */
+  exitText: string;
   signal: (points: ChartPoint[], params: StrategyParams) => number[];
 }
 
@@ -76,6 +80,8 @@ const lows = priceLows;
 export const STRATEGIES: StrategyMeta[] = [
   {
     key: "ma-cross",
+    entryText: "均线金叉",
+    exitText: "均线死叉",
     label: "均线交叉",
     summary: "快慢两条简单均线，快线在慢线上方时满仓持有，跌破即离场。",
     pros: "规则最经典、参数少不易过拟合，单边趋势里能吃到主升段。",
@@ -88,6 +94,8 @@ export const STRATEGIES: StrategyMeta[] = [
   },
   {
     key: "ema-cross",
+    entryText: "EMA 金叉",
+    exitText: "EMA 死叉",
     label: "EMA 交叉",
     summary: "用指数均线代替简单均线，同样快线上穿慢线时持有。",
     pros: "对最近价格更敏感，趋势启动时进场比 SMA 快。",
@@ -100,6 +108,8 @@ export const STRATEGIES: StrategyMeta[] = [
   },
   {
     key: "macd-cross",
+    entryText: "MACD 金叉",
+    exitText: "MACD 死叉",
     label: "MACD 金叉",
     summary: "MACD 的 DIF 上穿 DEA（金叉）时持有，死叉离场。",
     pros: "同时反映趋势与动量，趋势行情中信号相对稳健。",
@@ -117,6 +127,8 @@ export const STRATEGIES: StrategyMeta[] = [
   },
   {
     key: "ppo-cross",
+    entryText: "PPO 金叉",
+    exitText: "PPO 死叉",
     label: "PPO 金叉",
     summary: "把 MACD 归一化成百分比后的金叉策略，适合跨标的比较。",
     pros: "数值与价格量级无关，不同股票之间可以直接对比强弱。",
@@ -134,6 +146,8 @@ export const STRATEGIES: StrategyMeta[] = [
   },
   {
     key: "trix-cross",
+    entryText: "TRIX 上穿零轴",
+    exitText: "TRIX 下穿零轴",
     label: "TRIX 金叉",
     summary: "三重指数平滑后的变化率上穿 0 轴时持有。",
     pros: "多重平滑过滤噪音，假信号比 MACD 少。",
@@ -146,6 +160,8 @@ export const STRATEGIES: StrategyMeta[] = [
   },
   {
     key: "rsi-reversal",
+    entryText: "RSI 超卖",
+    exitText: "RSI 超买",
     label: "RSI 反转",
     summary: "RSI 跌破超卖阈值买入，涨过超买阈值卖出，做均值回归。",
     pros: "震荡市里低买高卖效果明显，参数直观。",
@@ -156,6 +172,8 @@ export const STRATEGIES: StrategyMeta[] = [
   },
   {
     key: "stoch-reversal",
+    entryText: "KD 超卖",
+    exitText: "KD 超买",
     label: "随机指标反转",
     summary: "KD 的 %K 低于超卖线买入，高于超买线卖出。",
     pros: "短线灵敏，适合波动较大的标的做波段。",
@@ -166,6 +184,8 @@ export const STRATEGIES: StrategyMeta[] = [
   },
   {
     key: "williams-reversal",
+    entryText: "威廉超卖",
+    exitText: "威廉超买",
     label: "威廉指标反转",
     summary: "威廉 %R（-100~0）跌到超卖区买入，回升到超买区卖出。",
     pros: "对顶部底部反应快，适合抓短线反弹。",
@@ -180,6 +200,8 @@ export const STRATEGIES: StrategyMeta[] = [
   },
   {
     key: "cci-reversal",
+    entryText: "CCI 超卖",
+    exitText: "CCI 超买",
     label: "CCI 反转",
     summary: "CCI 跌破 -100 视为超卖买入，升破 +100 离场。",
     pros: "对极端偏离敏感，能抓住恐慌性下跌后的反弹。",
@@ -190,6 +212,8 @@ export const STRATEGIES: StrategyMeta[] = [
   },
   {
     key: "boll-breakout",
+    entryText: "突破布林上轨",
+    exitText: "跌破布林中轨",
     label: "BOLL 突破",
     summary: "收盘价突破布林上轨买入，跌破中轨卖出，追强势。",
     pros: "能捕捉到放量突破的加速段，趋势市场表现好。",
@@ -211,6 +235,8 @@ export const STRATEGIES: StrategyMeta[] = [
   },
   {
     key: "boll-meanrev",
+    entryText: "跌破布林下轨",
+    exitText: "回归布林中轨",
     label: "BOLL 均值回归",
     summary: "跌破布林下轨买入，回到中轨卖出，做超跌反弹。",
     pros: "震荡行情里胜率较高，仓位时间短、资金效率高。",
@@ -232,6 +258,8 @@ export const STRATEGIES: StrategyMeta[] = [
   },
   {
     key: "keltner-breakout",
+    entryText: "突破肯特纳上轨",
+    exitText: "跌破肯特纳中轨",
     label: "凯尔特纳突破",
     summary: "EMA 加减 ATR 组成通道，突破上轨买入、跌破中轨卖出。",
     pros: "通道宽度随波动自适应，比固定百分比通道更稳。",
@@ -256,6 +284,8 @@ export const STRATEGIES: StrategyMeta[] = [
   },
   {
     key: "donchian",
+    entryText: "突破 N 日高点",
+    exitText: "跌破 M 日低点",
     label: "唐奇安突破（海龟）",
     summary: "收盘创 N 日新高买入，跌破 M 日新低离场，经典海龟规则。",
     pros: "最经得起时间考验的趋势跟随法，能吃到长趋势。",
@@ -279,6 +309,8 @@ export const STRATEGIES: StrategyMeta[] = [
   },
   {
     key: "price-vs-sma",
+    entryText: "站上均线",
+    exitText: "跌破均线",
     label: "价格站上均线",
     summary: "收盘价高于 N 日均线就持有，跌破就空仓，最简单的趋势过滤。",
     pros: "极少参数、几乎不会过拟合，是很好的仓位开关。",
@@ -295,6 +327,8 @@ export const STRATEGIES: StrategyMeta[] = [
   },
   {
     key: "dual-momentum",
+    entryText: "动量与趋势共振",
+    exitText: "动量或趋势转弱",
     label: "双动量",
     summary: "N 日收益为正且价格站上均线时才持有，双重确认。",
     pros: "趋势与动量共振，能显著减少无效交易和回撤。",
@@ -314,6 +348,8 @@ export const STRATEGIES: StrategyMeta[] = [
   },
   {
     key: "momentum",
+    entryText: "N 日动量达标",
+    exitText: "动量不足",
     label: "绝对动量",
     summary: "N 日涨跌幅超过阈值就持有，不足则空仓。",
     pros: "逻辑最直白，牛市中能持续待在场内。",
@@ -328,6 +364,8 @@ export const STRATEGIES: StrategyMeta[] = [
   },
   {
     key: "roc-threshold",
+    entryText: "ROC 上穿零轴",
+    exitText: "ROC 下穿零轴",
     label: "ROC 变动率",
     summary: "变动率由负转正（上穿 0）时持有，转负离场。",
     pros: "对趋势转向比较敏感，参数少。",
@@ -340,6 +378,8 @@ export const STRATEGIES: StrategyMeta[] = [
   },
   {
     key: "adx-trend",
+    entryText: "ADX 走强且站上均线",
+    exitText: "ADX 转弱或跌破均线",
     label: "ADX 趋势强度",
     summary: "ADX 高于阈值且价格在均线上方时才持有，只做有强度的趋势。",
     pros: "能过滤掉大部分无趋势的震荡行情，回撤更小。",
@@ -359,6 +399,8 @@ export const STRATEGIES: StrategyMeta[] = [
   },
   {
     key: "consecutive-reversal",
+    entryText: "连跌后抄底",
+    exitText: "反弹达标",
     label: "连跌反转",
     summary: "连续 N 天下跌后买入，反弹到目标幅度离场（超跌反弹）。",
     pros: "短线胜率不错，与趋势策略相关性低，适合组合。",
@@ -393,6 +435,8 @@ export const STRATEGIES: StrategyMeta[] = [
   },
   {
     key: "volume-breakout",
+    entryText: "放量创新高",
+    exitText: "跌破均线",
     label: "量价突破",
     summary: "创 N 日新高且成交量高于均量时买入，跌破均线离场。",
     pros: "用成交量确认突破，假突破明显更少。",
@@ -421,6 +465,8 @@ export const STRATEGIES: StrategyMeta[] = [
   },
   {
     key: "breakout-pullback",
+    entryText: "突破后回踩均线",
+    exitText: "跌破均线",
     label: "突破回踩",
     summary: "突破 N 日新高后不追高，等回踩均线时买入。",
     pros: "买点更便宜，止损参考清晰，盈亏比更好。",
