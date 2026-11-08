@@ -285,11 +285,21 @@ export default function InstitutionsDashboard() {
                   <p className="truncate text-[14px] font-medium tracking-tight">
                     {investor.nameZh}
                   </p>
-                  <p className="truncate text-[10.5px] text-muted-foreground">{investor.fund}</p>
+                  <p className="truncate text-[10.5px] text-muted-foreground">
+                    {filing?.entityName || investor.fund}
+                  </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5">
                   <Stat label={t("总市值")} value={filing ? `$${formatCompact(filing.totalValue)}` : "--"} />
-                  <Stat label={t("持仓数")} value={filing ? String(filing.holdings.length) : "--"} />
+                  <Stat
+                    label={t("持仓数")}
+                    value={filing ? String(filing.totalPositions) : "--"}
+                    hint={
+                      filing && filing.holdings.length < filing.totalPositions
+                        ? t("仅展示市值前 200 条")
+                        : undefined
+                    }
+                  />
                   <Stat
                     label={t("集中度")}
                     value={filing ? formatPercent(concentration, 1).replace("+", "") : "--"}
@@ -311,6 +321,11 @@ export default function InstitutionsDashboard() {
                 <span className="num">
                   {filing?.filedAt ? `${t("报告期")} ${filing.filedAt}` : "--"}
                 </span>
+                {filing && filing.holdings.length < filing.totalPositions && (
+                  <span className="text-muted-foreground/70">
+                    {t("仅展示市值前 200 条，总市值与占比按全量持仓计算")}
+                  </span>
+                )}
                 <span className="text-muted-foreground/70">{t("13F 为季度数据，通常滞后 45 天")}</span>
               </p>
             </section>

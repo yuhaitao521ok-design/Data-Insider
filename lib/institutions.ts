@@ -119,7 +119,7 @@ export const SUPER_INVESTORS: SuperInvestor[] = [
   { id: "greenlight", name: "Greenlight Capital", nameZh: "绿光资本 · 艾因霍恩", cik: "0001079114", fund: "Greenlight Capital Inc" },
   { id: "thirdpoint", name: "Third Point LLC", nameZh: "Third Point · 勒布", cik: "0001040273", fund: "Third Point LLC" },
   { id: "himalaya", name: "Himalaya Capital", nameZh: "喜马拉雅资本 · 李录", cik: "0001709323", fund: "Himalaya Capital Management LLC" },
-  { id: "duanyongping", name: "Duanyongping", nameZh: "段永平", cik: "0001759760", fund: "Duanyongping" },
+  { id: "duanyongping", name: "H&H International Investment", nameZh: "段永平", cik: "0001759760", fund: "H&H International Investment LLC" },
   // —— 以下为扩充名单（CIK 均已在 SEC EDGAR 校验，且近期有 13F-HR 申报）——
   { id: "soros", name: "Soros Fund Management", nameZh: "索罗斯基金 · 索罗斯", cik: "0001029160", fund: "Soros Fund Management LLC" },
   { id: "citadel", name: "Citadel Advisors", nameZh: "城堡投资 · 格里芬", cik: "0001423053", fund: "Citadel Advisors LLC" },
@@ -152,6 +152,7 @@ const SEC_HEADERS = {
 };
 
 interface SecSubmissions {
+  name?: string;
   filings?: {
     recent?: {
       form?: string[];
@@ -168,20 +169,62 @@ export interface Holding13F {
   cusip: string;
   /** 股数 */
   shares: number | null;
-  /** 市值（美元） */
+  /** 市值（美元，已做单位归一） */
   value: number | null;
+  /** 13F 申报的持股类型：SH（普通股/ETF）或 PRN（可转债/权证等） */
+  type: string | null;
 }
 
 export interface ThirteenFResult {
   investor: SuperInvestor;
+  /** SEC 申报主体名（与 preset 的 fund 可能不同，展示以它为准） */
+  entityName: string;
   /** 报告期（YYYY-MM-DD，来自 13F 提交） */
   filedAt: string | null;
+  /** 展示用持仓（按市值降序，最多 200 条） */
   holdings: Holding13F[];
+  /** 全量持仓条数（可能远多于展示条数） */
+  totalPositions: number;
+  /** 全量持仓总市值（USD，已做单位归一） */
   totalValue: number;
   fetchedAt: string;
 }
 
-/** 解析 13F information table XML（兼容带命名空间前缀的 ns1: 形式） */
+/**
+ * 13F 申报的 value 单位不统一：有的按美元、有的按千美元。
+ * 判定只用「普通股/ETF（SH）」样本——可转债/权证（PRN）的 value/shares 不是股价，
+ * 会污染统计。规则：SH 样本的隐含价格（value/shares）中位数 < $2，或最大持仓的
+ * 隐含价 < $2，即认定为千美元申报，需要 ×1000 归一到美元。
+ */
+export function detectValueScale(
+  holdings: { value: number | null; shares: number | null; type?: string | null }[],
+): number {
+  const shared = holdings.filter(
+    (item) =>
+      (item.type ?? "SH") === "SH" &&
+      item.value !== null &&
+      item.value > 0 &&
+      item.shares !== null &&
+      item.shares > 0,
+  );
+  // 没有 SH 样本（全是可转债等）时退回全部样本
+  const pool = shared.length > 0 ? shared : holdings;
+  const samples = pool
+    .map((item) => ({
+      value: item.value as number,
+      implied: (item.value as number) / (item.shares as number),
+    }))
+    .filter((item) => Number.isFinite(item.implied) && item.implied > 0);
+  if (samples.length === 0) return 1;
+
+  const sorted = [...samples].sort((a, b) => a.implied - b.implied);
+  const median = sorted[Math.floor(sorted.length / 2)].implied;
+  const topImplied = [...samples].sort((a, b) => b.value - a.value)[0].implied;
+
+  return median < 2 || topImplied < 2 ? 1000 : 1;
+}
+
+/** 解析 13F information table XML（兼容带命名空间前缀的 ns1: 形式），返回全量、按市值降序、单位归一到美元 */
 export function parseInformationTable(xml: string): Holding13F[] {
   const holdings: Holding13F[] = [];
   // 有些申报用 <ns1:infoTable>，有些不带前缀
@@ -204,10 +247,18 @@ export function parseInformationTable(xml: string): Holding13F[] {
       cusip: pick(block, "cusip"),
       shares,
       value,
+      type: pick(block, "sshPrnamtType") || null,
     });
   }
 
-  return holdings.sort((a, b) => (b.value ?? 0) - (a.value ?? 0)).slice(0, 200);
+  // 单位归一：value / shares 的中位数能可靠区分「美元」与「千美元」申报
+  const scale = detectValueScale(holdings);
+  const normalized = holdings.map((item) => ({
+    ...item,
+    value: item.value === null ? null : item.value * scale,
+  }));
+
+  return normalized.sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
 }
 
 /** 获取某位投资者的最新 13F（缓存 6 小时，SEC 建议低频访问） */
@@ -255,15 +306,18 @@ export async function get13F(
     );
     if (!tableResponse.ok) throw new Error(`SEC 持仓表不可用（${tableResponse.status}）`);
 
-    const holdings = parseInformationTable(await tableResponse.text());
-    if (holdings.length === 0) throw new Error("13F 持仓表为空");
+    const all = parseInformationTable(await tableResponse.text());
+    if (all.length === 0) throw new Error("13F 持仓表为空");
 
-    const totalValue = holdings.reduce((sum, item) => sum + (item.value ?? 0), 0);
+    // 总市值 / 权重口径基于全量持仓；展示只取市值最大的 200 条
+    const totalValue = all.reduce((sum, item) => sum + (item.value ?? 0), 0);
 
     return {
       investor,
+      entityName: submissions.name ?? investor.fund,
       filedAt,
-      holdings,
+      holdings: all.slice(0, 200),
+      totalPositions: all.length,
       totalValue,
       fetchedAt: new Date().toISOString(),
     };
