@@ -474,6 +474,7 @@ const ZH_HANT: Record<string, string> = {
   "水下越深、停留越久，说明策略的回撤风险越大": "水下越深、停留越久，說明策略的回撤風險越大",
   "最长回撤 = 从历史高点回落到重新创新高经历的自然日；未收复则算到今天。深度看风险承受，时长看资金占用":
     "最長回撤 = 從歷史高點回落到重新創新高經歷的自然日；未收復則算到今天。深度看風險承受，時長看資金佔用",
+  "离场": "離場",
   "切换导航风格": "切換導覽風格",
   "导航风格": "導覽風格",
   "水晶滑块": "水晶滑塊",
@@ -932,6 +933,7 @@ const EN: Record<string, string> = {
   "水下越深、停留越久，说明策略的回撤风险越大": "Deeper and longer underwater periods mean higher drawdown risk",
   "最长回撤 = 从历史高点回落到重新创新高经历的自然日；未收复则算到今天。深度看风险承受，时长看资金占用":
     "Longest drawdown = calendar days from equity high to reclaiming it (or to today if unrecovered). Depth shows risk tolerance, duration shows capital tied up",
+  "离场": "Exit",
   "切换导航风格": "Switch nav style",
   "导航风格": "Nav style",
   "水晶滑块": "Crystal",

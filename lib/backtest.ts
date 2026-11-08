@@ -74,7 +74,10 @@ export interface Trade {
   days: number;
   /** 持有多少根 K 线 */
   bars: number;
+  /** 出场原因（展示用） */
   reason: string;
+  /** 触发离场的策略标签（多策略联动时可能多个） */
+  reasonLabels: string[];
 }
 
 export interface BacktestResult {
@@ -144,24 +147,67 @@ export function computeSignalDuties(
   });
 }
 
+export interface SignalSeries {
+  key: string;
+  label: string;
+  series: number[];
+}
+
+/** 每个策略各自的信号序列（用于组合 + 出场归因） */
+export function buildSignalMatrix(points: ChartPoint[], params: BacktestParams): SignalSeries[] {
+  const enabled = params.strategies.length > 0 ? params.strategies : ["ma-cross"];
+  return enabled.flatMap((key) => {
+    const meta = STRATEGY_MAP[key];
+    if (!meta) return [];
+    return [
+      {
+        key: meta.key,
+        label: strategyLabel(meta.key),
+        series: meta.signal(points, resolveStrategyParams(meta, params)),
+      },
+    ];
+  });
+}
+
 /** 组合策略信号：any = 并集（任一策略看多即持有），all = 交集（全部看多才持有） */
 export function buildSignals(points: ChartPoint[], params: BacktestParams): number[] {
-  const enabled = params.strategies.length > 0 ? params.strategies : ["ma-cross"];
-  const metas = enabled.flatMap((key) => {
-    const meta = STRATEGY_MAP[key];
-    return meta ? [meta] : [];
-  });
-  if (metas.length === 0) return new Array(points.length).fill(0);
-
-  const perStrategy = metas.map((meta) => meta.signal(points, resolveStrategyParams(meta, params)));
-  if (perStrategy.length === 1) return perStrategy[0];
+  const matrix = buildSignalMatrix(points, params);
+  if (matrix.length === 0) return new Array(points.length).fill(0);
+  if (matrix.length === 1) return matrix[0].series;
 
   return points.map((_, index) => {
     if (params.combineMode === "all") {
-      return perStrategy.every((series) => series[index] === 1) ? 1 : 0;
+      return matrix.every((item) => item.series[index] === 1) ? 1 : 0;
     }
-    return perStrategy.some((series) => series[index] === 1) ? 1 : 0;
+    return matrix.some((item) => item.series[index] === 1) ? 1 : 0;
   });
+}
+
+/**
+ * 出场归因：在 `index` 这根 K 线离场时，是哪些策略导致的。
+ *  - 单策略：该策略本身
+ *  - all（全部共振）：出场时仍看空的策略 = 破坏共振的人
+ *  - any（任一信号）：这一根刚刚由多转空的策略 = 直接触发离场的人
+ */
+export function exitReasonFor(
+  matrix: SignalSeries[],
+  index: number,
+  combineMode: CombineMode,
+): string[] {
+  if (matrix.length === 0) return [];
+  if (matrix.length === 1) return [matrix[0].label];
+
+  if (combineMode === "all") {
+    const bearish = matrix.filter((item) => item.series[index] !== 1).map((item) => item.label);
+    return bearish.length > 0 ? bearish : matrix.map((item) => item.label);
+  }
+
+  const flipped = matrix
+    .filter((item) => index > 0 && item.series[index - 1] === 1 && item.series[index] === 0)
+    .map((item) => item.label);
+  if (flipped.length > 0) return flipped;
+  // 理论少见：这一根没有策略翻空却离场（数据缺口等），退化为“全部转空”
+  return matrix.map((item) => item.label);
 }
 
 function toStrategyParams(params: BacktestParams) {
@@ -181,9 +227,12 @@ export function strategyLabel(key: StrategyKey): string {
   return STRATEGY_MAP[key]?.label ?? key;
 }
 
-function strategyExitReason(params: BacktestParams): string {
-  const first = params.strategies[0] ?? "ma-cross";
-  return `${strategyLabel(first)} · 离场`;
+/** 出场原因展示：最多列 2 个策略，多于 2 个时折叠 */
+function formatExitReason(labels: string[]): string {
+  if (labels.length === 0) return "策略离场";
+  const shown = labels.slice(0, 2).join(" / ");
+  const extra = labels.length > 2 ? ` 等${labels.length - 2}项` : "";
+  return `${shown}${extra} · 离场`;
 }
 
 interface DrawdownInfo {
@@ -269,8 +318,21 @@ export function runBacktest(
   if (points.length < 30) return empty;
 
   const fee = Math.max(0, params.feeBps) / 10_000;
-  const signals = buildSignals(points, params);
-  const exitReason = strategyExitReason(params);
+  const matrix = buildSignalMatrix(points, params);
+  const signals =
+    matrix.length === 0
+      ? new Array<number>(points.length).fill(0)
+      : matrix.length === 1
+        ? matrix[0].series
+        : points.map((_, index) =>
+            params.combineMode === "all"
+              ? matrix.every((item) => item.series[index] === 1)
+                ? 1
+                : 0
+              : matrix.some((item) => item.series[index] === 1)
+                ? 1
+                : 0,
+          );
 
   let cash = initial;
   let shares = 0;
@@ -301,6 +363,7 @@ export function runBacktest(
       cash = gross * (1 - fee);
       const cost = shares * entryPrice;
       const pnl = cash - cost;
+      const reasonLabels = exitReasonFor(matrix, index, params.combineMode);
       trades.push({
         entryDate,
         entryPrice,
@@ -311,7 +374,8 @@ export function runBacktest(
         pnlPercent: cost > 0 ? (pnl / cost) * 100 : 0,
         days: Math.max(1, Math.round((point.t - entryDate) / 86_400)),
         bars: index - entryIndex,
-        reason: exitReason,
+        reason: formatExitReason(reasonLabels),
+        reasonLabels,
       });
       shares = 0;
     }

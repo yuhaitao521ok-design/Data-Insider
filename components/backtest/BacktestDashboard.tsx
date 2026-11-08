@@ -775,7 +775,20 @@ export default function BacktestDashboard() {
                             </td>
                             <td className="px-3 py-1.5">
                               <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                                {t(trade.reason)}
+                                {trade.reasonLabels.length > 0 ? (
+                                  <>
+                                    {trade.reasonLabels
+                                      .slice(0, 2)
+                                      .map((label) => t(label))
+                                      .join(" / ")}
+                                    {trade.reasonLabels.length > 2
+                                      ? ` +${trade.reasonLabels.length - 2}`
+                                      : ""}{" "}
+                                    · {t("离场")}
+                                  </>
+                                ) : (
+                                  t(trade.reason)
+                                )}
                               </span>
                             </td>
                           </tr>
