@@ -479,7 +479,7 @@ open-next.config.ts     OpenNext 适配器配置
 - 界面文案一律走 `t()`（`const { t } = useI18n()`），不要硬编码中文，包括 `aria-label` / `title` / `placeholder`
 - 同一个改动里把中文原文作为 key 补进 `lib/i18n.ts` 的 `ZH_HANT` 与 `EN` 两本词典（缺词条会静默回退中文，视为 bug）
 - 来自配置/数据的标签（周期、间隔、指标名、板块与指数名、交易时段）在渲染处包一层 `t()`
-- 提交前运行 `npm test`（单元测试：AI 解析 / 回测引擎 / 13F 解析等）与 `npm run check:i18n`，要求 **0 缺失 + 覆盖率 100%**；CI 可用 `npm run check:i18n -- --strict`（有缺失直接失败）
+- 提交前运行 `npm test`（单元测试：AI 解析 / 回测引擎 / 21 个策略的边界健壮性 / 指标层异常周期 / 13F 解析等）与 `npm run check:i18n`，要求 **0 缺失 + 覆盖率 100%**；CI 可用 `npm run check:i18n -- --strict`（有缺失直接失败）
 - 这条约定同时写在 `.github/copilot-instructions.md` 里，后续开发（包括 AI 助手）会默认遵守
 
 ### 协作流程（每次改动必须遵守）

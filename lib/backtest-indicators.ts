@@ -1,5 +1,6 @@
 /** 回测用的补充指标（stochastic / williams / CCI / ADX / TRIX / PPO / ROC / ATR / Keltner） */
 
+import { normalizePeriod } from "@/lib/indicators";
 import type { ChartPoint } from "@/lib/types";
 
 const closes = (points: ChartPoint[]) => points.map((point) => point.close);
@@ -7,9 +8,10 @@ const highs = (points: ChartPoint[]) => points.map((point) => point.high ?? poin
 const lows = (points: ChartPoint[]) => points.map((point) => point.low ?? point.close);
 
 /** 简单移动平均 */
-export function smaSeries(values: number[], period: number): (number | null)[] {
+export function smaSeries(values: number[], rawPeriod: number): (number | null)[] {
   const output: (number | null)[] = new Array(values.length).fill(null);
-  if (period <= 0) return output;
+  const period = normalizePeriod(rawPeriod);
+  if (values.length === 0) return output;
   let sum = 0;
   for (let index = 0; index < values.length; index += 1) {
     sum += values[index];
@@ -20,9 +22,10 @@ export function smaSeries(values: number[], period: number): (number | null)[] {
 }
 
 /** 指数移动平均（用前 period 个 SMA 初始化） */
-export function emaSeries(values: number[], period: number): (number | null)[] {
+export function emaSeries(values: number[], rawPeriod: number): (number | null)[] {
   const output: (number | null)[] = new Array(values.length).fill(null);
-  if (period <= 0 || values.length < period) return output;
+  const period = normalizePeriod(rawPeriod);
+  if (values.length < period) return output;
   const k = 2 / (period + 1);
   let previous = values.slice(0, period).reduce((sum, value) => sum + value, 0) / period;
   output[period - 1] = previous;
@@ -34,8 +37,10 @@ export function emaSeries(values: number[], period: number): (number | null)[] {
 }
 
 /** 平均真实波幅 */
-export function atrSeries(points: ChartPoint[], period: number): (number | null)[] {
+export function atrSeries(points: ChartPoint[], rawPeriod: number): (number | null)[] {
   const output: (number | null)[] = new Array(points.length).fill(null);
+  const period = normalizePeriod(rawPeriod);
+  if (points.length === 0) return output;
   const h = highs(points);
   const l = lows(points);
   const c = closes(points);
@@ -56,7 +61,8 @@ export function atrSeries(points: ChartPoint[], period: number): (number | null)
 }
 
 /** 随机指标 %K */
-export function stochasticK(points: ChartPoint[], period: number): (number | null)[] {
+export function stochasticK(points: ChartPoint[], rawPeriod: number): (number | null)[] {
+  const period = normalizePeriod(rawPeriod, 14);
   const h = highs(points);
   const l = lows(points);
   const c = closes(points);
@@ -76,7 +82,8 @@ export function williamsR(points: ChartPoint[], period: number): (number | null)
 }
 
 /** 顺势指标 CCI */
-export function cciSeries(points: ChartPoint[], period: number): (number | null)[] {
+export function cciSeries(points: ChartPoint[], rawPeriod: number): (number | null)[] {
+  const period = normalizePeriod(rawPeriod, 20);
   const typical = points.map((point) => ((point.high ?? point.close) + (point.low ?? point.close) + point.close) / 3);
   const mean = smaSeries(typical, period);
   return points.map((_, index) => {
@@ -99,7 +106,8 @@ export interface AdxResult {
 }
 
 /** 平均趋向指标 ADX（Wilder 平滑） */
-export function adxSeries(points: ChartPoint[], period: number): AdxResult {
+export function adxSeries(points: ChartPoint[], rawPeriod: number): AdxResult {
+  const period = normalizePeriod(rawPeriod, 14);
   const length = points.length;
   const h = highs(points);
   const l = lows(points);
@@ -159,7 +167,8 @@ export function adxSeries(points: ChartPoint[], period: number): AdxResult {
 }
 
 /** TRIX（三重指数平滑的变化率，%） */
-export function trixSeries(values: number[], period: number): (number | null)[] {
+export function trixSeries(values: number[], rawPeriod: number): (number | null)[] {
+  const period = normalizePeriod(rawPeriod, 15);
   const first = emaSeries(values, period);
   const squeeze = (series: (number | null)[]) => {
     const output: number[] = [];
@@ -189,8 +198,11 @@ export function trixSeries(values: number[], period: number): (number | null)[] 
 
 /** PPO（MACD 归一化，%） */
 export function ppoSeries(values: number[], fast: number, slow: number, signalPeriod: number) {
-  const fastEma = emaSeries(values, fast);
-  const slowEma = emaSeries(values, slow);
+  const safeFast = normalizePeriod(fast, 12);
+  const safeSlow = normalizePeriod(slow, 26);
+  const safeSignal = normalizePeriod(signalPeriod, 9);
+  const fastEma = emaSeries(values, safeFast);
+  const slowEma = emaSeries(values, safeSlow);
   const ppo: (number | null)[] = values.map((_, index) => {
     const f = fastEma[index];
     const s = slowEma[index];
@@ -198,7 +210,7 @@ export function ppoSeries(values: number[], fast: number, slow: number, signalPe
     return ((f - s) / s) * 100;
   });
   const compact = ppo.filter((value): value is number => value !== null);
-  const signalCompact = emaSeries(compact, signalPeriod);
+  const signalCompact = emaSeries(compact, safeSignal);
   const signal: (number | null)[] = new Array(values.length).fill(null);
   let cursor = 0;
   ppo.forEach((value, index) => {
@@ -210,7 +222,8 @@ export function ppoSeries(values: number[], fast: number, slow: number, signalPe
 }
 
 /** 变动率 ROC（%） */
-export function rocSeries(values: number[], period: number): (number | null)[] {
+export function rocSeries(values: number[], rawPeriod: number): (number | null)[] {
+  const period = normalizePeriod(rawPeriod);
   return values.map((value, index) => {
     if (index < period) return null;
     const previous = values[index - period];

@@ -140,9 +140,19 @@ export const INDICATOR_DEFINITIONS: Record<IndicatorType, IndicatorDefinition> =
 /* -------------------------------------------------------------------------- */
 
 /** 简单移动平均 */
-export function sma(values: number[], period: number): (number | null)[] {
+/**
+ * 周期参数规范化：四舍五入 + 最小 1，非有限值回退默认。
+ * 指标内部一律先过这一步，避免小数 / 0 / NaN 周期造成数组空洞与除零。
+ */
+export function normalizePeriod(period: number, fallback = 1): number {
+  if (!Number.isFinite(period)) return Math.max(1, Math.round(fallback));
+  return Math.max(1, Math.round(period));
+}
+
+export function sma(values: number[], rawPeriod: number): (number | null)[] {
   const output: (number | null)[] = new Array(values.length).fill(null);
-  if (period <= 0) return output;
+  const period = normalizePeriod(rawPeriod);
+  if (values.length === 0) return output;
 
   let sum = 0;
   for (let i = 0; i < values.length; i += 1) {
@@ -154,9 +164,10 @@ export function sma(values: number[], period: number): (number | null)[] {
 }
 
 /** 指数移动平均（首值用前 period 个数的 SMA 初始化） */
-export function ema(values: number[], period: number): (number | null)[] {
+export function ema(values: number[], rawPeriod: number): (number | null)[] {
   const output: (number | null)[] = new Array(values.length).fill(null);
-  if (period <= 0 || values.length < period) return output;
+  const period = normalizePeriod(rawPeriod);
+  if (values.length < period) return output;
 
   const k = 2 / (period + 1);
   let previous = values.slice(0, period).reduce((sum, value) => sum + value, 0) / period;
@@ -170,9 +181,10 @@ export function ema(values: number[], period: number): (number | null)[] {
 }
 
 /** RSI（Wilder 平滑） */
-export function rsi(values: number[], period: number): (number | null)[] {
+export function rsi(values: number[], rawPeriod: number): (number | null)[] {
   const output: (number | null)[] = new Array(values.length).fill(null);
-  if (period <= 0 || values.length <= period) return output;
+  const period = normalizePeriod(rawPeriod);
+  if (values.length <= period) return output;
 
   let avgGain = 0;
   let avgLoss = 0;
@@ -204,8 +216,11 @@ export interface MacdResult {
 
 /** MACD：DIF / DEA / 柱状图（histogram = DIF − DEA） */
 export function macd(values: number[], fast = 12, slow = 26, signalPeriod = 9): MacdResult {
-  const fastEma = ema(values, fast);
-  const slowEma = ema(values, slow);
+  const safeFast = normalizePeriod(fast, 12);
+  const safeSlow = normalizePeriod(slow, 26);
+  const safeSignal = normalizePeriod(signalPeriod, 9);
+  const fastEma = ema(values, safeFast);
+  const slowEma = ema(values, safeSlow);
   const macdLine: (number | null)[] = values.map((_, index) => {
     const fastValue = fastEma[index];
     const slowValue = slowEma[index];
@@ -216,7 +231,7 @@ export function macd(values: number[], fast = 12, slow = 26, signalPeriod = 9): 
   const start = macdLine.findIndex((value) => value !== null);
   if (start >= 0) {
     const slice = macdLine.slice(start) as number[];
-    const signalSlice = ema(slice, signalPeriod);
+    const signalSlice = ema(slice, safeSignal);
     signalSlice.forEach((value, index) => {
       if (value !== null) signalLine[start + index] = value;
     });
@@ -237,7 +252,9 @@ export interface BollResult {
 }
 
 /** 布林带（总体标准差） */
-export function bollinger(values: number[], period = 20, multiplier = 2): BollResult {
+export function bollinger(values: number[], rawPeriod = 20, rawMultiplier = 2): BollResult {
+  const period = normalizePeriod(rawPeriod, 20);
+  const multiplier = Number.isFinite(rawMultiplier) ? Math.max(0.1, rawMultiplier) : 2;
   const middle = sma(values, period);
   const upper: (number | null)[] = new Array(values.length).fill(null);
   const lower: (number | null)[] = new Array(values.length).fill(null);
