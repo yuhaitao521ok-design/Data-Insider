@@ -467,6 +467,13 @@ const ZH_HANT: Record<string, string> = {
   "颜色深浅代表动量强弱，绿强红弱": "顏色深淺代表動量強弱，綠強紅弱",
   "Beta": "Beta",
   "年化 Alpha": "年化 Alpha",
+  "该策略在当前数据上看多的时间占比": "該策略在當前資料上看多的時間佔比",
+  "行末百分比 = 该策略看多占比；联动：任一信号 = 任一策略看多即持有，全部共振 = 所有策略同时看多才持有":
+    "行末百分比 = 該策略看多佔比；聯動：任一訊號 = 任一策略看多即持有，全部共振 = 所有策略同時看多才持有",
+  "回撤 = 净值距历史高点的回落幅度，0% 线即历史新高": "回撤 = 淨值距歷史高點的回落幅度，0% 線即歷史新高",
+  "水下越深、停留越久，说明策略的回撤风险越大": "水下越深、停留越久，說明策略的回撤風險越大",
+  "最长回撤 = 从历史高点回落到重新创新高经历的自然日；未收复则算到今天。深度看风险承受，时长看资金占用":
+    "最長回撤 = 從歷史高點回落到重新創新高經歷的自然日；未收復則算到今天。深度看風險承受，時長看資金佔用",
   "切换导航风格": "切換導覽風格",
   "导航风格": "導覽風格",
   "水晶滑块": "水晶滑塊",
@@ -918,6 +925,13 @@ const EN: Record<string, string> = {
   "颜色深浅代表动量强弱，绿强红弱": "Color depth shows momentum strength: green strong, red weak",
   "Beta": "Beta",
   "年化 Alpha": "Annual alpha",
+  "该策略在当前数据上看多的时间占比": "Share of time this strategy is bullish on current data",
+  "行末百分比 = 该策略看多占比；联动：任一信号 = 任一策略看多即持有，全部共振 = 所有策略同时看多才持有":
+    "The % at row end = bullish share; combine: Any signal = hold if any strategy is bullish, All agree = hold only when all are bullish",
+  "回撤 = 净值距历史高点的回落幅度，0% 线即历史新高": "Drawdown = decline from the equity high; the 0% line marks a new high",
+  "水下越深、停留越久，说明策略的回撤风险越大": "Deeper and longer underwater periods mean higher drawdown risk",
+  "最长回撤 = 从历史高点回落到重新创新高经历的自然日；未收复则算到今天。深度看风险承受，时长看资金占用":
+    "Longest drawdown = calendar days from equity high to reclaiming it (or to today if unrecovered). Depth shows risk tolerance, duration shows capital tied up",
   "切换导航风格": "Switch nav style",
   "导航风格": "Nav style",
   "水晶滑块": "Crystal",

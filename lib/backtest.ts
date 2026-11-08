@@ -2,7 +2,12 @@ import type { ChartPoint, IntervalKey } from "@/lib/types";
 
 /** 回测引擎：多策略（见 backtest-catalog）自由组合，全部本地计算。 */
 
-import { STRATEGIES, STRATEGY_MAP, type StrategyMeta } from "@/lib/backtest-catalog";
+import {
+  STRATEGIES,
+  STRATEGY_MAP,
+  type StrategyMeta,
+  type StrategyParams,
+} from "@/lib/backtest-catalog";
 import { barsPerYear } from "@/lib/backtest-frame";
 
 export const STRATEGY_KEYS = STRATEGIES.map((item) => item.key);
@@ -100,8 +105,46 @@ export interface BacktestResult {
   };
 }
 
-/** 单个策略的看多信号序列（1 = 看多，0 = 看空） */
-/** 组合策略信号：any = 并集，all = 交集 */
+/**
+ * 合并策略参数：策略自带 defaults 时，若用户仍停留在全局默认值，
+ * 则用策略自己的建议值；用户改过（!= 全局默认）则尊重用户输入。
+ * 这让「绝对动量」「连跌反转」这类阈值语义不同的策略在默认参数下也能正常触发。
+ */
+export function resolveStrategyParams(
+  meta: StrategyMeta,
+  params: BacktestParams,
+): StrategyParams {
+  const base = toStrategyParams(params);
+  if (!meta.defaults) return base;
+  const resolved = { ...base };
+  for (const [key, value] of Object.entries(meta.defaults)) {
+    if (typeof value !== "number") continue;
+    const paramKey = key as keyof BacktestParams;
+    const userValue = params[paramKey] as number;
+    const globalDefault = DEFAULT_PARAMS[paramKey] as number;
+    if (userValue === globalDefault) {
+      resolved[key as keyof StrategyParams] = value;
+    }
+  }
+  return resolved;
+}
+
+/** 各策略在当前数据上的「看多占比」（帮助理解联动效果与参数是否合理） */
+export function computeSignalDuties(
+  points: ChartPoint[],
+  params: BacktestParams,
+): { key: string; label: string; duty: number }[] {
+  const enabled = params.strategies.length > 0 ? params.strategies : ["ma-cross"];
+  return enabled.flatMap((key) => {
+    const meta = STRATEGY_MAP[key];
+    if (!meta || points.length === 0) return [];
+    const signal = meta.signal(points, resolveStrategyParams(meta, params));
+    const duty = signal.reduce((sum, value) => sum + value, 0) / signal.length;
+    return [{ key: meta.key, label: meta.label, duty }];
+  });
+}
+
+/** 组合策略信号：any = 并集（任一策略看多即持有），all = 交集（全部看多才持有） */
 export function buildSignals(points: ChartPoint[], params: BacktestParams): number[] {
   const enabled = params.strategies.length > 0 ? params.strategies : ["ma-cross"];
   const metas = enabled.flatMap((key) => {
@@ -110,7 +153,7 @@ export function buildSignals(points: ChartPoint[], params: BacktestParams): numb
   });
   if (metas.length === 0) return new Array(points.length).fill(0);
 
-  const perStrategy = metas.map((meta) => meta.signal(points, toStrategyParams(params)));
+  const perStrategy = metas.map((meta) => meta.signal(points, resolveStrategyParams(meta, params)));
   if (perStrategy.length === 1) return perStrategy[0];
 
   return points.map((_, index) => {
@@ -150,25 +193,32 @@ interface DrawdownInfo {
   longestDays: number | null;
 }
 
-function drawdownInfo(points: { t: number; value: number }[]): DrawdownInfo {
+export function drawdownInfo(points: { t: number; value: number }[]): DrawdownInfo {
   if (points.length < 2) return { series: [], longestDays: null };
   let peak = points[0].value;
   let peakTime = points[0].t;
+  let inDrawdown = false;
   let longest = 0;
   const series = points.map((point) => {
-    if (point.value > peak) {
+    if (point.value >= peak) {
+      if (inDrawdown) {
+        // 回到前高即算收复（峰值 → 收复当天，含收复日）
+        longest = Math.max(longest, Math.round((point.t - peakTime) / 86_400));
+        inDrawdown = false;
+      }
       peak = point.value;
       peakTime = point.t;
+    } else {
+      inDrawdown = true;
     }
     const dd = peak > 0 ? (point.value / peak - 1) * 100 : 0;
-    if (dd < 0) {
-      longest = Math.max(longest, Math.round((point.t - peakTime) / 86_400));
-    } else {
-      // 收复新高：上一段回撤结束，从当前点起算下一段
-      peakTime = point.t;
-    }
     return { t: point.t, value: Number(dd.toFixed(3)) };
   });
+  if (inDrawdown) {
+    // 至今未收复：算到最后一根
+    const last = points[points.length - 1];
+    longest = Math.max(longest, Math.round((last.t - peakTime) / 86_400));
+  }
   return { series, longestDays: longest > 0 ? longest : null };
 }
 

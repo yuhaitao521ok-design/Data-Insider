@@ -319,6 +319,8 @@ export const STRATEGIES: StrategyMeta[] = [
     pros: "逻辑最直白，牛市中能持续待在场内。",
     cons: "拐点处反应慢，急跌时会完整吃到第一段回撤。",
     fields: ["slow", "threshold"],
+    // threshold 语义是「N 日涨跌幅（%）」，与 ADX 的 25 不同，这里给 5%
+    defaults: { threshold: 5 },
     signal: (points, params) => {
       const values = rocSeries(closes(points), Math.max(2, Math.round(params.slow)));
       return values.map((value) => (value !== null && value > params.threshold ? 1 : 0));
@@ -362,6 +364,8 @@ export const STRATEGIES: StrategyMeta[] = [
     pros: "短线胜率不错，与趋势策略相关性低，适合组合。",
     cons: "遇到单边下跌会连续接刀，必须靠仓位控制。",
     fields: ["slow", "threshold"],
+    // threshold 语义是「反弹目标（%）」，25% 太苛刻几乎不触发；slow 是连跌天数，30 天也极罕见
+    defaults: { threshold: 4, slow: 3 },
     signal: (points, params) => {
       const c = closes(points);
       const streakNeeded = Math.max(2, Math.round(params.slow));

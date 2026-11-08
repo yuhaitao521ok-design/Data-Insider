@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { DEFAULT_PARAMS, runBacktest } from "@/lib/backtest";
+import { DEFAULT_PARAMS, buildSignals, drawdownInfo, resolveStrategyParams, runBacktest } from "@/lib/backtest";
+import { STRATEGY_MAP } from "@/lib/backtest-catalog";
 import {
   addSnapshot,
   buildSnapshot,
@@ -143,4 +144,88 @@ test("快照：新增置顶、超限丢最旧、删除生效", () => {
   const afterRemove = removeSnapshot(list, list[0].id);
   assert.equal(afterRemove.length, MAX_SNAPSHOTS - 1);
   assert.ok(!afterRemove.some((item) => item.id === list[0].id));
+});
+
+test("最长回撤口径：峰值 → 回到前高（含收复日）", () => {
+  const equity = [
+    { t: 0, value: 100 },
+    { t: 86_400, value: 90 },
+    { t: 2 * 86_400, value: 95 },
+    { t: 3 * 86_400, value: 100 }, // 回到前高 = 收复
+    { t: 4 * 86_400, value: 110 },
+    { t: 5 * 86_400, value: 105 },
+    { t: 6 * 86_400, value: 110 }, // 3 天收复，短于第一段
+  ];
+  const info = drawdownInfo(equity);
+  assert.equal(info.longestDays, 3);
+  assert.equal(info.series[1].value, -10);
+  assert.equal(info.series[3].value, 0);
+});
+
+test("最长回撤口径：未收复算到最后一根", () => {
+  const equity = [
+    { t: 0, value: 100 },
+    { t: 86_400, value: 90 },
+    { t: 2 * 86_400, value: 80 },
+    { t: 3 * 86_400, value: 85 },
+  ];
+  assert.equal(drawdownInfo(equity).longestDays, 3);
+});
+
+test("策略默认参数：用户未改时用策略建议值，改过则尊重用户", () => {
+  const momentumMeta = STRATEGY_MAP["momentum"];
+  assert.equal(resolveStrategyParams(momentumMeta, DEFAULT_PARAMS).threshold, 5);
+  assert.equal(
+    resolveStrategyParams(momentumMeta, { ...DEFAULT_PARAMS, threshold: 10 }).threshold,
+    10,
+  );
+
+  const reversalMeta = STRATEGY_MAP["consecutive-reversal"];
+  const resolved = resolveStrategyParams(reversalMeta, DEFAULT_PARAMS);
+  assert.equal(resolved.slow, 3);
+  assert.equal(resolved.threshold, 4);
+  assert.equal(
+    resolveStrategyParams(reversalMeta, { ...DEFAULT_PARAMS, slow: 5 }).slow,
+    5,
+  );
+});
+
+test("修复后：绝对动量 / 连跌反转在默认参数下能产生信号", () => {
+  // 强上行 + 回调的合成数据：30 日 ROC 会超过 5%，也会出现连跌
+  const points: ChartPoint[] = [];
+  let price = 100;
+  for (let index = 0; index < 400; index += 1) {
+    const wave = index % 80 < 55 ? 1.004 : 0.996; // 先涨后跌的循环
+    price = price * wave;
+    points.push({
+      t: 1_600_000_000 + index * 86_400,
+      open: price,
+      high: price * 1.01,
+      low: price * 0.99,
+      close: price,
+      volume: 1_000_000,
+    });
+  }
+
+  for (const key of ["momentum", "consecutive-reversal"] as const) {
+    const meta = STRATEGY_MAP[key];
+    const signal = meta.signal(points, resolveStrategyParams(meta, DEFAULT_PARAMS));
+    const duty = signal.reduce((sum, value) => sum + value, 0) / signal.length;
+    assert.ok(duty > 0.01, `${key} 应产生信号（duty=${(duty * 100).toFixed(1)}%）`);
+  }
+});
+
+test("联动口径：any = 并集、all = 交集", () => {
+  const points = makeSeries(300, 86_400);
+  const strategies = ["ma-cross", "rsi-reversal"];
+  const anySig = buildSignals(points, { ...DEFAULT_PARAMS, strategies, combineMode: "any" });
+  const allSig = buildSignals(points, { ...DEFAULT_PARAMS, strategies, combineMode: "all" });
+  const a = buildSignals(points, { ...DEFAULT_PARAMS, strategies: ["ma-cross"] });
+  const b = buildSignals(points, { ...DEFAULT_PARAMS, strategies: ["rsi-reversal"] });
+
+  for (let index = 0; index < anySig.length; index += 1) {
+    assert.equal(anySig[index], a[index] === 1 || b[index] === 1 ? 1 : 0);
+    assert.equal(allSig[index], a[index] === 1 && b[index] === 1 ? 1 : 0);
+    assert.ok(allSig[index] <= anySig[index]);
+  }
 });
