@@ -17,5 +17,25 @@
   "observability": {
     "enabled": true
   },
+  "previews": {
+    "observability": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "issues": {
+        "enabled": false
+      },
+      "logs": {
+        "enabled": true,
+        "head_sampling_rate": 1,
+        "invocation_logs": true,
+        "persist": true
+      },
+      "traces": {
+        "enabled": false,
+        "head_sampling_rate": 1,
+        "persist": true
+      }
+    }
+  },
   "preview_urls": true
 }
