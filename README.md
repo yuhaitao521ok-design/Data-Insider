@@ -546,9 +546,18 @@ open-next.config.ts     OpenNext 适配器配置
 
 1. **先建 issue**：描述问题 / 需求与验收标准（bug 用 `bug(...)`、功能用 `feat(...)`、文档用 `docs(...)` 前缀）
 2. **从 `main` 开分支**：命名 `cline/<简短描述>`（如 `cline/llm-provider`）
-3. **提交 PR**：正文写清变更点与验证证据（`npm test` / `npm run build` / `npm run check:i18n` 的结果），并用 `Closes #N` 关联 issue
-4. **合并后删除分支**（仓库已开启自动删除），Cloudflare / Vercel 会自动构建并部署 `main`
-5. **收尾核对**：`git pull` 后确认 `HEAD == origin/main` 且工作区干净
+3. **本地先过闸门**：`npm run typecheck` + `npm test` + `npm run check:i18n`；涉及界面或构建产物时再加 `npm run build`（Cloudflare / OpenNext 相关用 `npm run build:cf`）
+4. **提交 PR**：正文写清变更点与验证证据（上面几条命令的结果），并用 `Closes #N` 关联 issue
+5. **自己合并**：PR 开出且本地闸门通过后，直接 `gh pr merge <n> --merge --delete-branch`（仓库用 merge commit），不要把手上的任务挂在 open PR 上
+6. **合并后删除分支**（仓库已开启自动删除），Cloudflare / Vercel 会自动构建并部署 `main`
+7. **收尾核对**：`git pull` 后确认 `HEAD == origin/main` 且工作区干净
+
+**以下情况才把 merge 交回人工判断：**
+
+- 需求 / 方案有歧义，或涉及需要拍板的取舍
+- 破坏性变更（删数据、改公开接口、动 CI/CD 密钥）
+- 需要平台后台操作（Cloudflare Dashboard 构建命令、Vercel 设置、DNS、Secrets、账单）
+- 本地闸门多次修复仍不通过
 
 ## 界面与主题
 

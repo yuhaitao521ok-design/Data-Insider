@@ -92,9 +92,19 @@ If you need to validate a focused change without a full suite, prefer `npm run t
 
 1. Open an issue first (title prefix `bug(...)` / `feat(...)` / `docs(...)`), describing problem and acceptance criteria.
 2. Branch from `main` as `cline/<short-description>`.
-3. Open a PR whose body lists the change and the verification evidence (`npm test`, `npm run build`, `npm run check:i18n`), and link the issue with `Closes #N`.
-4. After merge the branch is deleted automatically; Cloudflare / Vercel build and deploy `main`.
-5. Finish by `git pull` and confirming `HEAD == origin/main` with a clean worktree.
+3. Run the local gates before opening the PR: `npm run typecheck`, `npm test`, `npm run check:i18n`; add `npm run build` (or `npm run build:cf` when touching Cloudflare/OpenNext config) when UI or build output changes.
+4. Open a PR whose body lists the change and the verification evidence, and link the issue with `Closes #N`.
+5. **Merge it yourself once the PR is up and the local gates pass**: `gh pr merge <n> --merge --delete-branch` (repo uses merge commits). Do not leave a finished task sitting on an open PR.
+6. After merge the branch is deleted automatically; Cloudflare / Vercel build and deploy `main`.
+7. Finish by `git pull` and confirming `HEAD == origin/main` with a clean worktree.
+
+**Hand the merge back to the human only when:**
+- the request or design is ambiguous, or involves a trade-off that needs a decision;
+- the change is destructive (dropping/rewriting data, changing public APIs, touching CI/CD secrets);
+- the fix needs platform-side action (Cloudflare Dashboard build commands, Vercel settings, DNS, secrets, billing);
+- local gates keep failing after a genuine fix attempt.
+
+Everything else: issue → branch → PR with evidence → self-merge.
 
 ## Repo-specific notes
 
