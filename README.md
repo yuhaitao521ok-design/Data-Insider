@@ -354,7 +354,7 @@ curl 'http://localhost:3000/api/chart?symbol=NVDA&range=1Y&interval=1wk' | jq '.
 | 字段 | 填写 |
 | --- | --- |
 | Build command | `npm run build:cf` |
-| Deploy command | `npx wrangler deploy` |
+| Deploy command | `npm run deploy:cf`（先构建再部署，最稳；若确认 Build 步骤产物已带过来，也可用 `npx wrangler deploy`） |
 | Preview command | `npx wrangler preview` |
 
 > ⚠️ 默认的 `npm run build` **不对**：它只执行 `next build`，产出 `.next`，不会生成 Cloudflare 需要的 `.open-next/worker.js`，随后的 `wrangler deploy` 会失败。必须改用 `npm run build:cf`（内部会先跑 `next build`，再执行 OpenNext 转换）。
@@ -362,6 +362,11 @@ curl 'http://localhost:3000/api/chart?symbol=NVDA&range=1Y&interval=1wk' | jq '.
 > `npx wrangler preview` 是 Wrangler 4 的有效命令（open beta），用于非生产分支创建 Preview URL；如果想生成 Version URL，可改成 `npx wrangler versions upload`。
 >
 > **Preview 部署必须有 `previews` 块**：Worker 开了 Observability + Preview URL 时，Workers Builds 会要求 `wrangler.jsonc` 里显式声明 `previews.observability`，否则会在部署前直接失败并提示 “Your Wrangler configuration is missing a `previews` block”。仓库已内置该块（采样率 1、invocation logs 持久化、traces 关闭），本地可用 `npx wrangler deploy --dry-run` 提前校验。如果不希望 PR 触发预览部署，可把 Workers Builds 的 Preview command 清空（或关掉「非生产分支预览部署」），PR 就只构建、不部署。
+>
+> **部署报 `Could not find compiled Open Next config, did you run the build command?`**
+> `wrangler deploy` 只要在项目根目录同时看到 `next.config.*`、`open-next.config.*` 和已安装的 `@opennextjs/cloudflare`，就会判定为 OpenNext 项目并**自动转调 `opennextjs-cloudflare deploy`**（日志里那句 “OpenNext project detected” 就是它）。这条转调**只上传、不构建**，依赖 `.open-next/.build/open-next.config.edge.mjs` 等构建产物；如果 Workers Builds 的 Build command 只跑了 `npm run build`（`next build` 只会产 `.next`），或者 Build / Deploy 两步没有共享产物，就会在 deploy 阶段报这个错。
+>
+> 处理方式：把 Workers Builds 的 **Deploy command 改成 `npm run deploy:cf`**（内部先 `opennextjs-cloudflare build` 再 deploy，自带产物、可重复执行），Build command 用 `npm run build:cf` 或 `npm ci` 都行，保存后点 **Retry deployment**。想确认是不是这个问题，本地执行 `mv .open-next/.build /tmp/x && npx wrangler deploy`，能复现同一行报错；把目录挪回来就恢复正常（会继续走到要求 `CLOUDFLARE_API_TOKEN` 的那一步）。
 
 ### 环境变量
 
