@@ -360,6 +360,8 @@ curl 'http://localhost:3000/api/chart?symbol=NVDA&range=1Y&interval=1wk' | jq '.
 > ⚠️ 默认的 `npm run build` **不对**：它只执行 `next build`，产出 `.next`，不会生成 Cloudflare 需要的 `.open-next/worker.js`，随后的 `wrangler deploy` 会失败。必须改用 `npm run build:cf`（内部会先跑 `next build`，再执行 OpenNext 转换）。
 >
 > `npx wrangler preview` 是 Wrangler 4 的有效命令（open beta），用于非生产分支创建 Preview URL；如果想生成 Version URL，可改成 `npx wrangler versions upload`。
+>
+> **Preview 部署必须有 `previews` 块**：Worker 开了 Observability + Preview URL 时，Workers Builds 会要求 `wrangler.jsonc` 里显式声明 `previews.observability`，否则会在部署前直接失败并提示 “Your Wrangler configuration is missing a `previews` block”。仓库已内置该块（采样率 1、invocation logs 持久化、traces 关闭），本地可用 `npx wrangler deploy --dry-run` 提前校验。如果不希望 PR 触发预览部署，可把 Workers Builds 的 Preview command 清空（或关掉「非生产分支预览部署」），PR 就只构建、不部署。
 
 ### 环境变量
 
