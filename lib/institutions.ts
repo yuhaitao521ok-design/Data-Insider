@@ -173,6 +173,40 @@ export interface Holding13F {
   value: number | null;
   /** 13F 申报的持股类型：SH（普通股/ETF）或 PRN（可转债/权证等） */
   type: string | null;
+  /** 期权方向：CALL / PUT；普通股为 null */
+  putCall?: string | null;
+}
+
+/**
+ * 同一份 13F 会把同一只股票按不同申报主体（`otherManager`）拆成多条 `infoTable`。
+ * 例如伯克希尔 2026Q2 的苹果有 12 条，直接逐条展示就会变成「好几个苹果」。
+ * 这里按 `CUSIP + putCall` 聚合成一条真实持仓：股数、市值求和，其余字段取首条。
+ * 期权（CALL/PUT）与普通股分开，避免把期权名义股数混进正股。
+ */
+export function aggregateHoldings(holdings: Holding13F[]): Holding13F[] {
+  const sum = (a: number | null, b: number | null): number | null =>
+    a === null ? b : b === null ? a : a + b;
+
+  const merged = new Map<string, Holding13F>();
+  for (const item of holdings) {
+    const putCall = (item.putCall ?? "").toUpperCase();
+    const key = item.cusip
+      ? `${item.cusip}|${putCall}`
+      : `${item.issuer}|${item.titleOfClass}|${putCall}`;
+    const existing = merged.get(key);
+    if (!existing) {
+      merged.set(key, { ...item, putCall: putCall || null });
+      continue;
+    }
+    merged.set(key, {
+      ...existing,
+      shares: sum(existing.shares, item.shares),
+      value: sum(existing.value, item.value),
+      type: existing.type ?? item.type,
+    });
+  }
+
+  return [...merged.values()].sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
 }
 
 export interface ThirteenFResult {
@@ -248,6 +282,7 @@ export function parseInformationTable(xml: string): Holding13F[] {
       shares,
       value,
       type: pick(block, "sshPrnamtType") || null,
+      putCall: pick(block, "putCall") || null,
     });
   }
 
@@ -258,7 +293,8 @@ export function parseInformationTable(xml: string): Holding13F[] {
     value: item.value === null ? null : item.value * scale,
   }));
 
-  return normalized.sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
+  // 同一 CUSIP 的多条申报明细合并为一条持仓（数据本身正确，展示需要聚合）
+  return aggregateHoldings(normalized);
 }
 
 /** 获取某位投资者的最新 13F（缓存 6 小时，SEC 建议低频访问） */

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { detectValueScale, parseInformationTable } from "@/lib/institutions";
+import { aggregateHoldings, detectValueScale, parseInformationTable } from "@/lib/institutions";
 import { HISTORY_SIZE, pushHistory, sanitizeHistory } from "@/lib/backtest-history";
 
 const XML_PLAIN = `<?xml version="1.0" encoding="UTF-8"?>
@@ -125,6 +125,49 @@ test("parseInformationTable：美元申报保持原值", () => {
   assert.equal(holdings[0].issuer, "COCA COLA CO");
   assert.equal(holdings[0].value, 26_000_000_000);
   assert.equal(holdings[1].value, 23_300_000_000);
+});
+
+test("parseInformationTable：同一 CUSIP 的多条 otherManager 明细合并为一条（伯克希尔苹果场景）", () => {
+  const xml = `<informationTable>
+    <infoTable><nameOfIssuer>APPLE INC</nameOfIssuer><titleOfClass>COM</titleOfClass><cusip>037833100</cusip><value>200237120</value><shrsOrPrnAmt><sshPrnamt>692000</sshPrnamt><sshPrnamtType>SH</sshPrnamtType></shrsOrPrnAmt></infoTable>
+    <infoTable><nameOfIssuer>APPLE INC</nameOfIssuer><titleOfClass>COM</titleOfClass><cusip>037833100</cusip><value>1111142400</value><shrsOrPrnAmt><sshPrnamt>3840000</sshPrnamt><sshPrnamtType>SH</sshPrnamtType></shrsOrPrnAmt></infoTable>
+    <infoTable><nameOfIssuer>APPLE INC</nameOfIssuer><titleOfClass>COM</titleOfClass><cusip>037833100</cusip><value>17808079008</value><shrsOrPrnAmt><sshPrnamt>61542988</sshPrnamt><sshPrnamtType>SH</sshPrnamtType></shrsOrPrnAmt></infoTable>
+    <infoTable><nameOfIssuer>COCA COLA CO</nameOfIssuer><titleOfClass>COM</titleOfClass><cusip>191216100</cusip><value>26000000000</value><shrsOrPrnAmt><sshPrnamt>400000000</sshPrnamt><sshPrnamtType>SH</sshPrnamtType></shrsOrPrnAmt></infoTable>
+  </informationTable>`;
+  const holdings = parseInformationTable(xml);
+  assert.equal(holdings.length, 2, "同一 CUSIP 应只保留一条");
+  const apple = holdings.find((item) => item.cusip === "037833100")!;
+  assert.equal(apple.issuer, "APPLE INC");
+  assert.equal(apple.shares, 692_000 + 3_840_000 + 61_542_988);
+  assert.equal(apple.value, 200_237_120 + 1_111_142_400 + 17_808_079_008);
+  // 总市值保持全量口径（合并前后一致）
+  const total = holdings.reduce((sum, item) => sum + (item.value ?? 0), 0);
+  assert.equal(total, 200_237_120 + 1_111_142_400 + 17_808_079_008 + 26_000_000_000);
+});
+
+test("aggregateHoldings：普通股与 CALL/PUT 期权不合并", () => {
+  const holdings = [
+    { issuer: "APPLE INC", titleOfClass: "COM", cusip: "037833100", shares: 100, value: 20000, type: "SH", putCall: null },
+    { issuer: "APPLE INC", titleOfClass: "COM", cusip: "037833100", shares: 50, value: 10000, type: "SH", putCall: null },
+    { issuer: "APPLE INC", titleOfClass: "COM", cusip: "037833100", shares: 10, value: 5000, type: "SH", putCall: "CALL" },
+    { issuer: "APPLE INC", titleOfClass: "COM", cusip: "037833100", shares: 8, value: 3000, type: "SH", putCall: "PUT" },
+  ];
+  const merged = aggregateHoldings(holdings);
+  assert.equal(merged.length, 3);
+  assert.equal(merged.find((item) => item.putCall === null)!.shares, 150);
+  assert.equal(merged.find((item) => item.putCall === "CALL")!.shares, 10);
+  assert.equal(merged.find((item) => item.putCall === "PUT")!.shares, 8);
+});
+
+test("aggregateHoldings：缺失 CUSIP 时按发行人 + 类别 + 期权方向聚合", () => {
+  const merged = aggregateHoldings([
+    { issuer: "SOME FUND", titleOfClass: "COM", cusip: "", shares: 100, value: 1000, type: "SH" },
+    { issuer: "SOME FUND", titleOfClass: "COM", cusip: "", shares: 200, value: 2000, type: "SH" },
+    { issuer: "SOME FUND", titleOfClass: "NOTE", cusip: "", shares: 300, value: 3000, type: "PRN" },
+  ]);
+  assert.equal(merged.length, 2);
+  assert.equal(merged.find((item) => item.titleOfClass === "COM")!.shares, 300);
+  assert.equal(merged.find((item) => item.titleOfClass === "NOTE")!.shares, 300);
 });
 
 test("pushHistory：去重、移到最前、忽略非法代码", () => {
