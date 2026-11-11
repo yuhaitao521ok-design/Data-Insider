@@ -39,7 +39,10 @@ export async function GET(request: NextRequest) {
         period: data.period,
         totalPositions: data.totalPositions,
         totalValue: data.totalValue,
-        quarters: data.quarters,
+        // 总览只用最新季度明细；旧季度保留汇总数字，避免 29 人的列表把响应撑大
+        quarters: data.quarters.map((quarter, index) =>
+          index === 0 ? quarter : { ...quarter, buys: [], sells: [] },
+        ),
         fetchedAt: data.fetchedAt,
       };
       return Response.json(

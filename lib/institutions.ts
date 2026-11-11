@@ -288,9 +288,9 @@ export interface QuarterChange {
   previousQuarter: string | null;
   positions: number;
   totalValue: number;
-  /** 加仓（含新建仓），按市值变动降序，最多 8 条 */
+  /** 加仓（含新建仓），按市值变动降序，最多 30 条 */
   buys: PositionChange[];
-  /** 减仓（含清仓），按市值变动升序，最多 8 条 */
+  /** 减仓（含清仓），按市值变动升序，最多 30 条 */
   sells: PositionChange[];
   /** 本季加仓标的数（完整数量） */
   buysCount: number;
@@ -417,8 +417,8 @@ export function buildQuarterChanges(snapshots: QuarterSnapshot[]): QuarterChange
       previousQuarter: previous.quarter,
       positions: current.holdings.length,
       totalValue: current.totalValue,
-      buys: buys.slice(0, 8),
-      sells: sells.slice(0, 8),
+      buys: buys.slice(0, 30),
+      sells: sells.slice(0, 30),
       buysCount: buys.length,
       sellsCount: sells.length,
       buysValue: buys.reduce((sum, item) => sum + Math.max(0, item.valueChange ?? 0), 0),
@@ -427,6 +427,77 @@ export function buildQuarterChanges(snapshots: QuarterSnapshot[]): QuarterChange
   }
 
   return quarters;
+}
+
+/** 单笔调仓金额估算：股数变动 × 季末隐含价（新建仓用市值，清仓用上季市值） */
+export function estimatePositionTradeValue(change: PositionChange): number {
+  if (change.action === "new") return Math.max(0, change.value ?? 0);
+  if (change.action === "exit") return Math.max(0, change.prevValue ?? 0);
+  if (change.shares && change.shares > 0 && change.value !== null && change.value > 0) {
+    const price = change.value / change.shares;
+    return Math.abs(change.shareChange ?? 0) * price;
+  }
+  return Math.abs(change.valueChange ?? 0);
+}
+
+export interface AggregatedChange {
+  cusip: string;
+  issuer: string;
+  titleOfClass: string;
+  putCall: string | null;
+  /** 跨机构合计金额（USD，估算） */
+  amount: number;
+  /** 参与该标的加仓 / 减仓的机构数 */
+  institutions: number;
+}
+
+/** 把多位名人的最新季度调仓按标聚合，输出加仓或减仓 Top N */
+export function aggregateTopChanges(
+  entries: { investorId: string; quarter: QuarterChange }[],
+  side: "buy" | "sell",
+  limit = 5,
+): AggregatedChange[] {
+  const merged = new Map<
+    string,
+    {
+      cusip: string;
+      issuer: string;
+      titleOfClass: string;
+      putCall: string | null;
+      amount: number;
+      institutions: Set<string>;
+    }
+  >();
+
+  for (const { investorId, quarter } of entries) {
+    const items = side === "buy" ? quarter.buys : quarter.sells;
+    for (const item of items) {
+      // 期权名义股数与正股不可比，股票榜单只统计普通股 / ETF
+      if (item.putCall) continue;
+      const amount = estimatePositionTradeValue(item);
+      if (!(amount > 0)) continue;
+      const key = `${item.cusip}|${item.putCall ?? ""}`;
+      const existing = merged.get(key);
+      if (existing) {
+        existing.amount += amount;
+        existing.institutions.add(investorId);
+      } else {
+        merged.set(key, {
+          cusip: item.cusip,
+          issuer: item.issuer,
+          titleOfClass: item.titleOfClass,
+          putCall: item.putCall ?? null,
+          amount,
+          institutions: new Set([investorId]),
+        });
+      }
+    }
+  }
+
+  return [...merged.values()]
+    .sort((left, right) => right.amount - left.amount)
+    .slice(0, limit)
+    .map(({ institutions, ...rest }) => ({ ...rest, institutions: institutions.size }));
 }
 
 export interface ThirteenFResult {

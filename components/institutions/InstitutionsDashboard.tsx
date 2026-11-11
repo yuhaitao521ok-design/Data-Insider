@@ -6,7 +6,9 @@ import { useI18n } from "@/lib/i18n";
 import { formatCompact, formatNumber, formatPercent } from "@/lib/format";
 import {
   SUPER_INVESTORS,
+  aggregateTopChanges,
   pearsonCorrelation,
+  type AggregatedChange,
   type PositionChange,
   type QuarterChange,
   type ReturnSeries,
@@ -430,6 +432,94 @@ function CorrelationRankList({
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/** 跨机构加仓 / 减仓 Top 榜 */
+function AggregatedChangeList({
+  title,
+  tone,
+  items,
+  loading,
+}: {
+  title: string;
+  tone: "positive" | "negative";
+  items: AggregatedChange[];
+  loading: boolean;
+}) {
+  const { t } = useI18n();
+  return (
+    <div className="overflow-hidden rounded-xl border border-border bg-card">
+      <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+        <h2
+          className={`text-[11.5px] font-medium ${
+            tone === "positive" ? "text-positive-text" : "text-negative-text"
+          }`}
+        >
+          {title}
+        </h2>
+        <span className="text-[9px] text-muted-foreground">{t("按合计金额排序")}</span>
+      </div>
+      {loading ? (
+        <div className="space-y-1.5 p-3">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div key={index} className="skeleton h-6 rounded-md" />
+          ))}
+        </div>
+      ) : items.length === 0 ? (
+        <p className="px-3 py-4 text-[11px] text-muted-foreground">{t("暂无数据")}</p>
+      ) : (
+        <ol className="divide-y divide-border/60">
+          {items.map((item, index) => (
+            <li
+              key={`${item.cusip}-${item.putCall ?? ""}`}
+              className="flex items-center gap-2 px-3 py-1.5"
+            >
+              <span
+                className={`num flex h-4 w-4 shrink-0 items-center justify-center rounded text-[9px] ${
+                  index < 3
+                    ? tone === "positive"
+                      ? "bg-positive/15 font-medium text-positive-text"
+                      : "bg-negative/15 font-medium text-negative-text"
+                    : "text-muted-foreground/70"
+                }`}
+              >
+                {index + 1}
+              </span>
+              <span
+                className="min-w-0 flex-1 truncate text-[11px] text-foreground/90"
+                title={`${item.issuer} · ${item.cusip}`}
+              >
+                {item.issuer}
+                {item.titleOfClass && item.titleOfClass !== "COM" ? (
+                  <span className="ml-1 rounded bg-muted px-1 text-[8.5px] text-muted-foreground">
+                    {item.titleOfClass}
+                  </span>
+                ) : null}
+                {item.putCall ? (
+                  <span className="ml-1 rounded bg-muted px-1 text-[8.5px] text-muted-foreground">
+                    {item.putCall}
+                  </span>
+                ) : null}
+              </span>
+              <span className="num shrink-0 text-[9px] text-muted-foreground">
+                {item.institutions} {t("家机构")}
+              </span>
+              <span
+                className={`num w-[72px] shrink-0 text-right text-[10.5px] ${
+                  tone === "positive" ? "text-positive-text" : "text-negative-text"
+                }`}
+              >
+                {signedMoney(tone === "positive" ? item.amount : -item.amount)}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+      <p className="border-t border-border/60 px-3 py-1.5 text-[9px] text-muted-foreground/70">
+        {t("按本季股数变动 × 季末价估算；聚合每位名人本季前 30 个调仓标的（不含期权）")}
+      </p>
     </div>
   );
 }
@@ -870,6 +960,19 @@ export default function InstitutionsDashboard() {
     return { loaded, total: SUPER_INVESTORS.length, buys, sells, net, period };
   }, [overview]);
 
+  const topAggregatedChanges = useMemo(() => {
+    const entries = SUPER_INVESTORS.flatMap((investor) => {
+      const entry = overview[investor.id];
+      if (entry?.status !== "done") return [];
+      const quarter = entry.filing?.quarters[0];
+      return quarter ? [{ investorId: investor.id, quarter }] : [];
+    });
+    return {
+      buys: aggregateTopChanges(entries, "buy", 5),
+      sells: aggregateTopChanges(entries, "sell", 5),
+    };
+  }, [overview]);
+
   const correlationModel = useMemo(() => {
     const seriesMap = new Map<string, Map<string, number>>();
     const quarterSet = new Set<string>();
@@ -1019,6 +1122,21 @@ export default function InstitutionsDashboard() {
                 </p>
               )}
             </div>
+          </section>
+
+          <section className="grid gap-3 lg:grid-cols-2">
+            <AggregatedChangeList
+              title={t("机构加仓 Top 5")}
+              tone="positive"
+              items={topAggregatedChanges.buys}
+              loading={overviewStats.loaded === 0}
+            />
+            <AggregatedChangeList
+              title={t("机构减仓 Top 5")}
+              tone="negative"
+              items={topAggregatedChanges.sells}
+              loading={overviewStats.loaded === 0}
+            />
           </section>
 
           <section className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-3 py-2">
