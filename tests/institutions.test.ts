@@ -1,7 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { aggregateHoldings, detectValueScale, parseInformationTable } from "@/lib/institutions";
+import {
+  aggregateHoldings,
+  buildQuarterChanges,
+  computePositionChanges,
+  detectValueScale,
+  parseInformationTable,
+  recent13FFilings,
+} from "@/lib/institutions";
 import { HISTORY_SIZE, pushHistory, sanitizeHistory } from "@/lib/backtest-history";
 
 const XML_PLAIN = `<?xml version="1.0" encoding="UTF-8"?>
@@ -168,6 +175,179 @@ test("aggregateHoldings：缺失 CUSIP 时按发行人 + 类别 + 期权方向�
   assert.equal(merged.length, 2);
   assert.equal(merged.find((item) => item.titleOfClass === "COM")!.shares, 300);
   assert.equal(merged.find((item) => item.titleOfClass === "NOTE")!.shares, 300);
+});
+
+const holding = (
+  issuer: string,
+  cusip: string,
+  shares: number,
+  value: number,
+  extra: { putCall?: string | null; titleOfClass?: string } = {},
+) => ({
+  issuer,
+  titleOfClass: extra.titleOfClass ?? "COM",
+  cusip,
+  shares,
+  value,
+  type: "SH",
+  putCall: extra.putCall ?? null,
+});
+
+test("parseInformationTable：解码 issuer 中的 XML 实体", () => {
+  const xml = `<informationTable>
+    <infoTable><nameOfIssuer>STATE STR SPDR S&amp;P 500 ETF T</nameOfIssuer><titleOfClass>TR UNIT</titleOfClass><cusip>78462F103</cusip><value>3973046405</value><shrsOrPrnAmt><sshPrnamt>5320308</sshPrnamt></shrsOrPrnAmt></infoTable>
+  </informationTable>`;
+  const holdings = parseInformationTable(xml);
+  assert.equal(holdings[0].issuer, "STATE STR SPDR S&P 500 ETF T");
+});
+
+test("computePositionChanges：区分加仓 / 减仓 / 新建仓 / 清仓 / 不变", () => {
+  const previous = [
+    holding("APPLE INC", "037833100", 100, 20000),
+    holding("COCA COLA CO", "191216100", 50, 5000),
+    holding("MICROSOFT CORP", "594918104", 10, 4000),
+    holding("APPLE INC", "037833100", 5, 1000, { putCall: "CALL" }),
+  ];
+  const current = [
+    holding("APPLE INC", "037833100", 150, 33000),
+    holding("MICROSOFT CORP", "594918104", 10, 4200),
+    holding("NVIDIA CORP", "67066G104", 20, 8000),
+    holding("APPLE INC", "037833100", 2, 400, { putCall: "CALL" }),
+  ];
+
+  const changes = computePositionChanges(current, previous);
+  const apple = changes.find((item) => item.cusip === "037833100" && item.putCall === null)!;
+  assert.equal(apple.action, "add");
+  assert.equal(apple.shareChange, 50);
+  assert.equal(apple.changePercent, 50);
+  assert.equal(apple.valueChange, 13000);
+
+  const coca = changes.find((item) => item.cusip === "191216100")!;
+  assert.equal(coca.action, "exit");
+  assert.equal(coca.shares, null);
+  assert.equal(coca.changePercent, -100);
+  assert.equal(coca.valueChange, -5000);
+
+  const nvidia = changes.find((item) => item.cusip === "67066G104")!;
+  assert.equal(nvidia.action, "new");
+  assert.equal(nvidia.prevShares, null);
+  assert.equal(nvidia.valueChange, 8000);
+
+  const call = changes.find((item) => item.cusip === "037833100" && item.putCall === "CALL")!;
+  assert.equal(call.action, "reduce");
+  assert.equal(call.changePercent, -60);
+
+  // 股数未变的微软不产生调仓记录
+  assert.equal(changes.some((item) => item.cusip === "594918104"), false);
+});
+
+test("buildQuarterChanges：最近 3 个季度按新→旧输出，含净买入 / 净卖出", () => {
+  const snapshots = [
+    {
+      quarter: "2026-06-30",
+      filedAt: "2026-08-14",
+      holdings: [holding("APPLE INC", "A", 150, 30000), holding("NVIDIA CORP", "N", 20, 8000)],
+      totalValue: 38000,
+    },
+    {
+      quarter: "2026-03-31",
+      filedAt: "2026-05-15",
+      holdings: [holding("APPLE INC", "A", 100, 20000), holding("COCA COLA CO", "K", 50, 5000)],
+      totalValue: 25000,
+    },
+    {
+      quarter: "2025-12-31",
+      filedAt: "2026-02-17",
+      holdings: [holding("APPLE INC", "A", 80, 16000), holding("COCA COLA CO", "K", 50, 5000)],
+      totalValue: 21000,
+    },
+  ];
+
+  const quarters = buildQuarterChanges(snapshots);
+  assert.equal(quarters.length, 2);
+  assert.equal(quarters[0].quarter, "2026-06-30");
+  assert.equal(quarters[0].previousQuarter, "2026-03-31");
+  assert.equal(quarters[1].quarter, "2026-03-31");
+  assert.equal(quarters[1].previousQuarter, "2025-12-31");
+
+  // 2026Q2：苹果加仓 +$10,000，英伟达新建仓 +$8,000；可口可乐清仓 -$5,000
+  assert.equal(quarters[0].buysValue, 18000);
+  assert.equal(quarters[0].sellsValue, 5000);
+  assert.equal(quarters[0].buysCount, 2);
+  assert.equal(quarters[0].sellsCount, 1);
+  assert.deepEqual(
+    quarters[0].buys.map((item) => item.issuer),
+    ["APPLE INC", "NVIDIA CORP"],
+  );
+  assert.equal(quarters[0].sells[0].issuer, "COCA COLA CO");
+
+  // 2026Q1：只有苹果加仓
+  assert.equal(quarters[1].buys.length, 1);
+  assert.equal(quarters[1].buysValue, 4000);
+  assert.equal(quarters[1].sells.length, 0);
+  assert.equal(quarters[1].sellsValue, 0);
+});
+
+test("buildQuarterChanges：列表最多 8 条但保留完整计数", () => {
+  const snapshots = [
+    {
+      quarter: "2026-06-30",
+      filedAt: "2026-08-14",
+      holdings: Array.from({ length: 12 }, (_, index) =>
+        holding(`NEW ${index}`, `C${index}`, 100, (index + 1) * 1000),
+      ),
+      totalValue: 78000,
+    },
+    {
+      quarter: "2026-03-31",
+      filedAt: "2026-05-15",
+      holdings: [],
+      totalValue: 0,
+    },
+  ];
+
+  const [quarter] = buildQuarterChanges(snapshots);
+  assert.equal(quarter.buys.length, 8);
+  assert.equal(quarter.buysCount, 12);
+  assert.equal(quarter.buysValue, 78000);
+  assert.equal(quarter.buys[0].issuer, "NEW 11");
+});
+
+test("recent13FFilings：只看 13F-HR、忽略修订件并按报告期去重", () => {
+  const submissions = {
+    filings: {
+      recent: {
+        form: ["13F-HR/A", "13F-HR", "10-Q", "13F-HR", "13F-HR", "13F-HR"],
+        filingDate: [
+          "2026-09-01",
+          "2026-08-14",
+          "2026-08-01",
+          "2026-08-14",
+          "2026-05-15",
+          "2026-02-17",
+        ],
+        reportDate: ["2026-06-30", "2026-06-30", "2026-06-30", "2026-06-30", "2026-03-31", "2025-12-31"],
+        accessionNumber: [
+          "a-1",
+          "a-2",
+          "q-1",
+          "a-3",
+          "a-4",
+          "a-5",
+        ],
+      },
+    },
+  };
+
+  const filings = recent13FFilings(submissions, 4);
+  assert.deepEqual(
+    filings.map((item) => item.accession),
+    ["a-2", "a-4", "a-5"],
+  );
+  assert.equal(filings[0].period, "2026-06-30");
+  assert.equal(filings[2].period, "2025-12-31");
+  // 限制条数
+  assert.equal(recent13FFilings(submissions, 2).length, 2);
 });
 
 test("pushHistory：去重、移到最前、忽略非法代码", () => {
