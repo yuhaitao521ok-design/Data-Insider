@@ -4,9 +4,9 @@ import MobileTabBar from "@/components/MobileTabBar";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Data Insider · 美股多周期行情",
+  title: "TideWhale 潮鲸 · 美股多周期行情",
   description:
-    "从 Yahoo Finance、Nasdaq 与 Perplexity 获取美股报价，支持 1D / 5D / 1M / 3M / 6M / 1Y / 5Y / MAX 多周期走势与 AI 解读。",
+    "TideWhale 潮鲸：从 Yahoo Finance、Nasdaq 与 Perplexity 获取美股报价，支持 1D / 5D / 1M / 3M / 6M / 1Y / 5Y / MAX 多周期走势与 AI 解读。",
 };
 
 export const viewport: Viewport = {

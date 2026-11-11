@@ -147,7 +147,7 @@ export function findInvestor(id: string): SuperInvestor | null {
 }
 
 const SEC_HEADERS = {
-  "User-Agent": "Data Insider research contact@data-insider.local",
+  "User-Agent": "TideWhale research contact@tidewhale.local",
   Accept: "application/json, application/xml, text/xml, */*",
 };
 

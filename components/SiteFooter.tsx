@@ -14,14 +14,14 @@ export default function SiteFooter() {
         </p>
         <div className="flex items-center gap-4">
           <a
-            href="https://github.com/yuhaitao521ok-design/Data-Insider"
+            href="https://github.com/yuhaitao521ok-design/TideWhale"
             target="_blank"
             rel="noreferrer noopener"
             className="transition-colors hover:text-foreground"
           >
             GitHub
           </a>
-          <span className="hidden sm:inline">Data Insider</span>
+          <span className="hidden sm:inline">TideWhale · {t("潮鲸")}</span>
         </div>
       </div>
     </footer>
