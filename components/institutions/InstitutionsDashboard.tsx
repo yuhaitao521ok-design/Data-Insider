@@ -6,15 +6,17 @@ import { useI18n } from "@/lib/i18n";
 import { formatCompact, formatNumber, formatPercent } from "@/lib/format";
 import {
   SUPER_INVESTORS,
+  pearsonCorrelation,
   type PositionChange,
   type QuarterChange,
+  type ReturnSeries,
   type SymbolOwnership,
   type ThirteenFResult,
   type ThirteenFSummary,
 } from "@/lib/institutions";
 import { DEFAULT_WATCHLIST } from "@/lib/types";
 
-type Tab = "overview" | "investors" | "symbol";
+type Tab = "overview" | "correlation" | "investors" | "symbol";
 
 type OverviewStatus = "loading" | "done" | "error";
 
@@ -24,8 +26,15 @@ interface OverviewEntry {
   error?: string;
 }
 
+interface CorrelationEntry {
+  status: OverviewStatus;
+  series?: ReturnSeries;
+  error?: string;
+}
+
 const SYMBOL_RE = /^[A-Z0-9.^=-]{1,12}$/;
 const OVERVIEW_CACHE_KEY = "institutions:overview:v1";
+const CORR_CACHE_KEY = "institutions:correlation:v1";
 const OVERVIEW_CACHE_TTL = 6 * 60 * 60 * 1000;
 
 /** 头像用的首字母 / 首字 */
@@ -333,6 +342,98 @@ function OverviewCard({
   );
 }
 
+function shortInvestorName(name: string): string {
+  const base = name.split("·")[0].trim() || name;
+  return base.length > 7 ? `${base.slice(0, 7)}…` : base;
+}
+
+function corrLabel(r: number | null): string {
+  if (r === null || !Number.isFinite(r)) return "—";
+  if (r >= 0.995) return "+1";
+  if (r <= -0.995) return "−1";
+  const body = Math.abs(r).toFixed(2).slice(1);
+  return `${r > 0 ? "+" : "−"}${body}`;
+}
+
+const CORR_POSITIVE_CLASSES = [
+  "bg-positive/90 text-white",
+  "bg-positive/70 text-white",
+  "bg-positive/50 text-foreground",
+  "bg-positive/30 text-foreground",
+  "bg-positive/15 text-foreground",
+];
+
+const CORR_NEGATIVE_CLASSES = [
+  "bg-negative/90 text-white",
+  "bg-negative/70 text-white",
+  "bg-negative/50 text-foreground",
+  "bg-negative/30 text-foreground",
+  "bg-negative/15 text-foreground",
+];
+
+function correlationCellClass(r: number | null): string {
+  if (r === null || !Number.isFinite(r)) return "bg-muted/30 text-muted-foreground/40";
+  const magnitude = Math.abs(r);
+  const index =
+    magnitude >= 0.8 ? 0 : magnitude >= 0.6 ? 1 : magnitude >= 0.4 ? 2 : magnitude >= 0.2 ? 3 : 4;
+  return r >= 0 ? CORR_POSITIVE_CLASSES[index] : CORR_NEGATIVE_CLASSES[index];
+}
+
+/** 相关性排行列表 */
+function CorrelationRankList({
+  title,
+  tone,
+  items,
+  onSelect,
+}: {
+  title: string;
+  tone: "positive" | "negative";
+  items: { investor: (typeof SUPER_INVESTORS)[number]; r: number; n: number }[];
+  onSelect: (id: string) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <div className="rounded-lg border border-border/70 bg-muted/20 px-2.5 py-2">
+      <p
+        className={`text-[10.5px] font-medium ${
+          tone === "positive" ? "text-positive-text" : "text-negative-text"
+        }`}
+      >
+        {title}
+      </p>
+      {items.length === 0 ? (
+        <p className="mt-1 text-[10px] text-muted-foreground">{t("暂无足够数据")}</p>
+      ) : (
+        <ul className="mt-1.5 space-y-1">
+          {items.map((item) => (
+            <li key={item.investor.id}>
+              <button
+                type="button"
+                onClick={() => onSelect(item.investor.id)}
+                className="flex w-full items-baseline justify-between gap-2 rounded px-1 py-0.5 text-left transition-colors hover:bg-hover"
+              >
+                <span className="min-w-0 flex-1 truncate text-[10.5px] text-foreground/85">
+                  {item.investor.nameZh}
+                </span>
+                <span className="num shrink-0 text-[8.5px] text-muted-foreground/70">
+                  {t("共同季度")} {item.n}
+                </span>
+                <span
+                  className={`num w-[38px] shrink-0 text-right text-[10.5px] ${
+                    item.r >= 0 ? "text-positive-text" : "text-negative-text"
+                  }`}
+                >
+                  {corrLabel(item.r)}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function InstitutionsDashboard() {
   const { t } = useI18n();
   // 默认进入「调仓总览」，一眼看到所有名人的加减仓趋势
@@ -356,6 +457,12 @@ export default function InstitutionsDashboard() {
   const [overviewStarted, setOverviewStarted] = useState(false);
   const [overviewHydrated, setOverviewHydrated] = useState(false);
   const overviewDirtyRef = useRef(false);
+
+  const [corr, setCorr] = useState<Record<string, CorrelationEntry>>({});
+  const [corrStarted, setCorrStarted] = useState(false);
+  const [corrHydrated, setCorrHydrated] = useState(false);
+  const corrDirtyRef = useRef(false);
+  const [corrFocusId, setCorrFocusId] = useState(SUPER_INVESTORS[0].id);
   const [overviewFilter, setOverviewFilter] = useState<"all" | "buy" | "sell">("all");
   const [overviewSort, setOverviewSort] = useState<"netDesc" | "netAsc" | "name">("netDesc");
 
@@ -517,6 +624,118 @@ export default function InstitutionsDashboard() {
     setOverviewStarted(false);
   }, []);
 
+  const loadCorrelationInvestor = useCallback(async (id: string) => {
+    setCorr((prev) => ({ ...prev, [id]: { status: "loading" } }));
+    let lastError: unknown = null;
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const response = await fetch(
+          `/api/institutions/correlation?investor=${id}&quarters=8`,
+          { cache: "no-store" },
+        );
+        if (!response.ok) {
+          const body = (await response.json().catch(() => ({}))) as { error?: string };
+          throw new Error(body.error || `加载失败（${response.status}）`);
+        }
+        const data = (await response.json()) as ReturnSeries;
+        corrDirtyRef.current = true;
+        setCorr((prev) => ({ ...prev, [id]: { status: "done", series: data } }));
+        return;
+      } catch (error) {
+        lastError = error;
+        if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+    }
+
+    setCorr((prev) => ({
+      ...prev,
+      [id]: {
+        status: "error",
+        error: lastError instanceof Error ? lastError.message : "加载失败",
+      },
+    }));
+  }, []);
+
+  // 相关性：先用 6 小时本地缓存秒开，再补拉缺失数据
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(CORR_CACHE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as {
+          savedAt?: number;
+          entries?: Record<string, ReturnSeries>;
+        };
+        if (parsed.savedAt && Date.now() - parsed.savedAt < OVERVIEW_CACHE_TTL && parsed.entries) {
+          setCorr((prev) => {
+            const next = { ...prev };
+            for (const [id, series] of Object.entries(parsed.entries ?? {})) {
+              next[id] = { status: "done", series };
+            }
+            return next;
+          });
+        }
+      }
+    } catch {
+      // ignore
+    }
+    setCorrHydrated(true);
+  }, []);
+
+  // 相关性：首次进入时 3 路并发拉取，逐位填充
+  useEffect(() => {
+    if (!corrHydrated || tab !== "correlation" || corrStarted) return;
+    setCorrStarted(true);
+    setCorr((prev) => {
+      const next = { ...prev };
+      for (const item of SUPER_INVESTORS) {
+        if (!next[item.id]) next[item.id] = { status: "loading" };
+      }
+      return next;
+    });
+    const queue = SUPER_INVESTORS.map((item) => item.id).filter(
+      (id) => corr[id]?.status !== "done",
+    );
+    const worker = async () => {
+      for (;;) {
+        const id = queue.shift();
+        if (!id) return;
+        await loadCorrelationInvestor(id);
+      }
+    };
+    void Promise.all([worker(), worker(), worker()]);
+  }, [tab, corrStarted, corrHydrated, corr, loadCorrelationInvestor]);
+
+  // 缓存收益序列
+  useEffect(() => {
+    if (tab !== "correlation" || !corrDirtyRef.current) return;
+    const entries: Record<string, ReturnSeries> = {};
+    for (const item of SUPER_INVESTORS) {
+      const entry = corr[item.id];
+      if (entry?.status === "done" && entry.series) entries[item.id] = entry.series;
+    }
+    if (Object.keys(entries).length === 0) return;
+    try {
+      window.localStorage.setItem(
+        CORR_CACHE_KEY,
+        JSON.stringify({ savedAt: Date.now(), entries }),
+      );
+      corrDirtyRef.current = false;
+    } catch {
+      // ignore
+    }
+  }, [corr, tab]);
+
+  const refreshCorrelation = useCallback(() => {
+    try {
+      window.localStorage.removeItem(CORR_CACHE_KEY);
+    } catch {
+      // ignore
+    }
+    setCorr({});
+    setCorrStarted(false);
+  }, []);
+
   // 按标的：输入停顿 400ms 再请求，避免每敲一个字母打一次接口
   useEffect(() => {
     if (tab !== "symbol") return;
@@ -651,6 +870,86 @@ export default function InstitutionsDashboard() {
     return { loaded, total: SUPER_INVESTORS.length, buys, sells, net, period };
   }, [overview]);
 
+  const correlationModel = useMemo(() => {
+    const seriesMap = new Map<string, Map<string, number>>();
+    const quarterSet = new Set<string>();
+    for (const investor of SUPER_INVESTORS) {
+      const series = corr[investor.id]?.series;
+      if (!series) continue;
+      const points = new Map(series.points.map((point) => [point.quarter, point.returnPct]));
+      seriesMap.set(investor.id, points);
+      for (const quarter of points.keys()) quarterSet.add(quarter);
+    }
+
+    const matrix = new Map<string, Map<string, { r: number | null; n: number }>>();
+    for (const row of SUPER_INVESTORS) {
+      const rowMap = new Map<string, { r: number | null; n: number }>();
+      const rowPoints = seriesMap.get(row.id);
+      for (const col of SUPER_INVESTORS) {
+        const colPoints = seriesMap.get(col.id);
+        let r: number | null = null;
+        let n = 0;
+        if (rowPoints && colPoints) {
+          const xs: number[] = [];
+          const ys: number[] = [];
+          for (const [quarter, value] of rowPoints) {
+            const other = colPoints.get(quarter);
+            if (other !== undefined) {
+              xs.push(value);
+              ys.push(other);
+            }
+          }
+          n = xs.length;
+          if (n >= 5) r = pearsonCorrelation(xs, ys);
+        }
+        rowMap.set(col.id, { r, n });
+      }
+      matrix.set(row.id, rowMap);
+    }
+
+    const pairs: { a: (typeof SUPER_INVESTORS)[number]; b: (typeof SUPER_INVESTORS)[number]; r: number }[] = [];
+    let sum = 0;
+    for (let i = 0; i < SUPER_INVESTORS.length; i += 1) {
+      for (let j = i + 1; j < SUPER_INVESTORS.length; j += 1) {
+        const a = SUPER_INVESTORS[i];
+        const b = SUPER_INVESTORS[j];
+        const r = matrix.get(a.id)?.get(b.id)?.r;
+        if (r === null || r === undefined) continue;
+        pairs.push({ a, b, r });
+        sum += r;
+      }
+    }
+    pairs.sort((left, right) => right.r - left.r);
+    const quarters = [...quarterSet].sort().slice(-8);
+
+    return {
+      matrix,
+      loaded: seriesMap.size,
+      average: pairs.length > 0 ? sum / pairs.length : null,
+      highest: pairs[0] ?? null,
+      lowest: pairs[pairs.length - 1] ?? null,
+      pairCount: pairs.length,
+      quarters,
+    };
+  }, [corr]);
+
+  const corrFocus = SUPER_INVESTORS.find((item) => item.id === corrFocusId) ?? SUPER_INVESTORS[0];
+  const corrFocusRanked = SUPER_INVESTORS.filter((item) => item.id !== corrFocus.id)
+    .map((item) => {
+      const cell = correlationModel.matrix.get(corrFocus.id)?.get(item.id);
+      return cell && cell.r !== null ? { investor: item, r: cell.r, n: cell.n } : null;
+    })
+    .filter(
+      (item): item is { investor: (typeof SUPER_INVESTORS)[number]; r: number; n: number } =>
+        item !== null,
+    )
+    .sort((left, right) => right.r - left.r);
+  const corrTopPositive = corrFocusRanked.filter((item) => item.r > 0).slice(0, 5);
+  const corrTopNegative = [...corrFocusRanked]
+    .reverse()
+    .filter((item) => item.r < 0)
+    .slice(0, 5);
+
   return (
     <PageShell
       title={t("机构持仓")}
@@ -659,6 +958,7 @@ export default function InstitutionsDashboard() {
         <div className="inline-flex items-center gap-0.5 rounded-lg bg-muted p-0.5">
           {([
             { key: "overview", label: t("调仓总览") },
+            { key: "correlation", label: t("名人相关性") },
             { key: "investors", label: t("名人 13F") },
             { key: "symbol", label: t("按标的") },
           ] as const).map((item) => (
@@ -788,6 +1088,260 @@ export default function InstitutionsDashboard() {
           <p className="text-[9px] text-muted-foreground/70">
             {t("净额 = 加仓市值 − 减仓市值，含股价波动")}
           </p>
+        </div>
+      ) : tab === "correlation" ? (
+        <div className="space-y-3">
+          <section className="rounded-xl border border-border bg-card px-4 py-3">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+              <Stat
+                label={t("已加载")}
+                value={`${correlationModel.loaded}/${SUPER_INVESTORS.length}`}
+              />
+              <Stat
+                label={t("样本季度")}
+                value={
+                  correlationModel.quarters.length > 0
+                    ? `${quarterLabel(correlationModel.quarters[0])} – ${quarterLabel(
+                        correlationModel.quarters[correlationModel.quarters.length - 1],
+                      )}`
+                    : "--"
+                }
+              />
+              <Stat
+                label={t("平均相关性")}
+                value={correlationModel.average === null ? "--" : corrLabel(correlationModel.average)}
+              />
+              <div className="min-w-[150px]">
+                <p className="text-[10px] text-muted-foreground">{t("最高相关")}</p>
+                <p className="num mt-0.5 truncate text-[11px] text-foreground">
+                  {correlationModel.highest
+                    ? `${shortInvestorName(correlationModel.highest.a.nameZh)} ↔ ${shortInvestorName(
+                        correlationModel.highest.b.nameZh,
+                      )}`
+                    : "--"}
+                  {correlationModel.highest && (
+                    <span className="ml-1 text-positive-text">
+                      {corrLabel(correlationModel.highest.r)}
+                    </span>
+                  )}
+                </p>
+              </div>
+              <div className="min-w-[150px]">
+                <p className="text-[10px] text-muted-foreground">{t("最低相关")}</p>
+                <p className="num mt-0.5 truncate text-[11px] text-foreground">
+                  {correlationModel.lowest
+                    ? `${shortInvestorName(correlationModel.lowest.a.nameZh)} ↔ ${shortInvestorName(
+                        correlationModel.lowest.b.nameZh,
+                      )}`
+                    : "--"}
+                  {correlationModel.lowest && (
+                    <span className="ml-1 text-negative-text">
+                      {corrLabel(correlationModel.lowest.r)}
+                    </span>
+                  )}
+                </p>
+              </div>
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={refreshCorrelation}
+                  className="inline-flex h-7 items-center rounded-md border border-border px-2 text-[11px] text-muted-foreground transition-colors hover:border-accent/40 hover:bg-hover hover:text-foreground"
+                >
+                  {t("刷新全部")}
+                </button>
+              </div>
+              {correlationModel.loaded < SUPER_INVESTORS.length && (
+                <p className="w-full text-[9px] text-muted-foreground/70">
+                  {t("首次加载约需 60-90 秒（SEC 限流），之后缓存 6 小时")}
+                </p>
+              )}
+            </div>
+          </section>
+
+          <details open className="rounded-xl border border-border bg-card px-4 py-3">
+            <summary className="cursor-pointer text-[12.5px] font-medium text-foreground">
+              {t("相关性系数怎么用")}
+            </summary>
+            <p className="mt-2 text-[10.5px] leading-relaxed text-muted-foreground">
+              {t(
+                "用最近 8 个季度 13F 反推的组合收益计算两两 Pearson 相关系数（−1 ~ +1），衡量涨跌是否同步，不是持仓重叠度。",
+              )}
+            </p>
+            <div className="mt-2 grid gap-2 md:grid-cols-3">
+              <div className="rounded-lg border border-positive/20 bg-positive-soft px-2.5 py-2">
+                <p className="text-[10.5px] font-medium text-positive-text">
+                  {t("+0.6 以上 · 高度同步")}
+                </p>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">
+                  {t("风格接近，合并配置的分散效果有限")}
+                </p>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/20 px-2.5 py-2">
+                <p className="text-[10.5px] font-medium text-foreground">
+                  {t("−0.2 ~ +0.2 · 基本无关")}
+                </p>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">
+                  {t("组合在一起能明显降低波动")}
+                </p>
+              </div>
+              <div className="rounded-lg border border-negative/20 bg-negative-soft px-2.5 py-2">
+                <p className="text-[10.5px] font-medium text-negative-text">
+                  {t("< −0.2 · 反向")}
+                </p>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">
+                  {t("分散价值最高，但需确认不是数据异常")}
+                </p>
+              </div>
+            </div>
+            <ul className="mt-2 space-y-1 text-[10px] text-muted-foreground">
+              <li>• {t("用法一：挑低相关的 2-3 位名人组合，降低单一风格风险。")}</li>
+              <li>• {t("用法二：高相关名人避免重复配置；选风格差异大的组合。")}</li>
+              <li>• {t("用法三：结合调仓趋势看——高相关且同向加仓是共识，反向操作是分歧。")}</li>
+              <li>• {t("多数名人都是美股多头，相关性整体偏正；重点比较相对高低，而不是把 0 当基准。")}</li>
+              <li>• {t("样本只有 8 个季度，|r| 低于约 0.7 时统计意义有限，别过度解读。")}</li>
+            </ul>
+            <p className="mt-2 text-[9px] leading-relaxed text-muted-foreground/80">
+              {t(
+                "局限：13F 只含美股多头且季度滞后；现金/债券/做空/非美持仓未体现；8 个季度样本有限；拆股与期权可能造成偏差。相关性不代表因果，历史不代表未来。",
+              )}
+            </p>
+          </details>
+
+          <section className="overflow-hidden rounded-xl border border-border bg-card">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
+              <h2 className="text-[13px] font-medium">{t("相关性矩阵")}</h2>
+              <div className="flex items-center gap-1 text-[9px] text-muted-foreground">
+                <span>−1</span>
+                <span className="h-2.5 w-5 rounded-sm bg-negative/80" />
+                <span className="h-2.5 w-5 rounded-sm bg-muted/40" />
+                <span className="h-2.5 w-5 rounded-sm bg-positive/80" />
+                <span>+1</span>
+                <span className="ml-2">{t("绿=正相关 · 红=负相关")}</span>
+                <span className="text-muted-foreground/60">·</span>
+                <span>{t("空白 = 共同季度不足 5 个")}</span>
+              </div>
+            </div>
+            {correlationModel.loaded === 0 ? (
+              <div className="space-y-1.5 p-3">
+                {Array.from({ length: 8 }).map((_, index) => (
+                  <div key={index} className="skeleton h-6 rounded-md" />
+                ))}
+              </div>
+            ) : (
+              <div className="max-h-[70vh] overflow-auto scroll-thin p-2">
+                <table className="border-separate border-spacing-0 text-[9px]">
+                  <thead>
+                    <tr>
+                      <th className="sticky left-0 top-0 z-30 w-[92px] bg-card px-1.5 py-1 text-left text-[9px] font-medium text-muted-foreground">
+                        {t("名人")}
+                      </th>
+                      {SUPER_INVESTORS.map((item) => (
+                        <th
+                          key={item.id}
+                          className="sticky top-0 z-20 h-[96px] w-[30px] bg-card p-0 align-bottom"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => setCorrFocusId(item.id)}
+                            title={item.nameZh}
+                            className="flex h-full w-full items-end justify-center pb-1"
+                          >
+                            <span
+                              className={`text-[9px] [writing-mode:vertical-rl] ${
+                                item.id === corrFocus.id
+                                  ? "font-medium text-accent"
+                                  : "text-muted-foreground"
+                              }`}
+                            >
+                              {shortInvestorName(item.nameZh)}
+                            </span>
+                          </button>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {SUPER_INVESTORS.map((row) => {
+                      const rowCells = correlationModel.matrix.get(row.id);
+                      return (
+                        <tr key={row.id}>
+                          <th
+                            className={`sticky left-0 z-10 w-[92px] border-t border-border/40 bg-card px-1.5 py-0.5 text-left text-[9px] ${
+                              row.id === corrFocus.id
+                                ? "font-medium text-accent"
+                                : "font-normal text-foreground/85"
+                            }`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => setCorrFocusId(row.id)}
+                              title={row.nameZh}
+                              className="w-full truncate text-left"
+                            >
+                              {shortInvestorName(row.nameZh)}
+                            </button>
+                          </th>
+                          {SUPER_INVESTORS.map((col) => {
+                            const cell = rowCells?.get(col.id);
+                            const isSelf = row.id === col.id;
+                            return (
+                              <td
+                                key={col.id}
+                                onClick={() => setCorrFocusId(row.id)}
+                                title={`${row.nameZh} × ${col.nameZh} · ${t("共同季度")} ${
+                                  cell?.n ?? 0
+                                }`}
+                                className={`h-[26px] w-[30px] cursor-pointer border-l border-t border-border/30 p-0 text-center align-middle ${
+                                  isSelf
+                                    ? "bg-muted/30 text-muted-foreground/40"
+                                    : correlationCellClass(cell?.r ?? null)
+                                }`}
+                              >
+                                <span className="num text-[7.5px]">
+                                  {isSelf ? "—" : corrLabel(cell?.r ?? null)}
+                                </span>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+          <section className="overflow-hidden rounded-xl border border-border bg-card">
+            <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2.5">
+              <h2 className="text-[13px] font-medium">{t("相关性排行")}</h2>
+              <select
+                value={corrFocusId}
+                onChange={(event) => setCorrFocusId(event.target.value)}
+                aria-label={t("选择名人")}
+                className="ml-auto h-7 max-w-[220px] rounded-md border border-border bg-card px-2 text-[11px] text-foreground outline-none transition-colors focus:border-accent/60 focus:ring-2 focus:ring-accent/15"
+              >
+                {SUPER_INVESTORS.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.nameZh}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid gap-3 p-3 md:grid-cols-2">
+              <CorrelationRankList
+                title={t("正相关 Top 5")}
+                tone="positive"
+                items={corrTopPositive}
+                onSelect={setCorrFocusId}
+              />
+              <CorrelationRankList
+                title={t("负相关 Top 5")}
+                tone="negative"
+                items={corrTopNegative}
+                onSelect={setCorrFocusId}
+              />
+            </div>
+          </section>
         </div>
       ) : tab === "investors" ? (
         <div className="grid gap-3 xl:grid-cols-[260px_minmax(0,1fr)]">

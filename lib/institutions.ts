@@ -606,41 +606,50 @@ async function fetchQuarterHoldings(cik: string, accession: string): Promise<Hol
   return holdings;
 }
 
+/** 拉取最近 N 份 13F 的季度快照（新→旧），供详情页与相关性分析共用 */
+async function loadSnapshots(
+  investor: SuperInvestor,
+  filingCount: number,
+): Promise<{ entityName: string; snapshots: QuarterSnapshot[] }> {
+  const submissionsResponse = await secFetchWithRetry(
+    `https://data.sec.gov/submissions/CIK${investor.cik}.json`,
+    12_000,
+  );
+  if (!submissionsResponse.ok) {
+    throw new Error(`SEC 提交列表不可用（${submissionsResponse.status}）`);
+  }
+
+  const submissions = (await submissionsResponse.json()) as SecSubmissions;
+  const filings = recent13FFilings(submissions, filingCount);
+  if (filings.length === 0) throw new Error("该机构最近没有 13F 持仓申报");
+
+  const snapshots: QuarterSnapshot[] = [];
+  for (let index = 0; index < filings.length; index += 1) {
+    const filing = filings[index];
+    try {
+      const holdings = await fetchQuarterHoldings(investor.cik, filing.accession);
+      snapshots.push({
+        quarter: filing.period ?? filing.filedAt ?? filing.accession,
+        filedAt: filing.filedAt,
+        holdings,
+        totalValue: holdings.reduce((sum, item) => sum + (item.value ?? 0), 0),
+      });
+    } catch (error) {
+      // 最新季度必须成功；历史季度拉取失败时降级，至少保留已有对比
+      if (index === 0) throw error;
+    }
+  }
+
+  if (snapshots.length === 0) throw new Error("13F 持仓表为空");
+  return { entityName: submissions.name ?? investor.fund, snapshots };
+}
+
 /** 获取某位投资者最近 4 份 13F 与最近 3 个季度的调仓（缓存 6 小时，SEC 建议低频访问） */
 export async function get13F(
   investor: SuperInvestor,
 ): Promise<ThirteenFResult & { cached: boolean }> {
   const result = await cached(`13f:${investor.cik}`, 21600, 86400, async () => {
-    const submissionsResponse = await secFetchWithRetry(
-      `https://data.sec.gov/submissions/CIK${investor.cik}.json`,
-      12_000,
-    );
-    if (!submissionsResponse.ok) {
-      throw new Error(`SEC 提交列表不可用（${submissionsResponse.status}）`);
-    }
-
-    const submissions = (await submissionsResponse.json()) as SecSubmissions;
-    // 最近 4 个季度即可得到 3 次季度环比调仓
-    const filings = recent13FFilings(submissions, 4);
-    if (filings.length === 0) throw new Error("该机构最近没有 13F 持仓申报");
-
-    const snapshots: QuarterSnapshot[] = [];
-    for (let index = 0; index < filings.length; index += 1) {
-      const filing = filings[index];
-      try {
-        const holdings = await fetchQuarterHoldings(investor.cik, filing.accession);
-        snapshots.push({
-          quarter: filing.period ?? filing.filedAt ?? filing.accession,
-          filedAt: filing.filedAt,
-          holdings,
-          totalValue: holdings.reduce((sum, item) => sum + (item.value ?? 0), 0),
-        });
-      } catch (error) {
-        // 最新季度必须成功；历史季度拉取失败时降级，至少保留已有对比
-        if (index === 0) throw error;
-      }
-    }
-
+    const { entityName, snapshots } = await loadSnapshots(investor, 4);
     const latest = snapshots[0];
     const all = latest.holdings;
     const visible = all.slice(0, 200);
@@ -656,7 +665,7 @@ export async function get13F(
 
     return {
       investor,
-      entityName: submissions.name ?? investor.fund,
+      entityName,
       filedAt: latest.filedAt,
       period: latest.quarter,
       holdings: visible,
@@ -667,6 +676,149 @@ export async function get13F(
       fetchedAt: new Date().toISOString(),
     };
   });
+
+  return { ...result.value, cached: result.cached };
+}
+
+/* ---------------------------------
+ * 名人相关性：13F 反推季度组合收益
+ * --------------------------------- */
+
+export interface ReturnPoint {
+  quarter: string;
+  /** 该季度组合收益率（%），按上季持仓市值加权 */
+  returnPct: number;
+  /** 参与计算的共同持仓数 */
+  matchedPositions: number;
+}
+
+export interface ReturnSeries {
+  investor: SuperInvestor;
+  entityName: string;
+  /** 季度收益序列（新→旧） */
+  points: ReturnPoint[];
+  fetchedAt: string;
+}
+
+/**
+ * 用相邻季度 13F 的「隐含股价」反推组合季度收益，避免依赖 CUSIP→股票代码映射：
+ *   隐含价 = 申报市值 / 股数
+ *   个券收益 = 本季隐含价 / 上季隐含价 - 1
+ *   组合收益 = Σ(上季市值 × 个券收益) / Σ(上季市值)
+ * 只统计两季都持有的标的；对常见拆股做校正，并过滤 / 截断极端值。
+ */
+export function computeQuarterlyReturns(snapshots: QuarterSnapshot[]): ReturnPoint[] {
+  const points: ReturnPoint[] = [];
+
+  for (let index = 0; index < snapshots.length - 1; index += 1) {
+    const current = snapshots[index];
+    const previous = snapshots[index + 1];
+    const previousMap = new Map(
+      previous.holdings.map((item) => [`${item.cusip}|${item.putCall ?? ""}`, item]),
+    );
+
+    let weight = 0;
+    let weightedReturn = 0;
+    let matchedPositions = 0;
+
+    for (const item of current.holdings) {
+      const prev = previousMap.get(`${item.cusip}|${item.putCall ?? ""}`);
+      if (
+        !prev ||
+        !item.shares ||
+        !prev.shares ||
+        item.shares <= 0 ||
+        prev.shares <= 0 ||
+        !item.value ||
+        !prev.value ||
+        item.value <= 0 ||
+        prev.value <= 0
+      ) {
+        continue;
+      }
+
+      const currentPrice = item.value / item.shares;
+      const previousPrice = prev.value / prev.shares;
+      if (!(previousPrice > 0)) continue;
+
+      let priceRatio = currentPrice / previousPrice;
+      if (!Number.isFinite(priceRatio) || priceRatio <= 0) continue;
+
+      // 拆股校正：股数按标准比例变化且价格几乎完全反向时，还原真实收益
+      // 容差收紧到 3%，避免把「减仓 35% + 股价上涨 35%」误判成反向拆股
+      const shareRatio = item.shares / prev.shares;
+      const adjusted = priceRatio * shareRatio;
+      if ((shareRatio > 1.4 || shareRatio < 0.7) && Math.abs(adjusted - 1) < 0.03) {
+        priceRatio = adjusted;
+      }
+
+      let positionReturn = priceRatio - 1;
+      // 过滤异常值（拆股 / 数据错误），并把极端波动截断到 ±50%
+      if (!Number.isFinite(positionReturn) || Math.abs(positionReturn) > 1) continue;
+      positionReturn = Math.max(-0.5, Math.min(0.5, positionReturn));
+
+      weight += prev.value;
+      weightedReturn += prev.value * positionReturn;
+      matchedPositions += 1;
+    }
+
+    if (weight <= 0) continue;
+    points.push({
+      quarter: current.quarter,
+      returnPct: (weightedReturn / weight) * 100,
+      matchedPositions,
+    });
+  }
+
+  return points;
+}
+
+/** Pearson 相关系数（−1 ~ +1）；样本不足或任一侧无波动时返回 null */
+export function pearsonCorrelation(x: number[], y: number[]): number | null {
+  if (x.length !== y.length || x.length < 3) return null;
+  const n = x.length;
+  const meanX = x.reduce((sum, value) => sum + value, 0) / n;
+  const meanY = y.reduce((sum, value) => sum + value, 0) / n;
+
+  let covariance = 0;
+  let varianceX = 0;
+  let varianceY = 0;
+  for (let index = 0; index < n; index += 1) {
+    const dx = x[index] - meanX;
+    const dy = y[index] - meanY;
+    covariance += dx * dy;
+    varianceX += dx * dx;
+    varianceY += dy * dy;
+  }
+
+  if (varianceX <= 0 || varianceY <= 0) return null;
+  const r = covariance / Math.sqrt(varianceX * varianceY);
+  if (!Number.isFinite(r)) return null;
+  return Math.max(-1, Math.min(1, r));
+}
+
+/** 获取名人最近 N 个季度的组合收益序列（默认 8 个季度） */
+export async function get13FReturnSeries(
+  investor: SuperInvestor,
+  quarters = 8,
+): Promise<ReturnSeries & { cached: boolean }> {
+  const result = await cached(
+    `13f-series:${investor.cik}:${quarters}`,
+    21600,
+    86400,
+    async () => {
+      // 8 个季度收益需要 9 份季度持仓
+      const { entityName, snapshots } = await loadSnapshots(investor, quarters + 1);
+      const points = computeQuarterlyReturns(snapshots);
+      if (points.length < 3) throw new Error("历史 13F 数据不足，无法计算相关性");
+      return {
+        investor,
+        entityName,
+        points,
+        fetchedAt: new Date().toISOString(),
+      };
+    },
+  );
 
   return { ...result.value, cached: result.cached };
 }
