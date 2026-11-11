@@ -33,6 +33,7 @@ export function isLocale(value: unknown): value is Locale {
 
 /** 繁体词典（key 为简体原文） */
 const ZH_HANT: Record<string, string> = {
+  "潮鲸": "潮鯨",
   "行情": "行情",
   "美股行情": "美股行情",
   "自选股": "自選股",
@@ -734,6 +735,7 @@ const ZH_HANT: Record<string, string> = {
 
 /** 英文词典（key 为简体原文） */
 const EN: Record<string, string> = {
+  "潮鲸": "潮鲸",
   "行情": "Market",
   "美股行情": "US Market",
   "自选股": "Watchlist",

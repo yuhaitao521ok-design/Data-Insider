@@ -1,4 +1,4 @@
-# Data Insider · 美股多周期行情
+# TideWhale · 潮鲸 · 美股多周期行情
 
 一个开箱即用的美股行情看板：从 **Yahoo Finance** 获取多周期报价与走势，失败时自动降级到 **Nasdaq** 官方接口，并可选用大模型（**Perplexity / DeepSeek / 任意 OpenAI 兼容服务**）生成带引用来源的 AI 解读。
 

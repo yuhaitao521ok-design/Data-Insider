@@ -1,4 +1,4 @@
-# Copilot instructions for Data Insider
+# Copilot instructions for TideWhale
 
 ## Project overview
 

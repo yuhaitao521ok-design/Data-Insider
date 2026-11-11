@@ -65,7 +65,12 @@ export default function SiteHeader({ onPickSymbol }: SiteHeaderProps) {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
       <div className="mx-auto flex max-w-[1440px] flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 lg:px-6 xl:max-w-[1640px] 2xl:max-w-[2200px]">
-        <Link href="/" className="flex shrink-0 items-center gap-2">
+        <Link
+          href="/"
+          aria-label={`TideWhale ${t("潮鲸")}`}
+          title={`TideWhale ${t("潮鲸")}`}
+          className="flex shrink-0 items-center gap-2"
+        >
           <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-card text-foreground">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path
@@ -78,7 +83,8 @@ export default function SiteHeader({ onPickSymbol }: SiteHeaderProps) {
               <circle cx="4" cy="16.5" r="1.7" fill="currentColor" />
             </svg>
           </span>
-          <span className="text-[15px] font-medium tracking-tight">Data Insider</span>
+          <span className="text-[15px] font-medium tracking-tight">TideWhale</span>
+          <span className="hidden text-[10px] text-muted-foreground sm:inline">{t("潮鲸")}</span>
         </Link>
 
         <nav
@@ -174,7 +180,7 @@ export default function SiteHeader({ onPickSymbol }: SiteHeaderProps) {
           <ThemeToggle />
 
           <a
-            href="https://github.com/yuhaitao521ok-design/Data-Insider"
+            href="https://github.com/yuhaitao521ok-design/TideWhale"
             target="_blank"
             rel="noreferrer noopener"
             className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
