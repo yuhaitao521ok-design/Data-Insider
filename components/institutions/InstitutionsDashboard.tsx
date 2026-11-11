@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import PageShell from "@/components/PageShell";
 import { useI18n } from "@/lib/i18n";
 import { formatCompact, formatNumber, formatPercent } from "@/lib/format";
-import { SUPER_INVESTORS, type SymbolOwnership, type ThirteenFResult } from "@/lib/institutions";
+import { SUPER_INVESTORS, type PositionChange, type SymbolOwnership, type ThirteenFResult } from "@/lib/institutions";
 import { DEFAULT_WATCHLIST } from "@/lib/types";
 
 type Tab = "symbol" | "investors";
@@ -44,6 +44,124 @@ function WeightBar({ percent }: { percent: number | null }) {
         style={{ width: `${Math.min(100, Math.max(0, percent ?? 0))}%` }}
       />
     </span>
+  );
+}
+
+/** 2026-06-30 → 2026 Q2 */
+function quarterLabel(period: string | null): string {
+  if (!period) return "--";
+  const match = /^(\d{4})-(\d{2})/.exec(period);
+  if (!match) return period;
+  const month = Number(match[2]);
+  if (!Number.isFinite(month) || month < 1 || month > 12) return period;
+  return `${match[1]} Q${Math.ceil(month / 3)}`;
+}
+
+function signedCompact(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return "--";
+  const sign = value > 0 ? "+" : value < 0 ? "−" : "";
+  return `${sign}${formatCompact(Math.abs(value))}`;
+}
+
+function signedMoney(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return "--";
+  const sign = value > 0 ? "+" : value < 0 ? "−" : "";
+  return `${sign}$${formatCompact(Math.abs(value))}`;
+}
+
+/** 持仓明细「较上季」列：加仓绿、减仓红、新建仓直接标文字 */
+function ChangeBadge({ change }: { change?: PositionChange }) {
+  const { t } = useI18n();
+  if (!change) return <span className="text-muted-foreground/60">--</span>;
+  if (change.action === "new") return <span className="text-positive-text">{t("新建仓")}</span>;
+  if (change.changePercent === null) return <span className="text-muted-foreground/60">--</span>;
+  return (
+    <span
+      title={`${t("股数变动")} ${signedCompact(change.shareChange)}`}
+      className={change.changePercent > 0 ? "text-positive-text" : "text-negative-text"}
+    >
+      {formatPercent(change.changePercent, 1)}
+    </span>
+  );
+}
+
+/** 单季加仓 / 减仓 Top 列表 */
+function ChangeList({
+  title,
+  tone,
+  items,
+  count,
+  empty,
+}: {
+  title: string;
+  tone: "positive" | "negative";
+  items: PositionChange[];
+  count?: number;
+  empty: string;
+}) {
+  const { t } = useI18n();
+  return (
+    <div className="min-w-0 rounded-lg border border-border/70 bg-muted/20 px-2.5 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <p
+          className={`text-[10.5px] font-medium ${
+            tone === "positive" ? "text-positive-text" : "text-negative-text"
+          }`}
+        >
+          {title}
+        </p>
+        <span className="num text-[9px] text-muted-foreground/70">{count ?? items.length}</span>
+      </div>
+      {items.length === 0 ? (
+        <p className="mt-1 text-[10px] text-muted-foreground">{empty}</p>
+      ) : (
+        <ul className="mt-1.5 space-y-1">
+          {items.slice(0, 5).map((item) => (
+            <li
+              key={`${item.cusip}-${item.putCall ?? ""}`}
+              className="flex items-baseline justify-between gap-2"
+            >
+              <span
+                className="min-w-0 flex-1 truncate text-[11px] text-foreground/85"
+                title={`${item.issuer} · ${item.cusip}${item.putCall ? ` · ${item.putCall}` : ""}`}
+              >
+                {item.issuer}
+                {item.titleOfClass && item.titleOfClass !== "COM" ? (
+                  <span className="ml-1 rounded bg-card px-1 text-[8.5px] text-muted-foreground">
+                    {item.titleOfClass}
+                  </span>
+                ) : null}
+                {item.putCall ? (
+                  <span className="ml-1 rounded bg-card px-1 text-[8.5px] text-muted-foreground">
+                    {item.putCall}
+                  </span>
+                ) : null}
+              </span>
+              <span className="num shrink-0 text-[10px]">
+                {item.action === "new" || item.action === "exit" ? (
+                  <span
+                    className={
+                      item.action === "new" ? "text-positive-text" : "text-negative-text"
+                    }
+                  >
+                    {item.action === "new" ? t("新建仓") : t("清仓")}
+                  </span>
+                ) : (
+                  <span
+                    className={
+                      item.action === "add" ? "text-positive-text" : "text-negative-text"
+                    }
+                  >
+                    {formatPercent(item.changePercent, 1)}
+                  </span>
+                )}
+                <span className="ml-1 text-muted-foreground">{signedMoney(item.valueChange)}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -128,6 +246,14 @@ export default function InstitutionsDashboard() {
     );
   }, [investorQuery]);
 
+  const latestChangeMap = useMemo(() => {
+    const map = new Map<string, PositionChange>();
+    for (const change of filing?.latestChanges ?? []) {
+      map.set(`${change.cusip}|${change.putCall ?? ""}`, change);
+    }
+    return map;
+  }, [filing]);
+
   const rows = useMemo(() => {
     if (!filing) return [];
     const total = filing.totalValue || 0;
@@ -136,6 +262,7 @@ export default function InstitutionsDashboard() {
       rank: index + 1,
       weight:
         total > 0 && holding.value !== null ? (holding.value / total) * 100 : null,
+      change: latestChangeMap.get(`${holding.cusip}|${holding.putCall ?? ""}`),
     }));
     const keyword = filter.trim().toUpperCase();
     const filtered = keyword
@@ -146,7 +273,7 @@ export default function InstitutionsDashboard() {
         )
       : list;
     return ascending ? [...filtered].reverse() : filtered;
-  }, [filing, filter, ascending]);
+  }, [filing, filter, ascending, latestChangeMap]);
 
   // 前十大持仓始终按市值排序，不受表格过滤/升降序影响
   const topHoldings = useMemo(() => {
@@ -157,8 +284,9 @@ export default function InstitutionsDashboard() {
       rank: index + 1,
       weight:
         total > 0 && holding.value !== null ? (holding.value / total) * 100 : null,
+      change: latestChangeMap.get(`${holding.cusip}|${holding.putCall ?? ""}`),
     }));
-  }, [filing]);
+  }, [filing, latestChangeMap]);
   const concentration = useMemo(
     () => topHoldings.reduce((sum, item) => sum + (item.weight ?? 0), 0),
     [topHoldings],
@@ -319,8 +447,13 @@ export default function InstitutionsDashboard() {
                   SEC 13F
                 </span>
                 <span className="num">
-                  {filing?.filedAt ? `${t("报告期")} ${filing.filedAt}` : "--"}
+                  {filing ? `${t("报告期")} ${filing.period ?? filing.filedAt ?? "--"}` : "--"}
                 </span>
+                {filing?.filedAt && (
+                  <span className="num text-muted-foreground/70">
+                    {t("提交日")} {filing.filedAt}
+                  </span>
+                )}
                 {filing && filing.holdings.length < filing.totalPositions && (
                   <span className="text-muted-foreground/70">
                     {t("仅展示市值前 200 条，总市值与占比按全量持仓计算")}
@@ -364,8 +497,16 @@ export default function InstitutionsDashboard() {
                           </span>
                           <span className="min-w-0 flex-1">
                             <span className="flex items-baseline justify-between gap-2">
-                              <span className="truncate text-[11.5px] text-foreground/90">
+                              <span
+                                className="min-w-0 flex-1 truncate text-[11.5px] text-foreground/90"
+                                title={`${item.issuer} · ${item.cusip}`}
+                              >
                                 {item.issuer}
+                                {item.titleOfClass && item.titleOfClass !== "COM" ? (
+                                  <span className="ml-1 text-[8.5px] text-muted-foreground">
+                                    {item.titleOfClass}
+                                  </span>
+                                ) : null}
                               </span>
                               <span className="num shrink-0 text-[10.5px] text-muted-foreground">
                                 {formatPercent(item.weight, 1).replace("+", "")}
@@ -382,6 +523,71 @@ export default function InstitutionsDashboard() {
                         </li>
                       ))}
                     </ol>
+                  )}
+                </section>
+
+                <section className="overflow-hidden rounded-xl border border-border bg-card">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
+                    <h2 className="text-[13px] font-medium">{t("近期调仓")}</h2>
+                    <span className="text-[10px] text-muted-foreground">
+                      {t("最近 3 个季度 · 对比上季 13F · 按市值变动排序")}
+                    </span>
+                  </div>
+                  {filingLoading && !filing ? (
+                    <div className="space-y-1.5 p-3">
+                      {Array.from({ length: 3 }).map((_, index) => (
+                        <div key={index} className="skeleton h-16 rounded-md" />
+                      ))}
+                    </div>
+                  ) : (filing?.quarters?.length ?? 0) === 0 ? (
+                    <p className="px-4 py-5 text-[11.5px] text-muted-foreground">
+                      {t("暂无调仓数据")}
+                    </p>
+                  ) : (
+                    <div className="divide-y divide-border/60">
+                      {filing!.quarters.map((quarter) => (
+                        <div key={quarter.quarter} className="px-4 py-3">
+                          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                            <span className="num text-[12px] font-medium text-foreground">
+                              {quarterLabel(quarter.quarter)}
+                            </span>
+                            <span className="num text-[9.5px] text-muted-foreground">
+                              {t("报告期")} {quarter.quarter}
+                            </span>
+                            <span className="num text-[9.5px] text-muted-foreground/70">
+                              {t("对比")} {quarterLabel(quarter.previousQuarter)}
+                            </span>
+                            <span className="num ml-auto text-[9.5px] text-muted-foreground">
+                              {t("加仓市值")}{" "}
+                              <span className="text-positive-text">
+                                {signedMoney(quarter.buysValue)}
+                              </span>
+                              <span className="mx-1 text-muted-foreground/50">·</span>
+                              {t("减仓市值")}{" "}
+                              <span className="text-negative-text">
+                                {signedMoney(-quarter.sellsValue)}
+                              </span>
+                            </span>
+                          </div>
+                          <div className="mt-2 grid gap-2 md:grid-cols-2">
+                            <ChangeList
+                              title={t("加仓")}
+                              tone="positive"
+                              items={quarter.buys}
+                              count={quarter.buysCount}
+                              empty={t("本季无加仓")}
+                            />
+                            <ChangeList
+                              title={t("减仓")}
+                              tone="negative"
+                              items={quarter.sells}
+                              count={quarter.sellsCount}
+                              empty={t("本季无减仓")}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </section>
 
@@ -443,7 +649,7 @@ export default function InstitutionsDashboard() {
                     </p>
                   ) : (
                     <div className="max-h-[560px] overflow-auto scroll-thin">
-                      <table className="w-full min-w-[620px] text-[11.5px]">
+                      <table className="w-full min-w-[700px] text-[11.5px]">
                         <thead className="sticky top-0 z-10 bg-card/95 backdrop-blur">
                           <tr className="text-[10px] text-muted-foreground">
                             <th className="w-8 px-2 py-1.5 text-right font-medium">#</th>
@@ -452,6 +658,7 @@ export default function InstitutionsDashboard() {
                             <th className="px-3 py-1.5 text-right font-medium">{t("股数")}</th>
                             <th className="px-3 py-1.5 text-right font-medium">{t("市值")}</th>
                             <th className="w-[150px] px-3 py-1.5 text-right font-medium">{t("占比")}</th>
+                            <th className="w-[86px] px-3 py-1.5 text-right font-medium">{t("较上季")}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -464,7 +671,14 @@ export default function InstitutionsDashboard() {
                                 {holding.rank}
                               </td>
                               <td className="max-w-[240px] px-3 py-1.5">
-                                <span className="block truncate text-foreground/90">{holding.issuer}</span>
+                                <span className="block truncate text-foreground/90">
+                                  {holding.issuer}
+                                  {holding.putCall ? (
+                                    <span className="ml-1 rounded bg-muted px-1 text-[8.5px] text-muted-foreground">
+                                      {holding.putCall}
+                                    </span>
+                                  ) : null}
+                                </span>
                                 <span className="num block truncate text-[9px] text-muted-foreground/70">
                                   {holding.cusip}
                                 </span>
@@ -485,6 +699,9 @@ export default function InstitutionsDashboard() {
                                     {formatPercent(holding.weight, 1).replace("+", "")}
                                   </span>
                                 </span>
+                              </td>
+                              <td className="num px-3 py-1.5 text-right text-[10.5px]">
+                                <ChangeBadge change={holding.change} />
                               </td>
                             </tr>
                           ))}
