@@ -5,8 +5,10 @@ import {
   aggregateHoldings,
   buildQuarterChanges,
   computePositionChanges,
+  computeQuarterlyReturns,
   detectValueScale,
   parseInformationTable,
+  pearsonCorrelation,
   recent13FFilings,
 } from "@/lib/institutions";
 import { HISTORY_SIZE, pushHistory, sanitizeHistory } from "@/lib/backtest-history";
@@ -215,6 +217,67 @@ test("parseInformationTable：兼容 SEC 完整提交 .txt（含 SEC 头与其�
   assert.equal(holdings[0].issuer, "APPLE INC");
   assert.equal(holdings[0].shares, 4_532_000);
   assert.equal(holdings[0].value, 1_311_379_520);
+});
+
+test("computeQuarterlyReturns：按上季市值加权、拆股校正、过滤极端值", () => {
+  const snapshots = [
+    {
+      quarter: "2026-06-30",
+      filedAt: "2026-08-14",
+      holdings: [
+        holding("APPLE INC", "A", 110, 12100), // 100 → 110，+10%
+        holding("COCA COLA CO", "K", 50, 5000), // 100 → 100，0%
+        holding("SPLIT CO", "S", 200, 10000), // 2:1 拆股：100 → 50，校正后 0%
+        holding("CRAZY CO", "C", 100, 30000), // 上季 100 → 本季 300，+200% 应剔除
+      ],
+      totalValue: 57100,
+    },
+    {
+      quarter: "2026-03-31",
+      filedAt: "2026-05-15",
+      holdings: [
+        holding("APPLE INC", "A", 100, 10000),
+        holding("COCA COLA CO", "K", 50, 5000),
+        holding("SPLIT CO", "S", 100, 10000),
+        holding("CRAZY CO", "C", 100, 10000),
+      ],
+      totalValue: 35000,
+    },
+  ];
+
+  const [point] = computeQuarterlyReturns(snapshots);
+  // (10000×10% + 5000×0% + 10000×0%) / 25000 = 4%
+  assert.equal(point.quarter, "2026-06-30");
+  assert.ok(Math.abs(point.returnPct - 4) < 1e-9);
+  assert.equal(point.matchedPositions, 3);
+});
+
+test("computeQuarterlyReturns：没有共同持仓的季度跳过", () => {
+  const snapshots = [
+    {
+      quarter: "2026-06-30",
+      filedAt: "2026-08-14",
+      holdings: [holding("NEW CO", "N", 100, 10000)],
+      totalValue: 10000,
+    },
+    {
+      quarter: "2026-03-31",
+      filedAt: "2026-05-15",
+      holdings: [holding("OLD CO", "O", 100, 10000)],
+      totalValue: 10000,
+    },
+  ];
+  assert.deepEqual(computeQuarterlyReturns(snapshots), []);
+});
+
+test("pearsonCorrelation：正向 / 反向 / 无波动 / 样本不足", () => {
+  assert.equal(pearsonCorrelation([1, 2, 3, 4], [2, 4, 6, 8]), 1);
+  assert.equal(pearsonCorrelation([1, 2, 3, 4], [4, 3, 2, 1]), -1);
+  assert.equal(pearsonCorrelation([1, 1, 1], [1, 2, 3]), null);
+  assert.equal(pearsonCorrelation([1, 2], [1, 2]), null);
+  assert.equal(pearsonCorrelation([1, 2, 3], [1, 2]), null);
+  const mixed = pearsonCorrelation([1, 2, 4, 8], [2, 1, 8, 4]);
+  assert.ok(mixed !== null && Math.abs(mixed) < 1);
 });
 
 test("computePositionChanges：区分加仓 / 减仓 / 新建仓 / 清仓 / 不变", () => {
