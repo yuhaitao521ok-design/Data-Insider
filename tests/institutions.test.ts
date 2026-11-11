@@ -3,13 +3,17 @@ import assert from "node:assert/strict";
 
 import {
   aggregateHoldings,
+  aggregateTopChanges,
   buildQuarterChanges,
   computePositionChanges,
   computeQuarterlyReturns,
   detectValueScale,
+  estimatePositionTradeValue,
   parseInformationTable,
   pearsonCorrelation,
   recent13FFilings,
+  type PositionChange,
+  type QuarterChange,
 } from "@/lib/institutions";
 import { HISTORY_SIZE, pushHistory, sanitizeHistory } from "@/lib/backtest-history";
 
@@ -270,6 +274,93 @@ test("computeQuarterlyReturns：没有共同持仓的季度跳过", () => {
   assert.deepEqual(computeQuarterlyReturns(snapshots), []);
 });
 
+test("estimatePositionTradeValue：新建 / 加仓 / 减仓 / 清仓金额", () => {
+  const base: PositionChange = {
+    cusip: "A",
+    issuer: "APPLE INC",
+    titleOfClass: "COM",
+    putCall: null,
+    shares: 150,
+    prevShares: 100,
+    shareChange: 50,
+    changePercent: 50,
+    value: 3300,
+    prevValue: 2000,
+    valueChange: 1300,
+    action: "add",
+  };
+  assert.equal(estimatePositionTradeValue(base), 1100); // 50 股 × $22
+  assert.equal(estimatePositionTradeValue({ ...base, action: "new", prevShares: null }), 3300);
+  assert.equal(estimatePositionTradeValue({ ...base, action: "exit", shares: null, value: null }), 2000);
+  assert.equal(
+    estimatePositionTradeValue({ ...base, shares: 50, shareChange: -50, value: 500 }),
+    500,
+  );
+});
+
+test("aggregateTopChanges：跨机构合并同一标的、累计金额与机构数", () => {
+  const buy = (value: number): PositionChange => ({
+    cusip: "AAPL",
+    issuer: "APPLE INC",
+    titleOfClass: "COM",
+    putCall: null,
+    shares: 100,
+    prevShares: null,
+    shareChange: 100,
+    changePercent: null,
+    value,
+    prevValue: null,
+    valueChange: value,
+    action: "new",
+  });
+  const sell = (value: number): PositionChange => ({
+    cusip: "AAPL",
+    issuer: "APPLE INC",
+    titleOfClass: "COM",
+    putCall: null,
+    shares: null,
+    prevShares: 100,
+    shareChange: -100,
+    changePercent: -100,
+    value: null,
+    prevValue: value,
+    valueChange: -value,
+    action: "exit",
+  });
+  const quarter = (buys: PositionChange[], sells: PositionChange[]): QuarterChange => ({
+    quarter: "2026-06-30",
+    filedAt: "2026-08-14",
+    previousQuarter: "2026-03-31",
+    positions: 10,
+    totalValue: 10000,
+    buys,
+    sells,
+    buysCount: buys.length,
+    sellsCount: sells.length,
+    buysValue: buys.reduce((sum, item) => sum + estimatePositionTradeValue(item), 0),
+    sellsValue: sells.reduce((sum, item) => sum + estimatePositionTradeValue(item), 0),
+  });
+
+  const entries = [
+    { investorId: "a", quarter: quarter([buy(1000), { ...buy(500), cusip: "MSFT", issuer: "MICROSOFT CORP" }], []) },
+    { investorId: "b", quarter: quarter([buy(2000)], [sell(1500)]) },
+    // 期权不参与股票榜单
+    { investorId: "c", quarter: quarter([{ ...buy(9999), putCall: "CALL" }], []) },
+  ];
+
+  const topBuys = aggregateTopChanges(entries, "buy", 5);
+  assert.equal(topBuys.length, 2);
+  assert.equal(topBuys[0].issuer, "APPLE INC");
+  assert.equal(topBuys[0].amount, 3000);
+  assert.equal(topBuys[0].institutions, 2);
+  assert.equal(topBuys[1].amount, 500);
+
+  const topSells = aggregateTopChanges(entries, "sell", 5);
+  assert.equal(topSells.length, 1);
+  assert.equal(topSells[0].amount, 1500);
+  assert.equal(topSells[0].institutions, 1);
+});
+
 test("pearsonCorrelation：正向 / 反向 / 无波动 / 样本不足", () => {
   assert.equal(pearsonCorrelation([1, 2, 3, 4], [2, 4, 6, 8]), 1);
   assert.equal(pearsonCorrelation([1, 2, 3, 4], [4, 3, 2, 1]), -1);
@@ -367,15 +458,15 @@ test("buildQuarterChanges：最近 3 个季度按新→旧输出，含净买入 
   assert.equal(quarters[1].sellsValue, 0);
 });
 
-test("buildQuarterChanges：列表最多 8 条但保留完整计数", () => {
+test("buildQuarterChanges：列表最多 30 条但保留完整计数", () => {
   const snapshots = [
     {
       quarter: "2026-06-30",
       filedAt: "2026-08-14",
-      holdings: Array.from({ length: 12 }, (_, index) =>
+      holdings: Array.from({ length: 40 }, (_, index) =>
         holding(`NEW ${index}`, `C${index}`, 100, (index + 1) * 1000),
       ),
-      totalValue: 78000,
+      totalValue: 820000,
     },
     {
       quarter: "2026-03-31",
@@ -386,10 +477,10 @@ test("buildQuarterChanges：列表最多 8 条但保留完整计数", () => {
   ];
 
   const [quarter] = buildQuarterChanges(snapshots);
-  assert.equal(quarter.buys.length, 8);
-  assert.equal(quarter.buysCount, 12);
-  assert.equal(quarter.buysValue, 78000);
-  assert.equal(quarter.buys[0].issuer, "NEW 11");
+  assert.equal(quarter.buys.length, 30);
+  assert.equal(quarter.buysCount, 40);
+  assert.equal(quarter.buysValue, 820000);
+  assert.equal(quarter.buys[0].issuer, "NEW 39");
 });
 
 test("recent13FFilings：只看 13F-HR、忽略修订件并按报告期去重", () => {
