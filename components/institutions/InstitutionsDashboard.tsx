@@ -254,6 +254,16 @@ export default function InstitutionsDashboard() {
     return map;
   }, [filing]);
 
+  const netTrend = useMemo(() => {
+    // 由旧到新，便于从左到右看加减趋势
+    const quarters = [...(filing?.quarters ?? [])].reverse();
+    const max = Math.max(
+      1,
+      ...quarters.map((quarter) => Math.abs(quarter.buysValue - quarter.sellsValue)),
+    );
+    return { quarters, max };
+  }, [filing]);
+
   const rows = useMemo(() => {
     if (!filing) return [];
     const total = filing.totalValue || 0;
@@ -544,8 +554,49 @@ export default function InstitutionsDashboard() {
                       {t("暂无调仓数据")}
                     </p>
                   ) : (
-                    <div className="divide-y divide-border/60">
-                      {filing!.quarters.map((quarter) => (
+                    <>
+                      <div className="border-b border-border/60 bg-muted/10 px-4 py-2.5">
+                        <div className="flex flex-wrap items-center justify-between gap-1">
+                          <p className="text-[10px] font-medium text-muted-foreground">
+                            {t("近 3 季净买入 / 净卖出")}
+                          </p>
+                          <p className="text-[9px] text-muted-foreground/70">
+                            {t("绿=净买入 · 红=净卖出 · 由旧到新")}
+                          </p>
+                        </div>
+                        <div className="mt-2 grid grid-cols-3 gap-4">
+                          {netTrend.quarters.map((quarter) => {
+                            const net = quarter.buysValue - quarter.sellsValue;
+                            const height = Math.max(6, (Math.abs(net) / netTrend.max) * 100);
+                            return (
+                              <div key={quarter.quarter} className="min-w-0">
+                                <div className="flex h-12 items-end justify-center">
+                                  <span
+                                    className={`w-8 max-w-full rounded-t ${
+                                      net >= 0 ? "bg-positive/70" : "bg-negative/70"
+                                    }`}
+                                    style={{ height: `${height}%` }}
+                                  />
+                                </div>
+                                <div className="mt-1 flex items-baseline justify-between gap-1">
+                                  <span className="num text-[9px] text-muted-foreground">
+                                    {quarterLabel(quarter.quarter)}
+                                  </span>
+                                  <span
+                                    className={`num text-[9.5px] ${
+                                      net >= 0 ? "text-positive-text" : "text-negative-text"
+                                    }`}
+                                  >
+                                    {signedMoney(net)}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="divide-y divide-border/60">
+                        {filing!.quarters.map((quarter) => (
                         <div key={quarter.quarter} className="px-4 py-3">
                           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                             <span className="num text-[12px] font-medium text-foreground">
@@ -586,8 +637,9 @@ export default function InstitutionsDashboard() {
                             />
                           </div>
                         </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+                    </>
                   )}
                 </section>
 
