@@ -151,6 +151,51 @@ const SEC_HEADERS = {
   Accept: "application/json, application/xml, text/xml, */*",
 };
 
+/**
+ * SEC 限制约 10 请求/秒。总览页会并发拉取多位名人，这里做进程级节流：
+ * 所有 SEC 请求（submissions / index / information table）按 ~8 请求/秒排队。
+ */
+const SEC_MIN_INTERVAL_MS = 120;
+let secGate: Promise<void> = Promise.resolve();
+let secLastStartedAt = 0;
+
+async function secFetch(url: string, timeoutMs: number): Promise<Response> {
+  const run = async () => {
+    const wait = Math.max(0, secLastStartedAt + SEC_MIN_INTERVAL_MS - Date.now());
+    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+    secLastStartedAt = Date.now();
+    return fetch(url, {
+      headers: SEC_HEADERS,
+      cache: "no-store",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  };
+  const task = secGate.then(run, run);
+  secGate = task.then(
+    () => undefined,
+    () => undefined,
+  );
+  return task;
+}
+
+const SEC_RETRY_STATUS = new Set([429, 500, 502, 503, 504]);
+
+/** 429 / 5xx 自动退避重试，最多 3 次 */
+async function secFetchWithRetry(url: string, timeoutMs: number, attempts = 3): Promise<Response> {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const response = await secFetch(url, timeoutMs);
+    if (!SEC_RETRY_STATUS.has(response.status)) return response;
+    if (attempt === attempts - 1) return response;
+
+    const retryAfter = Number(response.headers.get("retry-after"));
+    const delay =
+      Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 800 * 2 ** attempt;
+    await response.body?.cancel();
+    await new Promise((resolve) => setTimeout(resolve, Math.min(delay, 6000)));
+  }
+  throw new Error("SEC 请求失败");
+}
+
 export interface SecSubmissions {
   name?: string;
   filings?: {
@@ -405,6 +450,9 @@ export interface ThirteenFResult {
   fetchedAt: string;
 }
 
+/** 总览页用的精简 13F（去掉持仓明细与大列表，减小传输体积） */
+export type ThirteenFSummary = Omit<ThirteenFResult, "holdings" | "latestChanges">;
+
 /**
  * 13F 申报的 value 单位不统一：有的按美元、有的按千美元。
  * 判定只用「普通股/ETF（SH）」样本——可转债/权证（PRN）的 value/shares 不是股价，
@@ -526,11 +574,18 @@ async function fetchQuarterHoldings(cik: string, accession: string): Promise<Hol
   const cikNoZero = String(Number(cik));
   const base = `https://www.sec.gov/Archives/edgar/data/${cikNoZero}/${digits}`;
 
-  const indexResponse = await fetch(`${base}/index.json`, {
-    headers: SEC_HEADERS,
-    cache: "no-store",
-    signal: AbortSignal.timeout(12_000),
-  });
+  // 快速路径：13F 完整提交的 .txt 已内嵌 information table，一次请求即可拿到
+  try {
+    const textResponse = await secFetchWithRetry(`${base}/${accession}.txt`, 20_000);
+    if (textResponse.ok) {
+      const holdings = parseInformationTable(await textResponse.text());
+      if (holdings.length > 0) return holdings;
+    }
+  } catch {
+    // 失败时走 index.json + XML 的兼容路径
+  }
+
+  const indexResponse = await secFetchWithRetry(`${base}/index.json`, 12_000);
   if (!indexResponse.ok) throw new Error(`SEC 文件索引不可用（${indexResponse.status}）`);
 
   const folder = (await indexResponse.json()) as {
@@ -543,11 +598,7 @@ async function fetchQuarterHoldings(cik: string, accession: string): Promise<Hol
   if (files.length === 0) throw new Error("SEC 没有 information table");
   const tableFile = files.find((name) => /infotable/i.test(name)) ?? files[0];
 
-  const tableResponse = await fetch(`${base}/${tableFile}`, {
-    headers: SEC_HEADERS,
-    cache: "no-store",
-    signal: AbortSignal.timeout(15_000),
-  });
+  const tableResponse = await secFetchWithRetry(`${base}/${tableFile}`, 15_000);
   if (!tableResponse.ok) throw new Error(`SEC 持仓表不可用（${tableResponse.status}）`);
 
   const holdings = parseInformationTable(await tableResponse.text());
@@ -560,9 +611,9 @@ export async function get13F(
   investor: SuperInvestor,
 ): Promise<ThirteenFResult & { cached: boolean }> {
   const result = await cached(`13f:${investor.cik}`, 21600, 86400, async () => {
-    const submissionsResponse = await fetch(
+    const submissionsResponse = await secFetchWithRetry(
       `https://data.sec.gov/submissions/CIK${investor.cik}.json`,
-      { headers: SEC_HEADERS, cache: "no-store", signal: AbortSignal.timeout(12_000) },
+      12_000,
     );
     if (!submissionsResponse.ok) {
       throw new Error(`SEC 提交列表不可用（${submissionsResponse.status}）`);

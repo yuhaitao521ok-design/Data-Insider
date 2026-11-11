@@ -201,6 +201,22 @@ test("parseInformationTable：解码 issuer 中的 XML 实体", () => {
   assert.equal(holdings[0].issuer, "STATE STR SPDR S&P 500 ETF T");
 });
 
+test("parseInformationTable：兼容 SEC 完整提交 .txt（含 SEC 头与其他文档）", () => {
+  const text = `<SEC-DOCUMENT>0001193125-26-352200.txt : 20260814
+<SEC-HEADER>...</SEC-HEADER>
+<DOCUMENT><TYPE>XML
+<informationTable>
+  <infoTable><nameOfIssuer>APPLE INC</nameOfIssuer><cusip>037833100</cusip><value>200237120</value><shrsOrPrnAmt><sshPrnamt>692000</sshPrnamt></shrsOrPrnAmt></infoTable>
+  <infoTable><nameOfIssuer>APPLE INC</nameOfIssuer><cusip>037833100</cusip><value>1111142400</value><shrsOrPrnAmt><sshPrnamt>3840000</sshPrnamt></shrsOrPrnAmt></infoTable>
+</informationTable>
+</DOCUMENT></SEC-DOCUMENT>`;
+  const holdings = parseInformationTable(text);
+  assert.equal(holdings.length, 1);
+  assert.equal(holdings[0].issuer, "APPLE INC");
+  assert.equal(holdings[0].shares, 4_532_000);
+  assert.equal(holdings[0].value, 1_311_379_520);
+});
+
 test("computePositionChanges：区分加仓 / 减仓 / 新建仓 / 清仓 / 不变", () => {
   const previous = [
     holding("APPLE INC", "037833100", 100, 20000),

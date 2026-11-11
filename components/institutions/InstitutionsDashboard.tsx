@@ -1,15 +1,32 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PageShell from "@/components/PageShell";
 import { useI18n } from "@/lib/i18n";
 import { formatCompact, formatNumber, formatPercent } from "@/lib/format";
-import { SUPER_INVESTORS, type PositionChange, type SymbolOwnership, type ThirteenFResult } from "@/lib/institutions";
+import {
+  SUPER_INVESTORS,
+  type PositionChange,
+  type QuarterChange,
+  type SymbolOwnership,
+  type ThirteenFResult,
+  type ThirteenFSummary,
+} from "@/lib/institutions";
 import { DEFAULT_WATCHLIST } from "@/lib/types";
 
-type Tab = "symbol" | "investors";
+type Tab = "overview" | "investors" | "symbol";
+
+type OverviewStatus = "loading" | "done" | "error";
+
+interface OverviewEntry {
+  status: OverviewStatus;
+  filing?: ThirteenFSummary;
+  error?: string;
+}
 
 const SYMBOL_RE = /^[A-Z0-9.^=-]{1,12}$/;
+const OVERVIEW_CACHE_KEY = "institutions:overview:v1";
+const OVERVIEW_CACHE_TTL = 6 * 60 * 60 * 1000;
 
 /** 头像用的首字母 / 首字 */
 function initials(name: string): string {
@@ -165,10 +182,161 @@ function ChangeList({
   );
 }
 
+/** 总览卡片里的近 3 季迷你趋势条（由旧到新） */
+function MiniTrend({ quarters }: { quarters: QuarterChange[] }) {
+  const list = [...quarters].reverse().slice(-3);
+  const max = Math.max(1, ...list.map((item) => Math.abs(item.buysValue - item.sellsValue)));
+  return (
+    <span className="flex h-8 items-end gap-0.5" aria-hidden="true">
+      {list.map((item) => {
+        const net = item.buysValue - item.sellsValue;
+        const height = Math.max(8, (Math.abs(net) / max) * 100);
+        return (
+          <span
+            key={item.quarter}
+            className={`w-1.5 rounded-t ${net >= 0 ? "bg-positive/70" : "bg-negative/70"}`}
+            style={{ height: `${height}%` }}
+          />
+        );
+      })}
+    </span>
+  );
+}
+
+/** 名人调仓总览卡片 */
+function OverviewCard({
+  investor,
+  entry,
+  onOpen,
+  onRetry,
+}: {
+  investor: (typeof SUPER_INVESTORS)[number];
+  entry: OverviewEntry;
+  onOpen: () => void;
+  onRetry: () => void;
+}) {
+  const { t } = useI18n();
+
+  if (entry.status !== "done" || !entry.filing) {
+    return (
+      <div className="rounded-xl border border-border bg-card px-3 py-3">
+        <div className="flex items-center gap-2">
+          <Avatar name={investor.nameZh} size={30} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[12.5px] font-medium text-foreground">{investor.nameZh}</p>
+            <p className="truncate text-[9.5px] text-muted-foreground">{investor.fund}</p>
+          </div>
+        </div>
+        {entry.status === "error" ? (
+          <div className="mt-3 rounded-lg border border-negative/20 bg-negative-soft px-2.5 py-2">
+            <p className="truncate text-[10px] text-negative-text" title={entry.error}>
+              {entry.error || t("加载失败")}
+            </p>
+            <button
+              type="button"
+              onClick={onRetry}
+              className="mt-1.5 h-6 rounded border border-border px-2 text-[10px] text-muted-foreground transition-colors hover:bg-hover hover:text-foreground"
+            >
+              {t("重试")}
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="skeleton mt-3 h-8 rounded-md" />
+            <div className="skeleton mt-2 h-3 rounded-md" />
+            <div className="skeleton mt-1.5 h-3 w-2/3 rounded-md" />
+          </>
+        )}
+      </div>
+    );
+  }
+
+  const filing = entry.filing;
+  const latest = filing.quarters[0];
+  const net = latest ? latest.buysValue - latest.sellsValue : 0;
+  const topBuy = latest?.buys[0];
+  const topSell = latest?.sells[0];
+  const changeLabel = (item: PositionChange) =>
+    item.action === "new"
+      ? t("新建仓")
+      : item.action === "exit"
+        ? t("清仓")
+        : formatPercent(item.changePercent, 0);
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group flex w-full flex-col gap-2 rounded-xl border border-border bg-card px-3 py-3 text-left transition-colors hover:border-accent/40 hover:bg-hover"
+    >
+      <div className="flex items-start gap-2">
+        <Avatar name={investor.nameZh} size={30} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[12.5px] font-medium text-foreground">{investor.nameZh}</p>
+          <p className="truncate text-[9.5px] text-muted-foreground">
+            {filing.entityName || investor.fund}
+          </p>
+        </div>
+        <span className="num shrink-0 rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
+          {quarterLabel(filing.period)}
+        </span>
+      </div>
+
+      <div className="flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[9px] text-muted-foreground">{t("本季净额")}</p>
+          <p
+            className={`num text-[18px] font-medium leading-tight ${
+              net >= 0 ? "text-positive-text" : "text-negative-text"
+            }`}
+          >
+            {signedMoney(net)}
+          </p>
+          <p className="truncate text-[9px] text-muted-foreground">
+            {net >= 0 ? t("净买入") : t("净卖出")} · {t("持仓")} {filing.totalPositions}
+          </p>
+        </div>
+        <div className="shrink-0">
+          <MiniTrend quarters={filing.quarters} />
+          <p className="mt-0.5 text-right text-[8.5px] text-muted-foreground/70">{t("近 3 季")}</p>
+        </div>
+      </div>
+
+      <div className="space-y-1 border-t border-border/60 pt-2">
+        <div className="flex items-baseline gap-1.5 text-[10px]">
+          <span className="w-7 shrink-0 text-positive-text">{t("加仓")}</span>
+          <span className="min-w-0 flex-1 truncate text-foreground/85" title={topBuy?.cusip}>
+            {topBuy?.issuer ?? "--"}
+          </span>
+          <span className="num shrink-0 text-positive-text">
+            {topBuy ? changeLabel(topBuy) : "--"}
+          </span>
+        </div>
+        <div className="flex items-baseline gap-1.5 text-[10px]">
+          <span className="w-7 shrink-0 text-negative-text">{t("减仓")}</span>
+          <span className="min-w-0 flex-1 truncate text-foreground/85" title={topSell?.cusip}>
+            {topSell?.issuer ?? "--"}
+          </span>
+          <span className="num shrink-0 text-negative-text">
+            {topSell ? changeLabel(topSell) : "--"}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between text-[9px] text-muted-foreground/70">
+        <span className="num">
+          {t("加仓")} {latest?.buysCount ?? 0} · {t("减仓")} {latest?.sellsCount ?? 0}
+        </span>
+        <span className="text-accent">{t("查看详情")} →</span>
+      </div>
+    </button>
+  );
+}
+
 export default function InstitutionsDashboard() {
   const { t } = useI18n();
-  // 默认直接展示名人 13F，打开页面即可看到
-  const [tab, setTab] = useState<Tab>("investors");
+  // 默认进入「调仓总览」，一眼看到所有名人的加减仓趋势
+  const [tab, setTab] = useState<Tab>("overview");
 
   const [draft, setDraft] = useState<string>(DEFAULT_WATCHLIST[0]);
   const [ownership, setOwnership] = useState<SymbolOwnership | null>(null);
@@ -183,6 +351,13 @@ export default function InstitutionsDashboard() {
   const [filter, setFilter] = useState("");
   const [ascending, setAscending] = useState(false);
   const [investorQuery, setInvestorQuery] = useState("");
+
+  const [overview, setOverview] = useState<Record<string, OverviewEntry>>({});
+  const [overviewStarted, setOverviewStarted] = useState(false);
+  const [overviewHydrated, setOverviewHydrated] = useState(false);
+  const overviewDirtyRef = useRef(false);
+  const [overviewFilter, setOverviewFilter] = useState<"all" | "buy" | "sell">("all");
+  const [overviewSort, setOverviewSort] = useState<"netDesc" | "netAsc" | "name">("netDesc");
 
   const loadOwnership = useCallback(async (nextSymbol: string) => {
     if (!SYMBOL_RE.test(nextSymbol)) return;
@@ -221,10 +396,126 @@ export default function InstitutionsDashboard() {
     }
   }, []);
 
+  const loadOverviewInvestor = useCallback(async (id: string) => {
+    setOverview((prev) => ({ ...prev, [id]: { status: "loading" } }));
+    let lastError: unknown = null;
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const response = await fetch(`/api/institutions/13f?investor=${id}&summary=1`, {
+          cache: "no-store",
+        });
+        if (!response.ok) {
+          const body = (await response.json().catch(() => ({}))) as { error?: string };
+          throw new Error(body.error || `加载失败（${response.status}）`);
+        }
+        const data = (await response.json()) as ThirteenFSummary;
+        overviewDirtyRef.current = true;
+        setOverview((prev) => ({ ...prev, [id]: { status: "done", filing: data } }));
+        return;
+      } catch (error) {
+        lastError = error;
+        // 首次失败多半是 SEC 瞬时限流，稍等再试一次
+        if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+    }
+
+    setOverview((prev) => ({
+      ...prev,
+      [id]: {
+        status: "error",
+        error: lastError instanceof Error ? lastError.message : "加载失败",
+      },
+    }));
+  }, []);
+
   // 名人 13F：进入页面就加载（tab 默认为 investors）
   useEffect(() => {
     if (tab === "investors") void loadFiling(investorId);
   }, [tab, investorId, loadFiling]);
+
+  // 总览：先用 localStorage 里的 6 小时缓存秒开，再补拉缺失 / 过期数据
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(OVERVIEW_CACHE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as {
+          savedAt?: number;
+          entries?: Record<string, ThirteenFSummary>;
+        };
+        if (
+          parsed.savedAt &&
+          Date.now() - parsed.savedAt < OVERVIEW_CACHE_TTL &&
+          parsed.entries
+        ) {
+          setOverview((prev) => {
+            const next = { ...prev };
+            for (const [id, filing] of Object.entries(parsed.entries ?? {})) {
+              next[id] = { status: "done", filing };
+            }
+            return next;
+          });
+        }
+      }
+    } catch {
+      // 忽略缓存解析失败，按正常流程拉取
+    }
+    setOverviewHydrated(true);
+  }, []);
+
+  // 总览：首次进入时 3 路并发拉取全部名人摘要，逐张填充
+  useEffect(() => {
+    if (!overviewHydrated || tab !== "overview" || overviewStarted) return;
+    setOverviewStarted(true);
+    setOverview((prev) => {
+      const next = { ...prev };
+      for (const item of SUPER_INVESTORS) {
+        if (!next[item.id]) next[item.id] = { status: "loading" };
+      }
+      return next;
+    });
+    const queue = SUPER_INVESTORS.map((item) => item.id).filter(
+      (id) => overview[id]?.status !== "done",
+    );
+    const worker = async () => {
+      for (;;) {
+        const id = queue.shift();
+        if (!id) return;
+        await loadOverviewInvestor(id);
+      }
+    };
+    void Promise.all([worker(), worker(), worker()]);
+  }, [tab, overviewStarted, overviewHydrated, overview, loadOverviewInvestor]);
+
+  // 缓存已加载的摘要，供下次打开秒开（仅在本轮真正拉到新数据时刷新时间戳）
+  useEffect(() => {
+    if (tab !== "overview" || !overviewDirtyRef.current) return;
+    const entries: Record<string, ThirteenFSummary> = {};
+    for (const item of SUPER_INVESTORS) {
+      const entry = overview[item.id];
+      if (entry?.status === "done" && entry.filing) entries[item.id] = entry.filing;
+    }
+    if (Object.keys(entries).length === 0) return;
+    try {
+      window.localStorage.setItem(
+        OVERVIEW_CACHE_KEY,
+        JSON.stringify({ savedAt: Date.now(), entries }),
+      );
+      overviewDirtyRef.current = false;
+    } catch {
+      // localStorage 不可用 / 超配额时忽略
+    }
+  }, [overview, tab]);
+
+  const refreshOverview = useCallback(() => {
+    try {
+      window.localStorage.removeItem(OVERVIEW_CACHE_KEY);
+    } catch {
+      // ignore
+    }
+    setOverview({});
+    setOverviewStarted(false);
+  }, []);
 
   // 按标的：输入停顿 400ms 再请求，避免每敲一个字母打一次接口
   useEffect(() => {
@@ -303,6 +594,63 @@ export default function InstitutionsDashboard() {
   );
   const maxTopWeight = topHoldings[0]?.weight ?? 0;
 
+  const overviewRows = useMemo(() => {
+    const rows = SUPER_INVESTORS.map((investor) => ({
+      investor,
+      entry: overview[investor.id] ?? { status: "loading" as const },
+    }));
+    const netOf = (entry: OverviewEntry): number | null => {
+      const latest = entry.filing?.quarters[0];
+      return latest ? latest.buysValue - latest.sellsValue : null;
+    };
+    const filtered = rows.filter(({ entry }) => {
+      if (overviewFilter === "all") return true;
+      const net = netOf(entry);
+      if (net === null) return false;
+      return overviewFilter === "buy" ? net > 0 : net < 0;
+    });
+
+    // 还在加载时保持稳定顺序，避免卡片随数据到达不断跳动
+    const settled = SUPER_INVESTORS.every((item) => {
+      const status = overview[item.id]?.status;
+      return status === "done" || status === "error";
+    });
+    if (!settled && overviewSort !== "name") return filtered;
+
+    return filtered.sort((a, b) => {
+      if (overviewSort === "name") return a.investor.nameZh.localeCompare(b.investor.nameZh);
+      const aNet = netOf(a.entry);
+      const bNet = netOf(b.entry);
+      if (aNet === null && bNet === null) return 0;
+      if (aNet === null) return 1;
+      if (bNet === null) return -1;
+      return overviewSort === "netDesc" ? bNet - aNet : aNet - bNet;
+    });
+  }, [overview, overviewFilter, overviewSort]);
+
+  const overviewStats = useMemo(() => {
+    let loaded = 0;
+    let buys = 0;
+    let sells = 0;
+    let net = 0;
+    let period: string | null = null;
+    for (const investor of SUPER_INVESTORS) {
+      const entry = overview[investor.id];
+      if (entry?.status !== "done" || !entry.filing) continue;
+      loaded += 1;
+      if (entry.filing.period && (!period || entry.filing.period > period)) {
+        period = entry.filing.period;
+      }
+      const latest = entry.filing.quarters[0];
+      if (!latest) continue;
+      const quarterNet = latest.buysValue - latest.sellsValue;
+      net += quarterNet;
+      if (quarterNet > 0) buys += 1;
+      else if (quarterNet < 0) sells += 1;
+    }
+    return { loaded, total: SUPER_INVESTORS.length, buys, sells, net, period };
+  }, [overview]);
+
   return (
     <PageShell
       title={t("机构持仓")}
@@ -310,6 +658,7 @@ export default function InstitutionsDashboard() {
       actions={
         <div className="inline-flex items-center gap-0.5 rounded-lg bg-muted p-0.5">
           {([
+            { key: "overview", label: t("调仓总览") },
             { key: "investors", label: t("名人 13F") },
             { key: "symbol", label: t("按标的") },
           ] as const).map((item) => (
@@ -330,7 +679,117 @@ export default function InstitutionsDashboard() {
         </div>
       }
     >
-      {tab === "investors" ? (
+      {tab === "overview" ? (
+        <div className="space-y-3">
+          <section className="rounded-xl border border-border bg-card px-4 py-3">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+              <div className="min-w-[84px]">
+                <p className="text-[10px] text-muted-foreground">{t("数据季度")}</p>
+                <p className="num mt-0.5 text-[13px] font-medium text-foreground">
+                  {quarterLabel(overviewStats.period)}
+                </p>
+              </div>
+              <Stat
+                label={t("已加载")}
+                value={`${overviewStats.loaded}/${overviewStats.total}`}
+              />
+              <Stat label={t("净买入人数")} value={String(overviewStats.buys)} />
+              <Stat label={t("净卖出人数")} value={String(overviewStats.sells)} />
+              <Stat label={t("合计净额")} value={signedMoney(overviewStats.net)} />
+              <div className="ml-auto flex items-center gap-2">
+                <span className="h-1.5 w-24 overflow-hidden rounded-full bg-muted">
+                  <span
+                    className="block h-full rounded-full bg-accent/70 transition-[width]"
+                    style={{
+                      width: `${(overviewStats.loaded / Math.max(1, overviewStats.total)) * 100}%`,
+                    }}
+                  />
+                </span>
+                <button
+                  type="button"
+                  onClick={refreshOverview}
+                  className="inline-flex h-7 items-center rounded-md border border-border px-2 text-[11px] text-muted-foreground transition-colors hover:border-accent/40 hover:bg-hover hover:text-foreground"
+                >
+                  {t("刷新全部")}
+                </button>
+              </div>
+              {overviewStats.loaded < overviewStats.total && (
+                <p className="w-full text-[9px] text-muted-foreground/70">
+                  {t("首次加载受 SEC 限流影响，约需 20-30 秒，之后缓存 6 小时")}
+                </p>
+              )}
+            </div>
+          </section>
+
+          <section className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-3 py-2">
+            <span className="text-[10px] text-muted-foreground">{t("筛选")}</span>
+            {([
+              { key: "all", label: t("全部名人") },
+              { key: "buy", label: t("净买入") },
+              { key: "sell", label: t("净卖出") },
+            ] as const).map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setOverviewFilter(item.key)}
+                aria-pressed={overviewFilter === item.key}
+                className={`h-6 rounded-md border px-2 text-[10.5px] transition-colors ${
+                  overviewFilter === item.key
+                    ? "border-accent/50 bg-accent-soft font-medium text-accent"
+                    : "border-border text-muted-foreground hover:bg-hover hover:text-foreground"
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+            <span className="ml-auto text-[10px] text-muted-foreground">{t("排序")}</span>
+            {([
+              { key: "netDesc", label: `${t("净额")} ↓` },
+              { key: "netAsc", label: `${t("净额")} ↑` },
+              { key: "name", label: t("名称") },
+            ] as const).map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setOverviewSort(item.key)}
+                aria-pressed={overviewSort === item.key}
+                className={`h-6 rounded-md border px-2 text-[10.5px] transition-colors ${
+                  overviewSort === item.key
+                    ? "border-accent/50 bg-accent-soft font-medium text-accent"
+                    : "border-border text-muted-foreground hover:bg-hover hover:text-foreground"
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </section>
+
+          {overviewRows.length === 0 ? (
+            <p className="rounded-xl border border-border bg-card px-4 py-6 text-[11.5px] text-muted-foreground">
+              {t("暂无数据")}
+            </p>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {overviewRows.map(({ investor: item, entry }) => (
+                <OverviewCard
+                  key={item.id}
+                  investor={item}
+                  entry={entry}
+                  onOpen={() => {
+                    setInvestorId(item.id);
+                    setFilter("");
+                    setTab("investors");
+                  }}
+                  onRetry={() => void loadOverviewInvestor(item.id)}
+                />
+              ))}
+            </div>
+          )}
+          <p className="text-[9px] text-muted-foreground/70">
+            {t("净额 = 加仓市值 − 减仓市值，含股价波动")}
+          </p>
+        </div>
+      ) : tab === "investors" ? (
         <div className="grid gap-3 xl:grid-cols-[260px_minmax(0,1fr)]">
           <aside className="min-w-0 self-start overflow-hidden rounded-xl border border-border bg-card xl:sticky xl:top-3">
             <div className="flex items-center justify-between border-b border-border px-3 py-2">
