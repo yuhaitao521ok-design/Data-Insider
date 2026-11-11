@@ -71,20 +71,39 @@ export default function SiteHeader({ onPickSymbol }: SiteHeaderProps) {
           title={`TideWhale ${t("潮鲸")}`}
           className="flex shrink-0 items-center gap-2"
         >
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-card text-foreground">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-card text-foreground">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path
-                d="M4 16.5 8.5 10l3.6 4.2L16.5 7.5H20"
-                stroke="currentColor"
-                strokeWidth="1.8"
+                d="M2.2 20.2c1.9 0 2.8-1.1 4.7-1.1s2.8 1.1 4.7 1.1 2.8-1.1 4.7-1.1 2.8 1.1 4.7 1.1"
+                stroke="var(--accent)"
+                strokeOpacity="0.35"
+                strokeWidth="1.3"
                 strokeLinecap="round"
-                strokeLinejoin="round"
               />
-              <circle cx="4" cy="16.5" r="1.7" fill="currentColor" />
+              <path
+                d="M2.8 18.2c2.1 0 3.2-1.2 5.3-1.2s3.2 1.2 5.3 1.2 3.2-1.2 5.3-1.2 3.2 1.2 5.3 1.2"
+                stroke="var(--accent)"
+                strokeOpacity="0.8"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+              <path
+                d="M3 12.9c0-2.8 2.9-5 6.7-5 3.3 0 5.8 1.7 7.2 3.9 1.3-.4 2.6-1.4 3.7-2.7.3-.4.9-.1.8.4l-.4 2.6 1.3-.6c.4-.2.9.2.7.6l-1.1 3.4c-.1.4-.5.5-.9.3l-1.6-.9c-1.7 2.1-4.4 3.4-7.7 3.4-4.4 0-7.7-2.1-7.7-5.4Z"
+                fill="currentColor"
+              />
+              <circle cx="8.2" cy="11" r="0.8" fill="var(--card)" />
+              <path
+                d="M7.4 7.3c-.5-.9-.6-1.9-.3-2.9"
+                stroke="currentColor"
+                strokeOpacity="0.55"
+                strokeWidth="1.1"
+                strokeLinecap="round"
+              />
+              <circle cx="6.6" cy="3.9" r="0.55" fill="currentColor" fillOpacity="0.55" />
             </svg>
           </span>
           <span className="text-[15px] font-medium tracking-tight">TideWhale</span>
-          <span className="hidden text-[10px] text-muted-foreground sm:inline">{t("潮鲸")}</span>
+          <span className="hidden text-[12px] font-medium text-muted-foreground sm:inline">{t("潮鲸")}</span>
         </Link>
 
         <nav
