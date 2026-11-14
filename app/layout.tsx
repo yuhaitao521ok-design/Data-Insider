@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import BackToTop from "@/components/BackToTop";
 import LocaleProvider from "@/components/LocaleProvider";
 import MobileTabBar from "@/components/MobileTabBar";
 import "./globals.css";
@@ -33,6 +34,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {children}
           {/* 全局常驻：路由切换不卸载，指示块才能平滑滑动 */}
           <MobileTabBar />
+          {/* 全局常驻：长页面滚到下方后出现，「回到顶部」按钮手机端会自动避开 tab bar */}
+          <BackToTop />
         </LocaleProvider>
       </body>
     </html>

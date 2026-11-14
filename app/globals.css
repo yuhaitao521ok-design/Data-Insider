@@ -472,3 +472,23 @@ body {
     0 8px 18px -6px rgba(99, 102, 241, 0.8),
     inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
+
+/* -------------------------------------------------------------------------- */
+/*  回到顶部：手机端要抬到底部 tab bar 之上，桌面端贴右下角                       */
+/* -------------------------------------------------------------------------- */
+
+.back-to-top {
+  bottom: calc(86px + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 1024px) {
+  .back-to-top {
+    bottom: 1.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .back-to-top {
+    transition: none;
+  }
+}
