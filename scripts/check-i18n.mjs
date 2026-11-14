@@ -11,8 +11,11 @@
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ROOT = new URL("..", import.meta.url).pathname;
+// 必须用 fileURLToPath：Windows 上 new URL("..").pathname 会得到 "/D:/..."，
+// 再经 join 会拼成 "D:\D:\..."，导致读不到 lib/i18n.ts
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const STRICT = process.argv.includes("--strict");
 
 const CJK = /[\u4e00-\u9fff]/;
