@@ -70,6 +70,26 @@ npm run build && npm start
 >
 > 本地自查：`mv .open-next/.build /tmp/x && npx wrangler deploy` 能 100% 复现；把目录挪回来就恢复（会继续走到提示需要 `CLOUDFLARE_API_TOKEN` 的那一步）。
 
+### 🟥 PR / 非生产分支的 preview build 每次都在 deploy 阶段失败（`module with name '_headers' ...` / `[code: 10021]`）
+
+**现象**：`main` 的生产构建是绿的，但每个 PR（非生产分支）的 `Workers Builds: data-insider` 预览构建都在 Build 成功后几秒内变成 failure，PR 上还会看到一个一直停在 `in_progress` 的同名 check（Cloudflare 的重复 check，不影响结论）—— 也就是「preview build 永远跑不完 / 每次都失败」。
+
+**原因**：Workers Builds 的预览构建走 `npx wrangler preview`（Worker Previews，open beta）。这条命令会把静态资源目录里的 `_headers` / `_redirects` 当成 **Worker 模块**上传，Previews API 直接拒绝：
+
+```
+✘ A request to the Cloudflare API (.../previews/<preview-name>/deployments) failed.
+  module with name '_headers' must have content type 'text/plain' [code: 10021]
+```
+
+生产部署走的是 `wrangler deploy`，这两个文件会放进 assets 配置，所以 `main` 从来不受影响 —— 这就是「只有 preview build 永远失败」的原因。本项目 `public/_headers`（`/_next/static/*`、`/fonts/*` 长缓存）正好会触发它；上游 issue：[workers-sdk#15791](https://github.com/cloudflare/workers-sdk/issues/15791)（修复 PR #16086 未合并，wrangler 4.152 / 4.162 都还是老行为）。
+
+**仓库已做的处理**：`npm run build:cf` 末尾会执行 `scripts/cf-preview-assets.mjs`。当它在 Workers Builds 里检测到 `WORKERS_CI_BRANCH` 不是生产分支（默认 `main`，可用 `PRODUCTION_BRANCH` 覆盖）时，从 `.open-next/assets` 移除 `_headers` / `_redirects`，预览请求里只剩 `worker.js`；生产分支与本地构建完全照旧，`public/_headers` 的长缓存头在生产仍然生效。
+
+**如果仍然失败**（顺序执行，都不需要改代码）：
+1. 把 Workers Builds 的 **Preview command** 改成 `npx wrangler versions upload`：稳定命令，同样走 assets 配置，产出 Version URL（`<version>-data-insider.<subdomain>.workers.dev`）而不是 Preview URL。
+2. 在控制台完成 Worker Previews 的一次性开启：Workers & Pages → `data-insider` → Settings → Builds → 「Set up Worker Previews」，确认 Preview command 是 `npx wrangler preview`（老 Worker 没做过这一步时预览部署会被拒）。
+3. 不想要 PR 预览部署：清空 Preview command，PR 只构建、不部署，生产不受影响。
+
 ### Cloudflare 在 PR / 非生产分支报 `Your Wrangler configuration is missing a previews block`
 
 Worker 开了 Observability + Preview URL 时，非生产分支走 Preview 部署（`npx wrangler preview`），要求 `wrangler.jsonc` 显式声明 `previews.observability`。仓库已内置该块；如果仍失败，可在 Workers Builds 里**清空 Preview command**（PR 只构建、不部署预览，生产不受影响），或把 Preview command 改成 `npx wrangler versions upload`。
@@ -77,7 +97,7 @@ Worker 开了 Observability + Preview URL 时，非生产分支走 Preview 部�
 ### `npm run build` 和 `npm run build:cf` 有什么区别？
 
 - `npm run build`：只跑 `next build`，产出 `.next`，**只适合本机 `npm start` / Vercel**
-- `npm run build:cf`：先 `next build`，再用 OpenNext 转成 Worker 结构（`.open-next/worker.js` + 静态资源），**部署 Cloudflare 必须用这个**
+- `npm run build:cf`：先 `next build`，再用 OpenNext 转成 Worker 结构（`.open-next/worker.js` + 静态资源），最后跑 `scripts/cf-preview-assets.mjs` 清理预览构建不需要的路由文件，**部署 Cloudflare 必须用这个**
 
 ### 改了界面文案，繁体 / 英文没生效？
 
@@ -419,6 +439,8 @@ curl 'http://localhost:3000/api/chart?symbol=NVDA&range=1Y&interval=1wk' | jq '.
 > `npx wrangler preview` 是 Wrangler 4 的有效命令（open beta），用于非生产分支创建 Preview URL；如果想生成 Version URL，可改成 `npx wrangler versions upload`。
 >
 > **Preview 部署必须有 `previews` 块**：Worker 开了 Observability + Preview URL 时，Workers Builds 会要求 `wrangler.jsonc` 里显式声明 `previews.observability`，否则会在部署前直接失败并提示 “Your Wrangler configuration is missing a `previews` block”。仓库已内置该块（采样率 1、invocation logs 持久化、traces 关闭），本地可用 `npx wrangler deploy --dry-run` 提前校验。如果不希望 PR 触发预览部署，可把 Workers Builds 的 Preview command 清空（或关掉「非生产分支预览部署」），PR 就只构建、不部署。
+>
+> **`wrangler preview` 会把 `_headers` 当 Worker 模块上传**：`public/_headers` 会被 OpenNext 复制进 `.open-next/assets`，而 `wrangler preview`（open beta）把它当模块上传，Previews API 会返回 `[code: 10021]`，导致非生产分支的预览构建**每次**都在 deploy 阶段失败（生产 `wrangler deploy` 不受影响）。`npm run build:cf` 末尾的 `scripts/cf-preview-assets.mjs` 会在预览分支自动移除该文件；细节与备选方案见 [常见问题（FAQ）](#常见问题faq)。
 
 
 
