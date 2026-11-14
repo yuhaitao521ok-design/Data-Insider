@@ -6,7 +6,7 @@
 
 import { readdirSync, rmSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { build } from "esbuild";
@@ -37,9 +37,8 @@ await build({
   logLevel: "warning",
 });
 
-const outputs = entries.map((entry) =>
-  join(OUT_DIR, entry.slice(entry.lastIndexOf("/") + 1).replace(/\.ts$/, ".mjs")),
-);
+// 用 basename 而不是切 "/"，否则 Windows 的反斜杠路径会拼出错误的输出文件名
+const outputs = entries.map((entry) => join(OUT_DIR, basename(entry).replace(/\.ts$/, ".mjs")));
 
 const result = spawnSync(process.execPath, ["--test", ...outputs], {
   stdio: "inherit",
